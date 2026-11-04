@@ -97,6 +97,12 @@ export function mountCreator(root, context) {
     fact(facts, "Output directory", attempt.build_dir || attempt.context?.build_dir || attempt.context?.build_directory, true);
     fact(facts, "Effective target", attempt.context?.effective_target || attempt.context?.target || attempt.context?.board, true);
     detail.append(facts);
+    const buildDirectory = attempt.build_dir || attempt.context?.build_dir || attempt.context?.build_directory;
+    if (buildDirectory) {
+      const inspect = node("a", "projects-button", "Inspect build");
+      inspect.href = `#/projects/builds/${encodeURIComponent(buildDirectory)}`;
+      detail.append(inspect);
+    }
     const technical = disclosure("Compiler and output files", `${key}:outputs`);
     const compiler = node("dl", "projects-identity");
     fact(compiler, "Compiler", attempt.context?.compiler || attempt.context?.c_compiler, true);

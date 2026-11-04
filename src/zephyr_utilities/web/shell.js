@@ -7,8 +7,8 @@ const stylesheets = new Map();
 const icons = {memory: "▥", devicetree: "⑂", projects: "＋", tinyml: "◈"};
 const toolDetails = {
   memory: ["RAM & ROM reports", "Symbol-level exploration", "Snapshot comparisons"],
-  devicetree: ["Device tree & overlay editing", "Bindings and diagnostics", "Build-aware hardware view"],
-  projects: ["Environment, board and SDK discovery", "Preview and create a C application", "Explicit configure and build jobs"],
+  devicetree: ["Read-only resolved tree inspection", "Search nodes and inspect properties", "Build and image context"],
+  projects: ["Environment, board and SDK discovery", "Create, configure and build", "Inspect existing build outputs"],
   tinyml: ["Model and experiment metadata", "Memory, latency and accuracy", "Reproducible framework comparisons"],
 };
 let api;
@@ -229,7 +229,8 @@ async function init() {
     $("workspace-save").disabled = true;
     try {
       await api("/api/workspace", {method: "PATCH", body: {path: $("workspace-path").value.trim()}});
-      await refreshWorkspace(); $("workspace-dialog").close(); notify("Workspace updated for all tools.");
+      await refreshWorkspace(); $("workspace-dialog").close();
+      await renderRoute(); notify("Workspace updated for all tools.");
     } finally { $("workspace-save").disabled = false; }
   }));
   $("app-jobs").addEventListener("click", () => navigate(activeJobRoute(state.activeJobs, state.features)));

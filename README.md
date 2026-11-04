@@ -5,6 +5,7 @@ One local application for Zephyr development, build analysis and experiments.
 **Zephyr Utilities 0.2** provides an English, offline interface with shared navigation,
 workspace selection and background jobs. Memory Explorer and Project Creator's environment
 analysis, minimal C application creation and explicit configure/build workflow are available.
+Existing-build inspection connects to a read-only resolved Device Tree reader.
 Device Tree editing and TinyML model/experiment analysis remain planned.
 
 ## Start
@@ -79,7 +80,7 @@ src/zephyr_utilities/
   core/                  # Shared HTTP, feature contracts, workspace and jobs
   features/
     memory/              # Working Memory Explorer and its web/ assets
-    devicetree/          # Planned Device Tree Editor
+    devicetree/          # Read-only Device Tree inspection; editing planned
     projects/            # Environment analysis, reviewed creation and explicit builds
     tinyml/              # Planned model and experiment analysis
   web/                   # Shared browser shell and helpers
@@ -156,6 +157,12 @@ application paths and source paths containing whitespace. No flashing, SDK insta
 workspace update or existing-project import is included. Device Tree editing remains
 planned. Generated source files and their README commands work independently of the
 utilities' metadata.
+
+Use **Project Creator → Inspect builds** to open an existing build, select its image/domain and
+inspect saved outputs. **Open Device Tree** shows that image's resolved nodes and
+properties without running tools or changing source files. Changed outputs require
+re-inspection; source freshness remains unknown. See the
+[build inspection guide](docs/build-inspection.md) for this first P3 slice and its limits.
 
 ## Requirements and interpretation
 

@@ -5,6 +5,7 @@ from pathlib import Path, PurePosixPath
 import secrets
 
 from . import __version__
+from .core.builds import BuildInspectionService
 from .core.context import ApplicationContext
 from .core.features import validate_features
 from .core.http import Handler, Response, Router
@@ -25,7 +26,8 @@ class Application:
         workspace = WorkspaceService(initial_path)
         self.features = validate_features(builtin_features() if features is None else features)
         self.token = secrets.token_urlsafe(32)
-        self.context = ApplicationContext(workspace, JobManager(), Path(data_dir).expanduser().resolve())
+        self.context = ApplicationContext(workspace, JobManager(), Path(data_dir).expanduser().resolve(),
+                                          builds=BuildInspectionService())
         self.router = Router()
         try:
             self._register_shared_routes()

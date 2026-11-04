@@ -46,6 +46,15 @@ A successful build establishes compilation for that attempt. It does not establi
 hardware operation, peripheral wiring, runtime memory limits or runner compatibility.
 There is no flash action in this release.
 
+## Inspect existing build outputs
+
+Choose **Inspect build** on an attempt, or open the **Inspect builds** tab and enter an existing
+build directory. Inspection is read-only and does not require a creator profile or an
+environment rescan. Select a sysbuild image/domain when present, then use **Open Device
+Tree** to inspect its resolved nodes and properties. Technical details remain optional.
+See the [build inspection guide](build-inspection.md) for freshness checks, supported
+metadata, API routes and the remaining P3 scope. Overlay editing remains planned.
+
 ## Generated files and independent use
 
 The `minimal-c` template, version 1, produces:

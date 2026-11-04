@@ -8,7 +8,7 @@ from .api import register
 FEATURE = FeatureDefinition(
     id='projects',
     title='Project Creator',
-    description='Discover your environment, create a minimal C application, and explicitly configure or build it.',
+    description='Discover your environment, create and build an application, or inspect existing build outputs.',
     entry_path="/#/projects/environment",
     frontend=FrontendDefinition(Path(__file__).parent / "web"),
     register=register,

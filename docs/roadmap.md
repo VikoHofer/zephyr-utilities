@@ -16,14 +16,16 @@ research master plan, not a general coding-assistant integration.
   bounded offline probes, saved observations, refresh and diagnostics.
 - Reviewed minimal-C workspace application creation, explicit configure/build jobs and
   versioned profiles/attempt evidence in fresh output directories.
+- Read-only existing-build inspection, sysbuild image selection and a shared observation
+  handoff to the resolved Device Tree reader.
 
 ## Feature ownership and next useful slices
 
 | Feature | State | Initial implementation direction |
 | --- | --- | --- |
 | Memory Explorer (`memory`) | Available | Existing-build reports, visualization, snapshots and comparisons |
-| Device Tree Editor (`devicetree`) | Planned | Inspect resolved tree and source overlays, then add validated reviewable edits |
-| Project Creator (`projects`) | Analysis, minimal creation and explicit single-image builds available | Next: existing-build inspection and Device Tree handoff |
+| Device Tree Editor (`devicetree`) | Read-only resolved tree inspection available; editing planned | Next: source/binding navigation, then reviewable edits |
+| Project Creator (`projects`) | Analysis, creation/build and existing-build inspection available | Next: richer P3 source inspection and Memory handoff |
 | TinyML Experiments (`tinyml`) | Planned | Connect model/build/run identities and compare imported experiment measurements |
 
 Planned catalog entries are development boundaries. They do not yet edit Device Trees,
@@ -41,7 +43,10 @@ measurement reference. The architecture guide describes the current implementati
 
 ## Device Tree Editor
 
-Build toward a complete editor incrementally:
+The first reader opens an inspected image's resolved DTS, supports node/property
+navigation and shares Projects' target/domain context. It checks output identity;
+source freshness remains unknown. See the [build inspection guide](build-inspection.md).
+Continue toward a complete editor incrementally:
 
 1. Read a selected build's resolved Device Tree and expose node/property/source context.
 2. Navigate application overlays, board definitions and bindings without changing them.
@@ -78,15 +83,17 @@ P2 adds the first creator workflow:
 
 The source and README commands work without Utilities metadata. This release is Linux
 only, requires a resolved existing west workspace/module list, and keeps SDK installation,
-advanced profile editing, project import and Device Tree handoff deferred. See the
+advanced profile editing and project import deferred. The P3 inspection slice adds the
+read-only Device Tree handoff. See the
 [Project Creator guide](project-creator.md) and
 [ADR 0004](decisions/0004-reviewed-project-creation.md).
 
 The detailed [Project Creator and environment analyser master plan](project-creator-masterplan.md)
 prioritizes new applications in the existing workspace. P0 through P2 are delivered
-within their documented limits. P3 introduces existing-build inspection and the first
-Device Tree reader connection; later stages cover editing, advanced composition and
-environment migration. Build evidence does not establish hardware operation.
+within their documented limits. P3's first slice provides existing-build inspection,
+sysbuild domain selection and a read-only Device Tree connection. Source/binding
+navigation and Memory handoff remain P3 follow-ups; later stages cover editing, advanced
+composition and environment migration. Build evidence does not establish hardware operation.
 
 ## TinyML model and experiment analysis
 

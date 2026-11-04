@@ -14,7 +14,7 @@ src/zephyr_utilities/
     __init__.py          # Explicit built-in feature registry
     memory/              # Existing analysis modules, service and HTTP routes
       web/               # index.js, view.html, style.css
-    devicetree/          # Planned feature manifest and scope
+    devicetree/          # Read-only resolved tree inspection
     projects/            # Environment analyser, creator, build attempts, API and web assets
     tinyml/              # Planned feature manifest and scope
   web/                   # index.html, shell.js, shell.css; shared client helpers
@@ -80,16 +80,20 @@ Only the shell owns global navigation and hash routing. Memory retains its Overv
 Explorer, Compare and Snapshots views as local feature navigation. Preserve old hashes
 `#overview`, `#explorer`, `#compare`, `#snapshots` by mapping them to memory views.
 Feature code scopes DOM queries and styles to its root, and releases listeners, timers
-and observers on dispose. Leaving a feature does not cancel server jobs. On re-entry,
+and observers on dispose. The shared workspace picker re-invokes `navigate(view)` on the
+active feature after changing the workspace; the view name may be unchanged. Leaving a
+feature does not cancel server jobs. On re-entry,
 memory can resume its last job through context.state and the shared jobs API. Projects
 reloads the current workspace's saved observation/latest retained job and keeps discovery
 path options separately per workspace in browser-session state. Its Environment and
-Create application subviews dispose their local requests/timers when switching. Creator
+Create application and Builds subviews dispose their local requests/timers when switching. Creator
 form choices are workspace-scoped; reviewed plans are discarded on remount. Projects and
 attempts persist separately from the shared job manager's in-memory retention.
 
 The Home view is a working feature catalog. Planned features are clearly labeled and do
 not pretend to implement editors or model training. Project Creator exposes environment
 analysis and a minimal workspace-app creation/configure/build workflow. Advanced project
-composition and Device Tree handoff remain planned.
+composition remains planned. Existing-build inspection hands a workspace-bound shared
+observation ID and domain to the read-only Device Tree reader. See the
+[build inspection contract](build-inspection.md).
 UI remains English and offline. No runtime CDN or hosted service dependency.

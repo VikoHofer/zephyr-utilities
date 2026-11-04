@@ -1,0 +1,133 @@
+import {buildTextKinds, canOpenDeviceTree, canReadBuildArtifact, createBuildSession, selectedBuildDomain} from "./build-state.js";
+
+const array = (value) => Array.isArray(value) ? value : [];
+const labels = {"resolved-dts": "Resolved Device Tree", "preprocessed-dts": "Preprocessed Device Tree", kconfig: "Kconfig output", "cmake-cache": "CMake cache", "build-info": "Build information", elf: "ELF", map: "Linker map"};
+const text = (value) => value === undefined || value === null || value === "" ? "Unknown" : String(value);
+
+export function mountBuilds(root, context) {
+  const $ = (name) => root.querySelector(`[data-build-${name}]`);
+  const lifetime = new AbortController();
+  const state = context.state.builds ||= {};
+  let session;
+  let disposed = false;
+  let detailKey;
+  let fileKey;
+  function node(tag, className, value) {
+    const item = document.createElement(tag);
+    if (className) item.className = className;
+    if (value !== undefined) item.textContent = String(value);
+    return item;
+  }
+  function fact(parent, label, value, path = false) {
+    const item = node("div", "projects-fact");
+    item.append(node("dt", "", label), node("dd", path ? "projects-path" : "", text(value)));
+    parent.append(item);
+  }
+  function paths(parent, heading, values) {
+    const entries = array(values);
+    parent.append(node("h3", "", heading));
+    if (!entries.length) { parent.append(node("p", "projects-muted", "Not recorded in this build.")); return; }
+    const list = node("ol", "projects-source-list projects-path");
+    for (const path of entries) list.append(node("li", "", path));
+    parent.append(list);
+  }
+  function render() {
+    if (disposed) return;
+    const observation = state.observation;
+    const domain = selectedBuildDomain(state);
+    const busy = Boolean(state.busy);
+    $("workspace").textContent = state.workspace || context.workspace.path;
+    if ($("path").value !== (state.path || "")) $("path").value = state.path || "";
+    $("path").placeholder = `${state.workspace || context.workspace.path}/applications/my_app/build`;
+    $("path").disabled = busy;
+    $("open").disabled = busy || !state.path?.trim();
+    $("open").textContent = state.busy === "open" ? "Reading build…" : "Open build";
+    $("error").hidden = !state.error; $("error").textContent = state.error || "";
+    $("results").hidden = !observation;
+    $("empty").hidden = Boolean(observation) || busy;
+    $("progress").hidden = !busy;
+    $("progress").textContent = state.busy === "check" ? "Checking the observed build files…" : "Reading existing build files…";
+    if (!observation) return;
+    const key = `${observation.id}:${state.domain}`;
+    if (key !== detailKey) {
+      detailKey = key;
+      for (const detail of root.querySelectorAll("[data-build-results] details")) detail.open = false;
+    }
+    const select = $("domain");
+    select.replaceChildren();
+    for (const image of array(observation.domains)) {
+      const option = node("option", "", image.name); option.value = image.name; select.append(option);
+    }
+    select.value = state.domain || ""; select.disabled = busy || !array(observation.domains).length;
+    $("check").disabled = busy;
+    $("reinspect").disabled = busy;
+    $("tree").disabled = !canOpenDeviceTree(state);
+    const freshness = domain?.freshness;
+    $("freshness").textContent = !state.verified ? "This observation needs a fresh check before opening its files." : freshness === "unchanged" ? "The observed build files are unchanged since this inspection." : freshness === "changed" ? "Build files changed since this inspection. Re-inspect to read the current outputs." : "Some observed build files are unavailable. Restore them or re-inspect the directory.";
+    $("identity").replaceChildren();
+    fact($("identity"), "Effective target", domain?.context?.effective_target);
+    fact($("identity"), "Application", domain?.context?.application_source_dir, true);
+    fact($("identity"), "Build directory", domain?.build_dir || observation.root_build_dir, true);
+    fact($("identity"), "Image / domain", domain?.name);
+    const metadata = $("metadata"); metadata.replaceChildren();
+    fact(metadata, "Zephyr checkout", domain?.context?.zephyr_base, true);
+    fact(metadata, "Zephyr version", domain?.context?.zephyr_version);
+    fact(metadata, "Toolchain", domain?.context?.toolchain);
+    fact(metadata, "SDK installation", domain?.context?.sdk_path, true);
+    fact(metadata, "Compiler", domain?.context?.compiler, true);
+    fact(metadata, "Cached board", domain?.context?.cached_board);
+    fact(metadata, "Observation", observation.id, true);
+    fact(metadata, "Observed at", observation.created_at);
+    const inputs = $("inputs"); inputs.replaceChildren();
+    paths(inputs, "Device Tree inputs (recorded order)", domain?.context?.devicetree?.files);
+    paths(inputs, "Explicit overlays", domain?.context?.devicetree?.user_files);
+    paths(inputs, "Extra overlays", domain?.context?.devicetree?.extra_user_files);
+    paths(inputs, "Configuration inputs", domain?.context?.configuration?.files);
+    paths(inputs, "Explicit configuration fragments", domain?.context?.configuration?.user_files);
+    paths(inputs, "Binding directories", domain?.context?.devicetree?.binding_dirs);
+    paths(inputs, "Include directories", domain?.context?.devicetree?.include_dirs);
+    const artifacts = $("artifacts"); artifacts.replaceChildren();
+    if (!array(domain?.artifacts).length) artifacts.append(node("p", "projects-muted", "No supported generated files were found for this image."));
+    for (const artifact of array(domain?.artifacts)) {
+      const row = node("div", "projects-build-artifact");
+      const info = node("div");
+      info.append(node("strong", "", labels[artifact.kind] || artifact.kind), node("p", "projects-path", artifact.path), node("p", "projects-muted", `${text(artifact.availability)} · ${artifact.size ?? "Unknown"} bytes`));
+      const hash = node("details", "projects-technical-details");
+      hash.append(node("summary", "", "Recorded SHA-256"), node("p", "projects-path", artifact.sha256 || "Not recorded"));
+      info.append(hash); row.append(info);
+      if (buildTextKinds.has(artifact.kind)) {
+        const button = node("button", "projects-button", "View file");
+        button.type = "button"; button.dataset.buildFile = artifact.kind;
+        button.setAttribute("aria-label", `View ${labels[artifact.kind] || artifact.kind}`);
+        button.disabled = !canReadBuildArtifact(state, artifact.kind) || Boolean(state.fileLoading);
+        row.append(button);
+      }
+      artifacts.append(row);
+    }
+    const file = state.file;
+    $("file-panel").hidden = !file && !state.fileLoading;
+    const nextFileKey = file || state.fileLoading ? `${key}:${file?.kind || state.fileLoading}` : null;
+    if (nextFileKey && nextFileKey !== fileKey) $("file-panel").open = true;
+    fileKey = nextFileKey;
+    $("file-title").textContent = state.fileLoading ? `Reading ${labels[state.fileLoading] || state.fileLoading}…` : labels[file?.kind] || "File preview";
+    $("file-path").textContent = file?.path || "";
+    $("file-text").textContent = file?.text || "";
+    const diagnostics = $("diagnostics"); diagnostics.replaceChildren();
+    for (const item of [...array(observation.diagnostics), ...array(domain?.diagnostics)]) diagnostics.append(node("p", "projects-banner", item.message || item));
+    $("diagnostics").hidden = !diagnostics.childNodes.length;
+  }
+  const listen = (element, event, callback) => element.addEventListener(event, callback, {signal: lifetime.signal});
+  listen($("path"), "input", () => session.changePath($("path").value));
+  listen($("form"), "submit", (event) => { event.preventDefault(); session.open(); });
+  listen($("domain"), "change", () => session.selectDomain($("domain").value));
+  listen($("check"), "click", () => session.check());
+  listen($("reinspect"), "click", () => session.open());
+  listen($("tree"), "click", () => session.openDeviceTree());
+  listen($("artifacts"), "click", (event) => {
+    const button = event.target.closest("[data-build-file]");
+    if (button && root.contains(button)) session.readText(button.dataset.buildFile);
+  });
+  session = createBuildSession({api: context.api, state, workspace: () => context.workspace.path, onChange: render, navigate: context.navigate});
+  render();
+  return {navigate(view) { return session.navigate(view); }, dispose() { disposed = true; lifetime.abort(); session.dispose(); }};
+}

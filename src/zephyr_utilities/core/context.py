@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 from typing import Any
 
+from .builds import BuildInspectionService
 from .jobs import JobManager
 from .workspace import WorkspaceService
 
@@ -15,6 +16,7 @@ class ApplicationContext:
     jobs: JobManager
     data_dir: Path
     services: dict[str, Any] = field(default_factory=dict)
+    builds: BuildInspectionService = field(default_factory=BuildInspectionService)
 
     def feature_data(self, feature_id):
         if not re.fullmatch(r"[a-z][a-z0-9_-]*", feature_id):

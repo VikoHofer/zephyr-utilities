@@ -1,0 +1,22 @@
+<section class="dt-feature" data-dt-root>
+  <header class="dt-heading"><div><span class="dt-eyebrow">DEVICE TREE · BUILD INSPECTION</span><h1>Explore your resolved hardware.</h1><p>Browse the nodes and properties captured in a configured image.</p></div><span class="dt-badge">Read only</span></header>
+  <div class="dt-toolbar"><a class="dt-button" href="#/projects/builds">Open a build in Project Creator</a><button type="button" class="dt-button" data-dt-refresh hidden>Recheck artifacts</button></div>
+  <p class="dt-scope">Generated Device Tree output is an inspection artifact. Overlay editing and binding validation remain planned.</p>
+  <div class="dt-error" data-dt-error role="alert" hidden></div>
+  <p class="dt-status" data-dt-loading role="status" hidden>Reading the resolved Device Tree…</p>
+  <section class="dt-empty" data-dt-empty><h2>Start with an existing build.</h2><p>Open a configured application or sysbuild directory in Project Creator, choose an image, then select Open Device Tree.</p><a class="dt-button" href="#/projects/builds">Inspect an existing build</a></section>
+  <div data-dt-results hidden>
+    <section class="dt-panel" aria-label="Device Tree build context">
+      <div class="dt-section-heading"><h2>Selected image</h2><label>Image / domain<select data-dt-domain></select></label></div>
+      <dl class="dt-facts" data-dt-context></dl>
+      <p class="dt-notice">This is the saved build output. Whether it matches the current source files is unknown; enabled nodes do not establish driver availability or hardware operation.</p>
+      <details><summary>Build and source details</summary><div data-dt-sources></div></details>
+    </section>
+    <div data-dt-diagnostics></div>
+    <section class="dt-panel" data-dt-browser aria-label="Device Tree node browser">
+      <div class="dt-section-heading"><div><h2>Nodes and properties</h2><p class="dt-muted" data-dt-count role="status"></p></div><label>Find a node<input type="search" data-dt-search placeholder="Path, label or compatible…"></label></div>
+      <div class="dt-browser"><div><div class="dt-nodes" data-dt-nodes></div><button type="button" class="dt-button dt-more" data-dt-more hidden>Show more nodes</button></div><aside class="dt-node-detail" data-dt-detail aria-label="Selected node"></aside></div>
+    </section>
+    <details class="dt-panel dt-raw"><summary>Resolved DTS text</summary><p class="dt-path" data-dt-document-path></p><pre data-dt-document></pre></details>
+  </div>
+</section>

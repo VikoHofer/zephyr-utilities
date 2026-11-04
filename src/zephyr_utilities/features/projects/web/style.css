@@ -123,4 +123,10 @@
 .projects-feature .projects-attempt .projects-error {margin-bottom:12px}
 .projects-feature [data-build-preview-recipe]>.projects-path {margin-bottom:18px}
 .projects-feature [data-detail]>.projects-button {margin-top:15px}
+.projects-feature .projects-build-domain {max-width:440px;margin-bottom:18px}
+.projects-feature .projects-build-artifact {display:flex;align-items:flex-start;justify-content:space-between;gap:15px;padding:13px 0;border-top:1px solid #e2e9dc}
+.projects-feature .projects-build-artifact>div {min-width:0}
+.projects-feature .projects-build-artifact strong {font-size:12px}
+.projects-feature .projects-build-artifact .projects-path {margin-top:5px}
+.projects-feature .projects-build-artifact>.projects-button {flex-shrink:0}
 @media(max-width:650px) {.projects-feature .projects-tabs {flex-wrap:wrap}.projects-feature .projects-full-width {grid-column:auto}}

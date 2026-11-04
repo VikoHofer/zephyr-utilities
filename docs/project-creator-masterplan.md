@@ -2,13 +2,15 @@
 
 Status: P0 foundation, P1 environment analysis and P2 minimal application creation with
 explicit configure/build actions are implemented on 2026-11-04. Device Tree Editor
-(`devicetree`) and P3 onward remain planned. The agreed first creation priority is
+(`devicetree`) now provides read-only resolved-tree inspection through the first P3
+existing-build inspection slice. The rest of P3 and P4 onward remain planned. The agreed first creation priority is
 **new applications inside the existing `zephyrproject` workspace**.
 
 Delivered records are `EnvironmentSnapshot` version 1 and feature-owned version-1
 project/profile and attempt records. The first creator is Linux only, minimal C, one
-image and an explicit installed GNU SDK. Shared editor/build contracts remain future
-work. See the [environment analyser guide](environment-analyser.md),
+image and an explicit installed GNU SDK. P3 adds a narrow transient build-observation
+contract; the full editor/change-plan contracts remain future work. See the
+[build inspection guide](build-inspection.md), [environment analyser guide](environment-analyser.md),
 [Project Creator guide](project-creator.md),
 [ADR 0003](decisions/0003-environment-observations.md) and
 [ADR 0004](decisions/0004-reviewed-project-creation.md) for implemented behaviour and limits.
@@ -301,10 +303,11 @@ in the build. Enabling a node is not proof its driver is enabled or linked. See
 `EnvironmentSnapshot` version 1 is a feature-owned observation record; its exact fields
 are in the [environment contract](environment-analyser.md). P2 also implements a narrow
 feature-owned project/profile, reviewed plan and attempt context, documented in the
-[creator contract](project-creator.md). The shared cross-feature records below remain
-design proposals; the current attempt record does not satisfy every proposed field or
-freshness guarantee. Define the minimum public interfaces and record an ADR when the
-Device Tree reader becomes a second consumer.
+[creator contract](project-creator.md). The full cross-feature records below remain
+design proposals; neither attempt records nor the initial P3 observation satisfies every
+proposed field or freshness guarantee. The implemented read-only shared interface is
+documented in [ADR 0005](decisions/0005-read-only-build-inspection.md): output identities
+are revalidated while source freshness remains unknown.
 
 | Record | Minimum contents | Purpose |
 | --- | --- | --- |
@@ -404,15 +407,16 @@ See [sysbuild](https://docs.zephyrproject.org/latest/build/sysbuild/index.html).
 ## Staged delivery and exit gates
 
 Stages are capability boundaries, not calendar estimates. P0/P1 provide environment
-analysis and P2 delivers the first creator workflow. P3 and P4 remain the next editor
-integration stages. P5 through P7 are optional expansion based on actual projects.
+analysis and P2 delivers the first creator workflow. The first P3 inspection slice is
+available; remaining P3 work and P4 expand editor integration. P5 through P7 are optional
+expansion based on actual projects.
 
 | Stage | Outcome | Status | Depends on | Relative scope |
 | --- | --- | --- | --- | --- |
 | P0 | Observation contract, capability policy and synthetic fixtures | Available | Existing platform | Small |
 | P1 | Offline environment analyser and target catalogue | Available | P0 | Medium |
 | P2 | New workspace application and explicit single-image build | Available within documented limits | P1 | Medium |
-| P3 | Existing-build inspection and Device Tree handoff | Planned | P2; editor reader | Medium |
+| P3 | Existing-build inspection and Device Tree handoff | First read-only slice available; source/binding navigation and Memory handoff pending | P2; editor reader | Medium |
 | P4 | Reviewable configuration and overlay editing | Planned | P3 | Large |
 | P5 | Reusable components and advanced project layouts | Planned | P2; P4 for integrated editing | Large, split into slices |
 | P6 | Environment comparison and upgrade trials | Planned | P1/P2; later stages for their profiles | Medium to large |
@@ -485,6 +489,14 @@ Stop here when the immediate need is reliable new-project creation. The next sta
 not require a graphical Kconfig editor, network installation or a custom-board wizard.
 
 ### P3 Connect existing builds and Device Tree inspection
+
+Delivered first slice: explicit existing-build opening, metadata/artifact inspection,
+sysbuild domain selection and a shared observation handoff to a read-only resolved DTS
+node/property reader. Changed or missing outputs retain their original identity and
+require re-inspection; source freshness remains unknown. No tools execute during
+inspection. See [scope and limits](build-inspection.md).
+
+The remaining target for this stage is:
 
 Open an existing application/build without changing its files. Share the minimal build
 context and artifact interface with the Device Tree reader. Offer source browsing before
@@ -593,8 +605,8 @@ firmware artifacts, private project sources, models or device captures into Git.
 Follow [contributing](../CONTRIBUTING.md): run focused checks during implementation,
 then `python scripts/check.py --quick` and `python scripts/check.py` in the development
 environment. Use `python scripts/verify_package.py` when adding/moving browser assets.
-Report socket, SDK or hardware limitations precisely. P3 and later acceptance gates
-describe future work. Environment discovery does not establish build success; configured
+Report socket, SDK or hardware limitations precisely. The full P3 and later acceptance
+gates still include future work. Environment discovery does not establish build success; configured
 or compiled attempt evidence does not establish device operation. See the
 [environment guide](environment-analyser.md) and [creator guide](project-creator.md) for
 current supported scope, contracts and validation limits.
@@ -606,10 +618,10 @@ uses the minimal C template, `<workspace>/applications/<name>`, explicit install
 selection and one image per project profile. Analysis and previews do not download tools
 or change firmware inputs. Profile/attempt persistence is versioned and feature-owned.
 
-P0 through P2 are available. The next proposed task is P3: existing-build inspection and
-a Device Tree reader consuming a narrowly shared build-context/artifact interface.
-Define freshness checks and read-root boundaries before exposing live artifacts through
-another feature. Keep current Project Creator and Memory Explorer behaviour intact.
+P0 through P2 and the first P3 inspection slice are available. The shared observation
+service now defines output freshness checks and read-root boundaries. Next P3 slices
+should add source/binding navigation and the Memory Explorer handoff, preserving existing
+creator and memory behavior. Do not treat output identity as source/build consistency.
 Before P4, select the first edit operations. Before P5/P7, prioritize actual needs such
 as sensors, networking, custom boards or multicore builds. These later stages are context,
 not authorization to implement them automatically.

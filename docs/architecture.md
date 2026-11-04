@@ -4,9 +4,9 @@ Zephyr Utilities runs as one local Python process serving one browser applicatio
 shared shell owns navigation and workspace selection. Features supply domain services,
 HTTP routes and scoped browser modules through an explicit registry.
 
-Memory Explorer and Project Creator's environment analyser, minimal-C creation and
-explicit configure/build workflow are working features. Device Tree editing and TinyML
-experiments remain planned workflows inside the same application.
+Memory Explorer, Project Creator's analyser/creation/build workflow, existing-build
+inspection and a read-only Device Tree reader are working features. Device Tree editing
+and TinyML experiments remain planned workflows inside the same application.
 
 ## Dependency direction
 
@@ -16,7 +16,7 @@ CLI
      ├─ core/ (HTTP, feature contracts, workspace, jobs)
      └─ explicit feature registry
          ├─ features/memory/
-         ├─ features/devicetree/  [planned]
+         ├─ features/devicetree/  [read-only inspection; editing planned]
          ├─ features/projects/    [analysis, creation and single-image builds]
          └─ features/tinyml/      [planned]
 
@@ -44,7 +44,7 @@ src/zephyr_utilities/
     __init__.py             # Explicit built-in registrations
     memory/                 # Report discovery/generation/model/snapshots/comparison
       web/                  # Feature entry module, template and stylesheet
-    devicetree/             # Planned editor scope
+    devicetree/             # Read-only resolved tree inspection; editing planned
     projects/               # Environment analysis, creation, builds, storage and UI
     tinyml/                 # Planned model/experiment-analysis scope
   web/                      # Shared HTML shell, styles and JavaScript helpers
@@ -87,6 +87,7 @@ removing them requires a documented migration and regression coverage.
 | `jobs.get(id)`, `jobs.list(feature=None)`, `jobs.cancel(id)` | Observe or cancel shared jobs |
 | `services` | Feature-owned service instances assembled during registration |
 | `feature_data(feature_id)` | Stable persistent storage namespace |
+| `builds.inspect/get/read_text` | Shared read-only build observations and verified text outputs |
 
 A task receives `(emit, cancel)` and returns a result mapping. Progress goes through
 `emit`; long-running work checks the cancellation event and releases subprocesses and
@@ -137,6 +138,9 @@ shell `navigate`, `notify`, feature-local in-memory `state`, and `refreshWorkspa
 Only the shell owns `window` hash navigation. Feature code controls its local views and
 scopes selectors/styles to its root. It removes listeners, timers and observers during
 dispose and can restore state when mounted again.
+After the shared workspace picker changes the workspace, the shell navigates the active
+feature to its current view again. Features must reconcile workspace-bound state on this
+notification, even when the view name is unchanged.
 
 The canonical paths are `/#/home` and `/#/memory/overview` (with other memory views below
 the same prefix), plus `/#/projects/environment` and `/#/projects/create`. Earlier hashes such as `#overview` map to the equivalent memory view.
@@ -164,10 +168,11 @@ selected environment and application inputs, then uses explicit CMake argument a
 and a fresh output directory. Application/Zephyr/toolchain code runs only for an explicit
 configure/build action. It is not sandboxed by output-directory separation.
 
-Project/profile and attempt context are feature-owned. They capture requested and
-effective target/toolchain values separately, with partial input coverage and live
-artifact references. Shared configured-build/editor contracts remain proposed until a
-second implemented feature needs them; no cross-feature private imports are introduced.
+Project/profile and attempt context remain feature-owned. The shared build-inspection
+service captures separate transient observations of existing outputs for Projects and
+Device Tree. It preserves original context/hashes and rechecks live artifacts, with
+source freshness explicitly unknown. This is a focused read interface, not the full
+future editor/change-plan contract. See [ADR 0005](decisions/0005-read-only-build-inspection.md).
 
 ## Measurement boundary
 
@@ -187,6 +192,7 @@ or worst-case resource demand. The [research roadmap](roadmap.md) and
 - [ADR 0002: Preserve evidence and storage compatibility](decisions/0002-evidence-and-storage-compatibility.md)
 - [ADR 0003: Versioned environment observations](decisions/0003-environment-observations.md)
 - [ADR 0004: Reviewed creation and build attempts](decisions/0004-reviewed-project-creation.md)
+- [ADR 0005: Shared read-only build observations](decisions/0005-read-only-build-inspection.md)
 - [Adding a feature](adding-a-feature.md)
 - [HTTP/browser integration contract](platform-contract.md)
 
