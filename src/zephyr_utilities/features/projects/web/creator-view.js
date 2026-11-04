@@ -2,6 +2,7 @@ import {activeJob} from "./environment-state.js";
 import {createCreatorSession, creatorBoards, creatorSdks, creatorTemplates, creatorTemplateId, creatorTemplateLabel, selectedCreatorTemplate, currentCreatorJob} from "./creator-state.js";
 import {createConfigurationView} from "./configuration-view.js";
 import {appendFragmentFacts} from "./fragment-view.js";
+import {isLocalSample, selectedSample, sampleSelectionError} from "./sample-state.js";
 
 export function mountCreator(root, context) {
   const $ = (name) => root.querySelector(`[data-${name}]`);
@@ -11,6 +12,7 @@ export function mountCreator(root, context) {
   let session;
   let disposed = false;
   let selectionKey;
+  let sampleKey;
   let renderedPlan;
   let renderedProjects;
   let renderedBuildPlan;
@@ -91,7 +93,15 @@ export function mountCreator(root, context) {
     fact(profile, "Exact target", plan.profile?.target, true);
     fact(profile, "SDK installation", plan.profile?.sdk?.path, true);
     fact(profile, "Zephyr checkout", plan.profile?.zephyr?.path, true);
-    fact(profile, "Template", creatorTemplateLabel(plan.template, state.templates));
+    fact(profile, "Template", creatorTemplateLabel(plan.template, state.templates, plan.sample));
+    const sample = $("preview-sample"); sample.replaceChildren(); sample.hidden = !plan.sample;
+    if (plan.sample) {
+      sample.append(node("p", "projects-muted", "The original sample files and license notices are retained. Source changes before creation require a new preview."));
+      const requirements = node("ul", "projects-sample-requirements");
+      for (const requirement of array(plan.sample.requirements)) requirements.append(node("li", "", requirement));
+      if (requirements.childElementCount) sample.append(requirements);
+      sample.append(disclosure("Sample provenance", "preview:sample", node("pre", "", JSON.stringify(plan.sample, null, 2))));
+    }
     const files = $("preview-files"); files.replaceChildren();
     for (const file of array(plan.files)) {
       const detail = node("details", "projects-preview-file");
@@ -99,6 +109,35 @@ export function mountCreator(root, context) {
       files.append(detail);
     }
     recipe($("preview-recipe"), plan.recipe);
+  }
+  function renderSamples(busy) {
+    const visible = isLocalSample(state.form);
+    const catalogue = state.sampleCatalogue;
+    $("creator-samples").hidden = !visible;
+    fields.sample_id.required = visible;
+    fields.sample_id.disabled = !visible || busy || !catalogue?.ready || catalogue.loading;
+    $("samples-refresh").disabled = busy || !state.snapshot || state.snapshot.status === "stale" || Boolean(catalogue?.loading);
+    $("samples-refresh").textContent = catalogue?.loading ? "Reading samples…" : "Refresh samples";
+    if (!visible) return;
+    const key = JSON.stringify([catalogue, state.form.sample_id, state.snapshot?.status]);
+    if (sampleKey === key) return;
+    sampleKey = key;
+    const sample = selectedSample(state);
+    const entries = array(catalogue?.samples).map((item) => [item.id, `${item.title}${item.status === "available" ? "" : ` · ${item.status}`}`]);
+    if (state.form.sample_id && !sample) entries.unshift([state.form.sample_id, `Unavailable sample: ${state.form.sample_id}`]);
+    choices(fields.sample_id, entries, "Choose a local sample");
+    fields.sample_id.value = state.form.sample_id || "";
+    $("samples-status").textContent = !state.snapshot || state.snapshot.status === "stale" ? "Analyze the selected workspace before loading local samples."
+      : catalogue?.loading ? "Reading the supported samples in this checkout…"
+      : catalogue?.error || (catalogue?.ready ? `Available samples in this checkout: ${catalogue.samples.filter((item) => item.status === "available").length}. Select one to see its requirements.` : "Refresh samples to read this checkout.");
+    $("sample-description").textContent = sample?.description || "";
+    const requirements = $("sample-requirements"); requirements.replaceChildren();
+    for (const requirement of array(sample?.requirements)) requirements.append(node("li", "", requirement));
+    requirements.hidden = !requirements.childElementCount;
+    const diagnostics = $("sample-diagnostics"); diagnostics.replaceChildren();
+    if (catalogue?.ready && state.form.sample_id && !sample) diagnostics.append(node("p", "projects-banner", "This sample is no longer listed in the selected checkout. Choose a listed sample."));
+    for (const diagnostic of [...array(catalogue?.diagnostics), ...array(sample?.diagnostics)]) diagnostics.append(node("p", "projects-banner", diagnostic));
+    if (sample?.status === "available") diagnostics.append(node("p", "projects-muted", `${sample.file_count} files in the reviewed copy, including provenance and license files. Board compatibility is checked by configure/build.`));
   }
   function renderAttempt(parent, attempt) {
     const detail = node("details", "projects-attempt");
@@ -159,7 +198,8 @@ export function mountCreator(root, context) {
       for (const project of projects) {
         const card = node("article", "projects-created-app");
         card.append(node("h3", "", project.name), node("p", "projects-path", project.path));
-        card.append(node("p", "projects-muted", creatorTemplateLabel(project.template, state.templates)));
+        card.append(node("p", "projects-muted", creatorTemplateLabel(project.template, state.templates, project.sample)));
+        if (project.sample) card.append(disclosure("Sample provenance", `project:${project.id}:sample`, node("pre", "", JSON.stringify(project.sample, null, 2))));
         card.append(configurations.create(project));
         const actions = node("div", "projects-actions");
         for (const [operation, label] of [["configure", "Configure"], ["build", "Build"]]) {
@@ -232,7 +272,8 @@ export function mountCreator(root, context) {
     $("creator-requirement").textContent = snapshot?.status === "stale" ? "Environment inputs changed during the scan. Analyze again before creating an application." : "Analyze this workspace in Environment before choosing a board and SDK.";
     renderChoices();
     for (const input of Object.values(fields)) input.disabled = Boolean(state.busy === "create" || activeJob(currentCreatorJob(state)));
-    $("preview-submit").disabled = busy || !selectedCreatorTemplate(state) || !snapshot || snapshot.status === "stale" || !state.form.board_id || !state.form.target || !state.form.sdk_id || !state.form.name.trim();
+    renderSamples(busy);
+    $("preview-submit").disabled = busy || !selectedCreatorTemplate(state) || Boolean(sampleSelectionError(state)) || !snapshot || snapshot.status === "stale" || !state.form.board_id || !state.form.target || !state.form.sdk_id || !state.form.name.trim();
     $("preview-submit").textContent = state.busy === "preview" ? "Preparing preview…" : "Preview application";
     $("create-submit").disabled = busy || !state.plan;
     $("create-submit").textContent = state.busy === "create" ? "Starting creation…" : "Create application";
@@ -250,6 +291,7 @@ export function mountCreator(root, context) {
   listen($("build-start"), "click", () => session.build());
   listen($("creator-cancel"), "click", () => session.cancel());
   listen($("creator-refresh"), "click", () => session.refresh());
+  listen($("samples-refresh"), "click", () => session.loadSamples());
   listen(window, "focus", () => session.refresh());
   listen($("created-projects"), "click", (event) => {
     const button = event.target.closest("[data-build-operation]");
@@ -298,7 +340,7 @@ export function mountCreator(root, context) {
       [...root.querySelectorAll("[data-configuration-select]")].find((input) => input.dataset.configurationSelect === projectId)?.focus();
     }
   });
-  session = createCreatorSession({api: context.api, state, workspace: () => context.workspace.path, onChange: render, pendingBoard: () => {
+  session = createCreatorSession({api: context.api, state, workspace: () => context.workspace.path, isCreating: () => view === "create", onChange: render, pendingBoard: () => {
     const pending = context.state.creatorPendingBoard;
     delete context.state.creatorPendingBoard;
     return pending;
@@ -310,6 +352,7 @@ export function mountCreator(root, context) {
       view = next === "create" ? "create" : "applications";
       render();
       if (changed && view === "applications") session.refresh();
+      else if (view === "create") session.tick().then(() => session.ensureSamples());
       else session.tick();
     },
     dispose() { disposed = true; lifetime.abort(); session.dispose(); },

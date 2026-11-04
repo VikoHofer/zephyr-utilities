@@ -5,8 +5,8 @@ explicit configure/build actions are implemented on 2026-11-04. Build Inspector
 (`inspector`) provides advanced read-only build/resolved-tree inspection, current source
 and binding/include navigation, including application sources before configuration.
 A verified image handoff to Memory Explorer is also available.
-P4 named configurations and fragment selection, and the first P5 slice (a Minimal C++
-starter), are also available. Further editor work and advanced composition remain
+P4 named configurations and fragment selection, and the first P5 slices (a Minimal C++
+starter and curated local sample cloning), are also available. Further editor work and advanced composition remain
 planned. The agreed first creation priority is
 **new applications inside the existing `zephyrproject` workspace**.
 
@@ -19,7 +19,7 @@ is deferred and is not the automatic next task. See [ADR 0009](decisions/0009-pr
 
 Delivered records are `EnvironmentSnapshot` version 1, feature-owned version-1
 project and attempt records, and version-2 profiles (with version-1 compatibility).
-The creator is Linux only, minimal C or C++, one image and an explicit installed GNU
+The creator is Linux only, minimal C/C++ or a curated local sample, one image and an explicit installed GNU
 SDK. P3 adds a narrow transient build-observation
 contract; the full editor/change-plan contracts remain future work. See the
 [build inspection guide](build-inspection.md), [environment analyser guide](environment-analyser.md),
@@ -431,7 +431,7 @@ expansion based on actual projects.
 | P2 | New workspace application and explicit single-image build | Available within documented limits | P1 | Medium |
 | P3 | Existing-build inspection and tool handoffs | Device Tree, Memory, current source/binding navigation and pre-configuration browsing available; deeper attribution pending | P2; editor reader | Medium |
 | P4 | Reviewable configuration and overlay editing | Named configurations and fragment selection available; source/visual editing deferred | P3 | Large |
-| P5 | Reusable components and advanced project layouts | C++ starter available; sample cloning and composition planned | P2; P4 for integrated editing | Large, split into slices |
+| P5 | Reusable components and advanced project layouts | C++ starter and curated sample cloning available; further composition planned | P2; P4 for integrated editing | Large, split into slices |
 | P6 | Environment comparison and upgrade trials | Planned | P1/P2; later stages for their profiles | Medium to large |
 | P7 | Custom board assistance and testing/device workflows | Planned | P4/P5 | Large, separate workflows |
 
@@ -566,9 +566,17 @@ trusted built-in template catalogue controls the reviewed source files and retai
 template identity. C++ uses `main.cpp`, C/CXX CMake languages and `CONFIG_CPP=y`, with
 the existing destination checks and separate Configure/Build workflow. Earlier clients
 that omit template selection still receive the original C template. This does not
-convert existing applications or implement sample cloning.
+convert existing applications.
 
-Prioritize remaining use cases independently: curated local sample cloning; snippets and
+The local sample slice copies supported Hello World, Blinky and Button trees from the
+selected checkout. A bounded adapter checks the local CMake/source/license layout and
+preserves upstream supporting files, board overlays and origin hashes. Unsupported
+layouts or changed source inputs block creation; no sample build code runs during
+discovery/preview. The existing Configure/Build flow validates a copied app explicitly.
+See [ADR 0012](decisions/0012-reviewed-local-sample-cloning.md) for the source and
+publication boundaries. General sample discovery and additional adapters remain planned.
+
+Prioritize remaining use cases independently: more sample adapters; snippets and
 shields; module/custom-driver/binding roots; freestanding applications; portable profiles
 and manifest-owned workspaces; then sysbuild with explicit per-image configuration.
 Show ordered additions from each component, rather than hiding them behind checkboxes.
@@ -657,7 +665,7 @@ current supported scope, contracts and validation limits.
 ## Decisions for the next implementation task
 
 The user selected **new apps in the existing workspace** as the first priority. The creator
-uses Minimal C or C++ templates, `<workspace>/applications/<name>`, explicit installed GNU SDK
+uses Minimal C/C++ templates or curated local samples, `<workspace>/applications/<name>`, explicit installed GNU SDK
 selection and one image per project profile. Analysis and previews do not download tools
 or change firmware inputs. Profile/attempt persistence is versioned and feature-owned.
 
@@ -668,8 +676,9 @@ everyday workflow takes priority. Current-source
 and binding navigation preserve existing creator and memory behavior. Do not treat output
 identity or a current binding candidate as source/build consistency.
 P4 provides named board-target/SDK configurations and ordered fragment selection.
-P5 starts with the C++ template; curated local sample cloning is the next composition
-candidate, with license, provenance and dependency checks still required.
+P5 provides the C++ template and curated local sample cloning with license, provenance
+and dependency checks. Further sample adapters or explicit snippet/shield selections
+are candidates for later composition slices.
 Defer visual hardware editing until the creator workflow is ready. For further P5/P7
 work, prioritize actual needs such
 as sensors, networking, custom boards or multicore builds. These later stages are context,

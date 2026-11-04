@@ -1,4 +1,4 @@
-"""Reviewed minimal applications, published without replacing existing files."""
+"""Reviewed applications, published without replacing existing files."""
 
 from copy import deepcopy
 import ctypes
@@ -21,6 +21,11 @@ SCHEMA_VERSION = 1
 _NAME = re.compile(r"[A-Za-z][A-Za-z0-9_-]{0,63}\Z")
 _DIRECTORY_FLAGS = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
 _RESERVED = {".west", ".venv", ".git", ".features", "build", "node_modules"}
+MAX_APPLICATION_FILES = 128
+MAX_APPLICATION_FILE_BYTES = 1024 * 1024
+MAX_APPLICATION_BYTES = 4 * 1024 * 1024
+MAX_APPLICATION_DEPTH = 8
+_FILE_PART = re.compile(r"[A-Za-z0-9_.+-]+\Z")
 
 
 def _now():
@@ -222,9 +227,17 @@ def select_profile(workspace, body, snapshot):
 
 def preview_project(workspace, body, snapshot, *, recipe_factory=None):
     """Prepare all source bytes and identities without writing or configuring anything."""
-    if not isinstance(body, dict) or set(body) - {"name", "destination", "board_id", "target", "sdk_id", "template_id"}:
+    if not isinstance(body, dict) or set(body) - {
+            "name", "destination", "board_id", "target", "sdk_id", "template_id", "sample_id", "sample_fingerprint"}:
         raise ValueError("Unknown project creation option.")
     template = select_template(body.get("template_id", "minimal-c"))
+    sample = template["id"] == "local-sample"
+    if not sample and {"sample_id", "sample_fingerprint"} & set(body):
+        raise ValueError("Sample selection is only supported for the local sample template.")
+    if sample and (not isinstance(body.get("sample_id"), str) or not body["sample_id"] or
+                   not isinstance(body.get("sample_fingerprint"), str) or
+                   not re.fullmatch(r"[a-f0-9]{64}", body["sample_fingerprint"])):
+        raise ValueError("Choose a current local sample before previewing.")
     name = body.get("name")
     if not isinstance(name, str) or not _NAME.fullmatch(name):
         raise ValueError("Application names need a leading letter and up to 64 letters, digits, underscores or hyphens.")
@@ -242,12 +255,26 @@ def preview_project(workspace, body, snapshot, *, recipe_factory=None):
         from .builds import command_recipe
         recipe_factory = command_recipe
     recipe = recipe_factory(profile, destination, destination / "build" / "manual")
-    contents = render_template(template, name, profile, recipe)
-    return {"schema_version": SCHEMA_VERSION, "id": uuid.uuid4().hex, "workspace": str(workspace),
+    provenance = None
+    if sample:
+        from .samples import preview_sample
+        selected_sample = preview_sample(snapshot, body["sample_id"], recipe)
+        provenance = selected_sample["provenance"]
+        if provenance["fingerprint"] != body["sample_fingerprint"]:
+            raise ValueError("The local sample changed after selection. Refresh the sample list and select it again.")
+        files = selected_sample["files"]
+    else:
+        contents = render_template(template, name, profile, recipe)
+        files = [{"path": path, "content": content, "sha256": _hash(content.encode())}
+                 for path, content in contents.items()]
+    _validate_file_manifest(files)
+    plan = {"schema_version": SCHEMA_VERSION, "id": uuid.uuid4().hex, "workspace": str(workspace),
             "name": name, "destination": str(destination), "profile": profile, "template": template,
-            "files": [{"path": path, "content": content, "sha256": _hash(content.encode())}
-                      for path, content in contents.items()],
+            "files": files,
             "destination_identity": identity, "recipe": recipe, "created_at": _now()}
+    if sample:
+        plan["sample"] = deepcopy(provenance)
+    return plan
 
 
 def _open_parent(destination, expected, owned):
@@ -288,44 +315,99 @@ def _same_directory(parent, name, identity):
     try:
         observed = os.stat(name, dir_fd=parent, follow_symlinks=False)
         return stat.S_ISDIR(observed.st_mode) and _identity(observed) == identity
-    except FileNotFoundError:
+    except OSError:
         return False
 
 
-def _cleanup_files(directory, files, source_identity):
+def _validate_file_manifest(files):
+    """Bound every reviewed text file before creating any destination directory."""
+    if not isinstance(files, list) or not 1 <= len(files) <= MAX_APPLICATION_FILES:
+        raise ValueError("The change plan contains an unsupported generated file count.")
+    names = set()
+    total = 0
+    for item in files:
+        if not isinstance(item, dict) or not isinstance(item.get("path"), str):
+            raise ValueError("The change plan contains unsupported generated files.")
+        name = item["path"]
+        parts = name.split("/")
+        if (not 1 <= len(parts) <= MAX_APPLICATION_DEPTH or len(name) > 1024 or
+                any(not _FILE_PART.fullmatch(part) or len(part) > 255 or part in {".", ".."} or
+                    part in _RESERVED or (part.startswith(".") and name != ".gitignore") for part in parts) or
+                name in names):
+            raise ValueError("The change plan contains unsupported generated files or conflicting paths.")
+        names.add(name)
+        if not isinstance(item.get("content"), str) or "\0" in item["content"]:
+            raise ValueError("The reviewed files must contain UTF-8 text without null bytes.")
+        content = item["content"].encode("utf-8")
+        total += len(content)
+        if len(content) > MAX_APPLICATION_FILE_BYTES or total > MAX_APPLICATION_BYTES:
+            raise ValueError("The reviewed files exceed the application publication size limit.")
+        if _hash(content) != item.get("sha256"):
+            raise ValueError("The reviewed file contents changed. Preview again.")
+    if any(parent.as_posix() in names for name in names for parent in Path(name).parents if parent != Path(".")):
+        raise ValueError("The change plan contains unsupported generated files or conflicting paths.")
+    return names
+
+
+def _attached_directory(directory, relative, directories):
+    """Return a pinned descriptor only while its complete directory chain is intact."""
+    descriptor = directory
+    current = Path(".")
+    for part in relative.parts:
+        current /= part
+        entry = directories.get(current)
+        if entry is None or not _same_directory(descriptor, part, entry["identity"]):
+            return None
+        descriptor = entry["descriptor"]
+    return descriptor
+
+
+def _ensure_directory(directory, relative, directories):
+    """Create and retain every nested parent inside the private staging directory."""
+    descriptor = directory
+    current = Path(".")
+    for part in relative.parts:
+        current /= part
+        if current not in directories:
+            os.mkdir(part, mode=0o755, dir_fd=descriptor)
+            child = _directory(descriptor, part)
+            directories[current] = {"descriptor": child, "identity": _identity(os.fstat(child))}
+        entry = directories[current]
+        if not _same_directory(descriptor, part, entry["identity"]):
+            raise ValueError("The staged application directory changed during creation.")
+        descriptor = entry["descriptor"]
+    return descriptor
+
+
+def _cleanup_files(directory, files, directories):
     """Remove unchanged operation-owned bytes only; foreign additions/edits survive."""
-    source = None
-    try:
-        if source_identity and _same_directory(directory, "src", source_identity):
-            source = _directory(directory, "src")
-        for item in files:
-            relative = Path(item["path"])
-            parent = source if relative.parent == Path("src") else directory
-            if parent is None:
-                continue
-            try:
-                fd = os.open(relative.name, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW, dir_fd=parent)
-                with os.fdopen(fd, "rb") as stream:
-                    info = os.fstat(stream.fileno())
-                    expected = item["content"].encode()
-                    if (not stat.S_ISREG(info.st_mode) or _identity(info) != item["identity"] or
-                            info.st_size > len(expected) or (item["complete"] and info.st_size != len(expected))):
-                        continue
-                    if stream.read(len(expected) + 1) != expected[:info.st_size]:
-                        continue
-                    current = os.stat(relative.name, dir_fd=parent, follow_symlinks=False)
-                    if _identity(current) == _identity(info):
-                        os.unlink(relative.name, dir_fd=parent)
-            except OSError:
-                continue
-    finally:
-        if source is not None:
-            os.close(source)
-            try:
-                if _same_directory(directory, "src", source_identity):
-                    os.rmdir("src", dir_fd=directory)
-            except OSError:
-                pass
+    for item in files:
+        relative = Path(item["path"])
+        parent = _attached_directory(directory, relative.parent, directories)
+        if parent is None:
+            continue
+        try:
+            fd = os.open(relative.name, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW, dir_fd=parent)
+            with os.fdopen(fd, "rb") as stream:
+                info = os.fstat(stream.fileno())
+                expected = item["content"].encode()
+                if (not stat.S_ISREG(info.st_mode) or _identity(info) != item["identity"] or
+                        info.st_size > len(expected) or (item["complete"] and info.st_size != len(expected))):
+                    continue
+                if stream.read(len(expected) + 1) != expected[:info.st_size]:
+                    continue
+                current = os.stat(relative.name, dir_fd=parent, follow_symlinks=False)
+                if _identity(current) == _identity(info):
+                    os.unlink(relative.name, dir_fd=parent)
+        except OSError:
+            continue
+    for relative, entry in reversed(list(directories.items())):
+        parent = _attached_directory(directory, relative.parent, directories)
+        try:
+            if parent is not None and _same_directory(parent, relative.name, entry["identity"]):
+                os.rmdir(relative.name, dir_fd=parent)
+        except OSError:
+            pass
 
 
 def _directory_names(descriptor):
@@ -338,16 +420,25 @@ def _directory_names(descriptor):
         os.close(fresh)
 
 
-def _validate_staging(directory, source, source_identity, files):
-    expected_root = {Path(item["path"]).parts[0] for item in files}
-    expected_source = {Path(item["path"]).name for item in files if Path(item["path"]).parent == Path("src")}
-    if (not _same_directory(directory, "src", source_identity) or
-            set(_directory_names(directory)) != expected_root or
-            set(_directory_names(source)) != expected_source):
-        raise ValueError("The staged application changed during creation; foreign files were preserved.")
+def _validate_staging(directory, directories, files):
+    expected = {Path("."): set()}
     for item in files:
         relative = Path(item["path"])
-        parent = source if relative.parent == Path("src") else directory
+        expected.setdefault(relative.parent, set()).add(relative.name)
+        for parent in relative.parents:
+            if parent != Path("."):
+                expected.setdefault(parent.parent, set()).add(parent.name)
+    if set(expected) != {Path("."), *directories}:
+        raise ValueError("The staged application directory structure changed during creation.")
+    for relative, names in expected.items():
+        descriptor = _attached_directory(directory, relative, directories)
+        if descriptor is None or set(_directory_names(descriptor)) != names:
+            raise ValueError("The staged application changed during creation; foreign files were preserved.")
+    for item in files:
+        relative = Path(item["path"])
+        parent = _attached_directory(directory, relative.parent, directories)
+        if parent is None:
+            raise ValueError("The staged application directory changed during creation.")
         fd = os.open(relative.name, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW, dir_fd=parent)
         with os.fdopen(fd, "rb") as stream:
             info = os.fstat(stream.fileno())
@@ -362,20 +453,25 @@ def apply_project(plan, *, cancel=None):
     if plan.get("schema_version") != SCHEMA_VERSION:
         raise ValueError("Unsupported project change-plan schema.")
     template = validate_template(plan.get("template"))
+    sample = template["id"] == "local-sample"
+    if not sample and "sample" in plan:
+        raise ValueError("Sample provenance is only supported for the local sample template.")
     destination = _path(plan["destination"], "Destination")
     if _destination_identity(destination) != plan["destination_identity"]:
         raise ValueError("The destination ancestors changed after preview. Preview again.")
     files = plan["files"]
-    expected_names = template_paths(template)
-    if len(files) != len(expected_names) or {item["path"] for item in files} != expected_names:
+    names = _validate_file_manifest(files)
+    if sample:
+        from .samples import validate_sample_plan
+        validate_sample_plan(plan, cancel=cancel)
+    elif names != template_paths(template):
         raise ValueError("The change plan contains unsupported generated files.")
-    if any(_hash(item["content"].encode()) != item["sha256"] for item in files):
-        raise ValueError("The reviewed file contents changed. Preview again.")
     check_cancel(cancel)
     owned = []
-    parent = staging = source = None
+    parent = staging = None
     stage_name = f".zephyr-create-{uuid.uuid4().hex}"
-    stage_identity = source_identity = None
+    stage_identity = None
+    directories = {}
     published = False
     written = []
     try:
@@ -383,22 +479,23 @@ def apply_project(plan, *, cancel=None):
         os.mkdir(stage_name, mode=0o755, dir_fd=parent)
         staging = _directory(parent, stage_name)
         stage_identity = _identity(os.fstat(staging))
-        os.mkdir("src", mode=0o755, dir_fd=staging)
-        source = _directory(staging, "src")
-        source_identity = _identity(os.fstat(source))
         for item in files:
             check_cancel(cancel)
             relative = Path(item["path"])
+            directory = _ensure_directory(staging, relative.parent, directories)
             fd = os.open(relative.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                         0o644, dir_fd=source if relative.parent == Path("src") else staging)
+                         0o644, dir_fd=directory)
             written.append({**item, "identity": _identity(os.fstat(fd)), "complete": False})
             with os.fdopen(fd, "wb") as stream:
                 stream.write(item["content"].encode())
                 stream.flush()
                 os.fsync(stream.fileno())
             written[-1]["complete"] = True
-        os.fsync(source)
+        for entry in reversed(list(directories.values())):
+            os.fsync(entry["descriptor"])
         os.fsync(staging)
+        if sample:
+            validate_sample_plan(plan, cancel=cancel)
         # The descriptors pinned the parent; rechecking paths catches renamed ancestors.
         expected = deepcopy(plan["destination_identity"])
         expected["ancestors"].extend({"path": str(Path(plan["destination_identity"]["missing"][index])), **identity}
@@ -410,7 +507,7 @@ def apply_project(plan, *, cancel=None):
             raise ValueError("The destination ancestors changed during creation. Preview again.")
         if not _same_directory(parent, stage_name, stage_identity):
             raise ValueError("The staged application directory changed during creation.")
-        _validate_staging(staging, source, source_identity, written)
+        _validate_staging(staging, directories, written)
         check_cancel(cancel)
         _rename_noreplace(parent, stage_name, destination.name)
         published = True
@@ -424,17 +521,20 @@ def apply_project(plan, *, cancel=None):
                                 "message": f"Application created, but directory synchronization failed: {exc}"})
         ancestry = [{key: entry[key] for key in ("path", "device", "inode")} for entry in expected["ancestors"]]
         ancestry.append({"path": str(destination), **stage_identity})
-        return {"schema_version": SCHEMA_VERSION, "id": uuid.uuid4().hex, "workspace": plan["workspace"],
+        project = {"schema_version": SCHEMA_VERSION, "id": uuid.uuid4().hex, "workspace": plan["workspace"],
                 "name": plan["name"], "path": str(destination), "profile": deepcopy(plan["profile"]),
                 "template": template, "directory_identity": ancestry,
                 "files": [{"path": item["path"], "sha256": item["sha256"]} for item in files],
                 "diagnostics": diagnostics, "created_at": _now()}
+        if sample:
+            project["sample"] = deepcopy(plan["sample"])
+        return project
     finally:
-        if source is not None:
-            os.close(source)
         if staging is not None:
             if not published:
-                _cleanup_files(staging, written, source_identity)
+                _cleanup_files(staging, written, directories)
+            for entry in directories.values():
+                os.close(entry["descriptor"])
             os.close(staging)
         if parent is not None:
             if not published and stage_identity and _same_directory(parent, stage_name, stage_identity):

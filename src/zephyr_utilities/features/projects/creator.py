@@ -18,6 +18,7 @@ from .fragments import discover_fragment_files, profile_fragments, validate_frag
 from .metadata import read_regular
 from .probing import check_cancel
 from .records import ProjectStore, configuration_name, identifier, now
+from .samples import sample_catalog
 from .templates import template_catalog
 
 
@@ -106,8 +107,17 @@ class CreatorService:
         return {"workspace": workspace, "snapshot": snapshot, "projects": projects, "jobs": jobs,
                 "diagnostics": diagnostics, "templates": template_catalog()}
 
+    def samples(self, body):
+        workspace = self._workspace(body, set())
+        snapshot = self.environments.latest(workspace)
+        zephyr = snapshot.get("zephyr") if isinstance(snapshot, dict) else None
+        if not isinstance(zephyr, dict) or not isinstance(zephyr.get("path"), str) or not zephyr["path"]:
+            raise ValueError("Analyze this workspace before choosing a local sample.")
+        return {"workspace": workspace, **sample_catalog(snapshot)}
+
     def preview(self, body):
-        workspace = self._workspace(body, {"name", "destination", "board_id", "target", "sdk_id", "template_id"})
+        workspace = self._workspace(body, {"name", "destination", "board_id", "target", "sdk_id", "template_id",
+                                           "sample_id", "sample_fingerprint"})
         snapshot = self.environments.latest(workspace)
         if snapshot is None:
             raise ValueError("Analyze this workspace before creating an application.")

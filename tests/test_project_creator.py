@@ -16,9 +16,11 @@ from zephyr_utilities.app import Application
 from zephyr_utilities.core.http import Request
 from zephyr_utilities.features.projects.creator import source_inputs
 from zephyr_utilities.features.projects.records import ProjectStore
+from zephyr_utilities.features.projects.samples import sample_catalog
 
 import test_projects_api as existing_api
 from test_projects_api import wait_job
+from test_project_samples import sample_fixture
 
 
 class CreatorServiceTests(unittest.TestCase):
@@ -83,9 +85,9 @@ class CreatorServiceTests(unittest.TestCase):
 
     def test_template_catalog_has_independent_public_descriptors(self):
         templates = self.call("GET", "creator").data["templates"]
-        self.assertEqual([item["id"] for item in templates], ["minimal-c", "minimal-cpp"])
-        self.assertEqual([item["title"] for item in templates], ["Minimal C", "Minimal C++"])
-        self.assertEqual([item["language"] for item in templates], ["C", "C++"])
+        self.assertEqual([item["id"] for item in templates], ["minimal-c", "minimal-cpp", "local-sample"])
+        self.assertEqual([item["title"] for item in templates], ["Minimal C", "Minimal C++", "Local Zephyr sample"])
+        self.assertEqual([item["language"] for item in templates], ["C", "C++", "C"])
         for template in templates:
             self.assertEqual(set(template), {"id", "version", "title", "description", "language"})
             self.assertEqual(template["version"], 1)
@@ -128,6 +130,67 @@ class CreatorServiceTests(unittest.TestCase):
         self.assertEqual(self.creator.plans, {})
         self.assertFalse((self.workspace / "applications").exists())
         self.analyze.assert_not_called()
+
+    def sample_selection(self):
+        catalogue = self.call("POST", "samples", self.body()).data
+        sample = next(item for item in catalogue["samples"] if item["id"] == "hello_world")
+        self.assertEqual(sample["status"], "available", sample["diagnostics"])
+        return {"template_id": "local-sample", "sample_id": sample["id"],
+                "sample_fingerprint": sample["fingerprint"]}
+
+    def test_sample_catalogue_and_preview_are_read_only_and_workspace_bound(self):
+        source = sample_fixture(self.workspace / "zephyr")
+        before = {str(path): path.read_bytes() for path in source.rglob("*") if path.is_file()}
+        with patch("zephyr_utilities.features.projects.creator.sample_catalog", wraps=sample_catalog) as scan:
+            self.call("GET", "creator")
+            scan.assert_not_called()
+            selection = self.sample_selection()
+            scan.assert_called_once()
+        plan = self.preview(**selection)
+        self.assertEqual(plan["sample"]["id"], "hello_world")
+        self.assertEqual(plan["sample"]["fingerprint"], selection["sample_fingerprint"])
+        self.assertFalse(Path(plan["destination"]).exists())
+        self.assertEqual(before, {str(path): path.read_bytes() for path in source.rglob("*") if path.is_file()})
+        self.assertEqual(self.app.context.jobs.list(), [])
+        self.analyze.assert_not_called()
+        for body in ({"workspace": "/another"}, self.body(path="/arbitrary")):
+            with self.assertRaises(ValueError):
+                self.call("POST", "samples", body)
+
+    def test_sample_creation_persists_provenance_and_reopens_without_upstream(self):
+        source = sample_fixture(self.workspace / "zephyr")
+        plan = self.preview(**self.sample_selection())
+        with patch("zephyr_utilities.features.projects.creator.execute_build") as execute:
+            job = wait_job(self.app.context.jobs, self.call("POST", "create", self.body(plan_id=plan["id"])).data["id"])
+            self.assertEqual(job["status"], "completed", job.get("error"))
+            execute.assert_not_called()
+        project = job["result"]["project"]
+        self.assertEqual(project["sample"], plan["sample"])
+        self.assertEqual(project["template"], {"id": "local-sample", "version": 1})
+        for item in plan["files"]:
+            self.assertEqual((Path(project["path"]) / item["path"]).read_bytes(), item["content"].encode())
+        source.rename(source.with_name("moved-upstream"))
+        reopened = Application(self.workspace, self.root / "data")
+        self.addCleanup(reopened.close)
+        saved = reopened.context.services["project_creator"].current()["projects"][0]
+        self.assertEqual(saved["sample"], plan["sample"])
+        self.assertEqual(saved["attempts"], [])
+
+    def test_sample_changes_invalidate_catalogue_choice_and_retained_creation(self):
+        source = sample_fixture(self.workspace / "zephyr")
+        selection = self.sample_selection()
+        plan = self.preview(**selection)
+        path = source / "src/main.c"
+        path.write_text(path.read_text() + "\n/* independent source edit */\n")
+        with self.assertRaises(ValueError):
+            self.preview(**selection)
+        job = wait_job(self.app.context.jobs, self.call("POST", "create", self.body(plan_id=plan["id"])).data["id"])
+        self.assertEqual(job["status"], "failed")
+        self.assertFalse(Path(plan["destination"]).exists())
+        self.assertEqual(self.creator.current()["projects"], [])
+        refreshed = self.sample_selection()
+        self.assertNotEqual(refreshed["sample_fingerprint"], selection["sample_fingerprint"])
+        self.assertEqual(self.preview(**refreshed)["sample"]["fingerprint"], refreshed["sample_fingerprint"])
 
     def test_create_rechecks_then_persists_and_remains_separate_from_build(self):
         with patch("zephyr_utilities.features.projects.creator.execute_build") as execute:
@@ -338,14 +401,14 @@ class CreatorHttpTests(unittest.TestCase):
     request = existing_api.ProjectsHttpTests.request
 
     def test_creator_routes_use_shared_guards_and_need_explicit_inputs(self):
-        for endpoint in ("preview", "create", "configurations", "configuration-files", "build-preview", "build"):
+        for endpoint in ("samples", "preview", "create", "configurations", "configuration-files", "build-preview", "build"):
             with self.subTest(endpoint=endpoint), self.assertRaises(HTTPError) as error:
                 self.request("/api/projects/" + endpoint, method="POST", body={}, authorized=False)
             self.assertEqual(error.exception.code, 403)
             with self.assertRaises(HTTPError) as error:
                 self.request("/api/projects/" + endpoint, method="POST", body={})
             self.assertEqual(error.exception.code, 400)
-        for endpoint in ("configurations", "configuration-files"):
+        for endpoint in ("samples", "configurations", "configuration-files"):
             for values, expected in [({"method": "POST", "origin": "https://outside.invalid"}, 403),
                                      ({"method": "DELETE"}, 405)]:
                 with self.subTest(endpoint=endpoint, values=values), self.assertRaises(HTTPError) as error:
@@ -354,7 +417,22 @@ class CreatorHttpTests(unittest.TestCase):
         with self.request("/api/projects/creator") as response:
             data = json.load(response)
             self.assertEqual(data["projects"], [])
-            self.assertEqual([item["id"] for item in data["templates"]], ["minimal-c", "minimal-cpp"])
+            self.assertEqual([item["id"] for item in data["templates"]], ["minimal-c", "minimal-cpp", "local-sample"])
+
+    def test_sample_catalogue_over_http_reads_only_selected_checkout(self):
+        zephyr = self.root / "zephyr"
+        sample_fixture(zephyr)
+        snapshot = existing_api.observation(self.root, {})
+        snapshot["zephyr"] = {"path": str(zephyr), "version": "test-version"}
+        self.server.app.context.services["projects"].store.save(snapshot)
+        with self.request("/api/projects/samples", method="POST", body={"workspace": str(self.root)}) as response:
+            data = json.load(response)
+        self.assertEqual(data["workspace"], str(self.root))
+        self.assertEqual(data["samples"][0]["status"], "available")
+        self.assertEqual(self.server.app.context.jobs.list(), [])
+        with self.assertRaises(HTTPError) as error:
+            self.request("/api/projects/samples", method="POST", body={"workspace": str(self.root), "path": "/outside"})
+        self.assertEqual(error.exception.code, 400)
 
     def test_preview_rejects_invalid_template_ids_over_http(self):
         self.server.app.context.services["projects"].store.save(existing_api.observation(self.root, {}))

@@ -51,6 +51,15 @@
       <div class="projects-section-heading"><div><span class="projects-eyebrow">1 · APPLICATION</span><h2>Choose a template, destination and target.</h2></div></div>
       <div class="projects-option-grid">
         <label class="projects-full-width">Application template<select data-create-field="template_id" required><option value="minimal-c">Minimal C</option></select><span class="projects-input-help" data-creator-template-note></span></label>
+        <section class="projects-sample-choice projects-full-width" data-creator-samples hidden aria-label="Local sample selection">
+          <div class="projects-sample-heading"><h3>Choose a local sample</h3><button type="button" class="projects-button" data-samples-refresh>Refresh samples</button></div>
+          <p class="projects-muted">Copies supported samples from your selected Zephyr checkout, including their supporting files and licenses. Configure and build check compatibility with your target.</p>
+          <p class="projects-muted" data-samples-status role="status" aria-live="polite"></p>
+          <label>Sample<select data-create-field="sample_id"><option value="">Choose a local sample</option></select></label>
+          <p data-sample-description></p>
+          <ul class="projects-sample-requirements" data-sample-requirements></ul>
+          <div data-sample-diagnostics></div>
+        </section>
         <label>Application name<input data-create-field="name" required autocomplete="off" spellcheck="false" placeholder="my_app"></label>
         <label>Destination in workspace<input data-create-field="destination" autocomplete="off" spellcheck="false" placeholder="applications/my_app"><span class="projects-input-help">Leave blank for applications/&lt;name&gt;. The destination must be new.</span></label>
         <label class="projects-full-width">Find a board<input type="search" data-create-field="search" placeholder="Board name, chip, vendor or target…" autocomplete="off"></label>
@@ -64,6 +73,7 @@
     <section class="projects-panel" data-creator-preview hidden aria-label="Application preview">
       <div class="projects-section-heading"><div><span class="projects-eyebrow">2 · REVIEW</span><h2>Files to create</h2><p class="projects-path" data-preview-destination></p></div><span class="projects-label" data-preview-count></span></div>
       <div data-preview-profile class="projects-identity"></div>
+      <div data-preview-sample hidden></div>
       <div data-preview-files></div>
       <details class="projects-recipe"><summary>Configure and build commands</summary><div data-preview-recipe></div></details>
       <p class="projects-muted projects-apply-note">Create applies only these files in a new directory. It does not configure or compile the application.</p>

@@ -10,6 +10,10 @@ _TEMPLATES = {
         "id": "minimal-cpp", "version": 1, "title": "Minimal C++", "language": "C++",
         "description": "A small C++ application that prints a greeting without standard-library extras.",
     },
+    "local-sample": {
+        "id": "local-sample", "version": 1, "title": "Local Zephyr sample", "language": "C",
+        "description": "Copy a supported sample from the selected Zephyr checkout.",
+    },
 }
 
 
@@ -37,6 +41,8 @@ def validate_template(value):
 def template_paths(template):
     """Only these generated paths may be published for the selected template."""
     identity = validate_template(template)
+    if identity["id"] == "local-sample":
+        raise ValueError("Local sample files require a validated source preview.")
     source = "src/main.cpp" if identity["id"] == "minimal-cpp" else "src/main.c"
     return {"CMakeLists.txt", "prj.conf", source, ".gitignore", "README.md"}
 
@@ -44,6 +50,8 @@ def template_paths(template):
 def render_template(template, name, profile, recipe):
     """Render version-one sources and their standalone build instructions."""
     identity = validate_template(template)
+    if identity["id"] == "local-sample":
+        raise ValueError("Local samples require a validated source preview.")
     descriptor = _TEMPLATES[identity["id"]]
     cpp = identity["id"] == "minimal-cpp"
     source = "src/main.cpp" if cpp else "src/main.c"

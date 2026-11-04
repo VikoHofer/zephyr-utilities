@@ -57,6 +57,19 @@ class ProjectCreationTests(unittest.TestCase):
     def preview(self, **changes):
         return preview_project(str(self.workspace), {**self.body, **changes}, self.snapshot, recipe_factory=self.recipe)
 
+    def sample_plan(self):
+        # Sample scanning has its own tests. These fixtures isolate publication
+        # after the scanner has accepted exact nested source and license bytes.
+        plan = self.preview()
+        plan["template"] = {"id": "local-sample", "version": 1}
+        plan["sample"] = {"schema_version": 1, "id": "hello-world", "fingerprint": "a" * 64}
+        for path, content in {
+                "boards/vendor/test_board.overlay": "/* copied board overlay */\n",
+                "config/debug.conf": "CONFIG_DEBUG=y\n",
+                "LICENSES/Apache-2.0.txt": "Synthetic license text\n"}.items():
+            plan["files"].append({"path": path, "content": content, "sha256": hashlib.sha256(content.encode()).hexdigest()})
+        return plan
+
     def test_preview_is_read_only_and_contains_exact_generated_files_and_commands(self):
         before = list(self.workspace.iterdir())
         plan = self.preview()
@@ -151,19 +164,172 @@ class ProjectCreationTests(unittest.TestCase):
                         apply_project(forged)
         self.assertFalse((self.workspace / "applications").exists())
 
+    def test_sample_preview_retains_the_current_source_and_rejects_stale_selection(self):
+        fixture = self.sample_plan()
+        result = {"files": fixture["files"], "provenance": fixture["sample"]}
+        with patch("zephyr_utilities.features.projects.samples.preview_sample", return_value=result) as preview:
+            plan = self.preview(template_id="local-sample", sample_id="hello-world", sample_fingerprint="a" * 64)
+            self.assertEqual(plan["files"], fixture["files"])
+            self.assertEqual(plan["sample"], fixture["sample"])
+            self.assertEqual(plan["template"], {"id": "local-sample", "version": 1})
+            preview.assert_called_once_with(self.snapshot, "hello-world", plan["recipe"])
+            with self.assertRaisesRegex(ValueError, "sample changed"):
+                self.preview(template_id="local-sample", sample_id="hello-world", sample_fingerprint="b" * 64)
+        self.assertFalse((self.workspace / "applications").exists())
+
+    def test_sample_selection_fields_are_required_and_not_accepted_for_builtins(self):
+        for changes in ({"sample_id": "hello-world"}, {"sample_fingerprint": "a" * 64},
+                        {"template_id": "minimal-cpp", "sample_id": "hello-world"}):
+            with self.subTest(changes=changes), self.assertRaisesRegex(ValueError, "Sample selection"):
+                self.preview(**changes)
+        for changes in ({}, {"sample_id": None, "sample_fingerprint": "a" * 64},
+                        {"sample_id": "hello-world", "sample_fingerprint": ""},
+                        {"sample_id": "hello-world", "sample_fingerprint": "g" * 64},
+                        {"sample_id": "hello-world", "sample_fingerprint": []}):
+            with self.subTest(changes=changes), self.assertRaisesRegex(ValueError, "current local sample"):
+                self.preview(template_id="local-sample", **changes)
+        self.assertFalse((self.workspace / "applications").exists())
+
+    def test_sample_publication_preserves_nested_files_and_provenance(self):
+        plan = self.sample_plan()
+        with patch("zephyr_utilities.features.projects.samples.validate_sample_plan") as validate:
+            project = apply_project(plan)
+        self.assertEqual(validate.call_count, 2)
+        destination = Path(project["path"])
+        for item in plan["files"]:
+            self.assertEqual((destination / item["path"]).read_bytes(), item["content"].encode())
+        self.assertEqual(project["directory_identity"], path_identity(destination))
+        self.assertEqual(project["sample"], plan["sample"])
+        plan["sample"]["fingerprint"] = "changed"
+        self.assertEqual(project["sample"]["fingerprint"], "a" * 64)
+        self.assertEqual({path.relative_to(destination).as_posix() for path in destination.rglob("*") if path.is_file()},
+                         {item["path"] for item in project["files"]})
+
+    def test_sample_change_before_or_during_publication_leaves_no_owned_files(self):
+        for checks in ([ValueError("Sample inputs changed")], [None, ValueError("Sample inputs changed")]):
+            with self.subTest(checks=checks):
+                plan = self.sample_plan()
+                with patch("zephyr_utilities.features.projects.samples.validate_sample_plan", side_effect=checks):
+                    with self.assertRaisesRegex(ValueError, "Sample inputs changed"):
+                        apply_project(plan)
+                self.assertFalse((self.workspace / "applications").exists())
+
+    def test_nested_manifest_rejects_traversal_collisions_and_hidden_build_inputs_before_writes(self):
+        plan = self.sample_plan()
+        bad_paths = ["../outside", "/outside", "src//extra.c", "src/./extra.c", "src/../extra.c",
+                     "src\\outside.c", "src;outside.c", "src/line\nbreak.c", ".git/config", "build/config",
+                     "src/.hidden/file.c", "src", "src/main.c", "/".join(["deep"] * 9)]
+        for path in bad_paths:
+            forged = deepcopy(plan)
+            forged["files"][-1]["path"] = path
+            with self.subTest(path=path), patch("zephyr_utilities.features.projects.samples.validate_sample_plan") as validate:
+                with self.assertRaisesRegex(ValueError, "unsupported generated files"):
+                    apply_project(forged)
+                validate.assert_not_called()
+        self.assertFalse((self.workspace / "applications").exists())
+
+    def test_sample_publication_bounds_reviewed_bytes_and_file_count(self):
+        plan = self.sample_plan()
+        for limit, value in (("MAX_APPLICATION_FILES", len(plan["files"]) - 1),
+                             ("MAX_APPLICATION_FILE_BYTES", 1), ("MAX_APPLICATION_BYTES", 1)):
+            with self.subTest(limit=limit), patch.object(creation, limit, value):
+                with self.assertRaises(ValueError):
+                    apply_project(plan)
+        self.assertFalse((self.workspace / "applications").exists())
+
+    def test_cancellation_after_nested_files_are_staged_cleans_only_owned_tree(self):
+        plan = self.sample_plan()
+        cancel = Event()
+        original = creation._validate_staging
+
+        def cancel_after_validation(*args):
+            original(*args)
+            cancel.set()
+
+        with patch("zephyr_utilities.features.projects.samples.validate_sample_plan"), \
+                patch.object(creation, "_validate_staging", side_effect=cancel_after_validation):
+            with self.assertRaises(CancelledError):
+                apply_project(plan, cancel=cancel)
+        self.assertFalse((self.workspace / "applications").exists())
+
+    def test_nested_foreign_edit_survives_failed_publication(self):
+        plan = self.sample_plan()
+
+        def edit_and_fail(parent, source, destination):
+            folder = os.open(source, os.O_RDONLY | os.O_DIRECTORY, dir_fd=parent)
+            try:
+                fd = os.open("boards/vendor/test_board.overlay", os.O_WRONLY | os.O_TRUNC, dir_fd=folder)
+                with os.fdopen(fd, "w") as stream:
+                    stream.write("concurrent nested edit")
+            finally:
+                os.close(folder)
+            raise ValueError("synthetic collision")
+
+        with patch("zephyr_utilities.features.projects.samples.validate_sample_plan"), \
+                patch.object(creation, "_rename_noreplace", side_effect=edit_and_fail):
+            with self.assertRaisesRegex(ValueError, "synthetic collision"):
+                apply_project(plan)
+        remaining = list((self.workspace / "applications").glob(".zephyr-create-*/boards/vendor/test_board.overlay"))
+        self.assertEqual(len(remaining), 1)
+        self.assertEqual(remaining[0].read_text(), "concurrent nested edit")
+        self.assertFalse(Path(plan["destination"]).exists())
+
+    def test_replaced_nested_directory_is_never_followed_or_cleaned(self):
+        plan = self.sample_plan()
+        outside = self.root / "outside"
+        outside.mkdir()
+        (outside / "test_board.overlay").write_text("external file must survive")
+        validate = creation._validate_staging
+
+        def redirect(directory, directories, files):
+            os.rename("boards/vendor", "boards/saved", src_dir_fd=directory, dst_dir_fd=directory)
+            os.symlink(outside, "boards/vendor", dir_fd=directory)
+            validate(directory, directories, files)
+
+        with patch("zephyr_utilities.features.projects.samples.validate_sample_plan"), \
+                patch.object(creation, "_validate_staging", side_effect=redirect):
+            with self.assertRaisesRegex(ValueError, "staged application changed"):
+                apply_project(plan)
+        self.assertEqual((outside / "test_board.overlay").read_text(), "external file must survive")
+        remaining = list((self.workspace / "applications").glob(".zephyr-create-*/boards/saved/test_board.overlay"))
+        self.assertEqual(len(remaining), 1)
+        self.assertEqual(remaining[0].read_text(), "/* copied board overlay */\n")
+        self.assertFalse(Path(plan["destination"]).exists())
+
+    def test_foreign_file_added_to_a_nested_directory_prevents_publication_and_survives(self):
+        plan = self.sample_plan()
+        validate = creation._validate_staging
+
+        def add_file(directory, directories, files):
+            descriptor = directories[Path("boards/vendor")]["descriptor"]
+            fd = os.open("user.overlay", os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644, dir_fd=descriptor)
+            with os.fdopen(fd, "w") as stream:
+                stream.write("concurrent additional source")
+            validate(directory, directories, files)
+
+        with patch("zephyr_utilities.features.projects.samples.validate_sample_plan"), \
+                patch.object(creation, "_validate_staging", side_effect=add_file):
+            with self.assertRaisesRegex(ValueError, "foreign files were preserved"):
+                apply_project(plan)
+        remaining = list((self.workspace / "applications").glob(".zephyr-create-*/boards/vendor/user.overlay"))
+        self.assertEqual(len(remaining), 1)
+        self.assertEqual(remaining[0].read_text(), "concurrent additional source")
+        self.assertFalse(Path(plan["destination"]).exists())
+
     def test_publication_refreshes_a_filesystems_initial_empty_directory_listing(self):
         plan = self.preview()
         original_validate = creation._validate_staging
         listdir = os.listdir
 
-        def validate(directory, source, source_identity, files):
+        def validate(directory, directories, files):
             # Reproduce a filesystem whose pre-write directory descriptors retain
             # an empty initial listing even after child files are flushed.
             def stale_listing(path):
-                return [] if isinstance(path, int) and path in {directory, source} else listdir(path)
+                pinned = {directory, *(entry["descriptor"] for entry in directories.values())}
+                return [] if isinstance(path, int) and path in pinned else listdir(path)
 
             with patch.object(creation.os, "listdir", side_effect=stale_listing):
-                return original_validate(directory, source, source_identity, files)
+                return original_validate(directory, directories, files)
 
         with patch.object(creation, "_validate_staging", side_effect=validate):
             project = apply_project(plan)

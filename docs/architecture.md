@@ -139,6 +139,13 @@ Unknown formats are preserved. Interrupted work is shown as interrupted after re
 not resumed. See [ADR 0004](decisions/0004-reviewed-project-creation.md) and the
 [creator contract](project-creator.md).
 
+Curated local sample copies add optional version-1 source provenance to the existing
+project record. A bounded source adapter preserves upstream files and license evidence;
+source fingerprints are checked independently of environment observations. The reviewed
+publisher supports nested files and retains the same no-replacement and cleanup guards
+for built-in templates. Saved copies do not depend on their upstream sample directory.
+See [ADR 0012](decisions/0012-reviewed-local-sample-cloning.md).
+
 ## Browser feature boundary
 
 The shell fetches the session and feature catalog, loads a registered template and
@@ -226,6 +233,7 @@ or worst-case resource demand. The [research roadmap](roadmap.md) and
 - [ADR 0007: Read-only source and binding navigation](decisions/0007-source-and-binding-navigation.md)
 - [ADR 0008: Application source browsing before configuration](decisions/0008-application-source-browsing.md)
 - [ADR 0009: Project navigation and advanced Build Inspector](decisions/0009-project-navigation-and-inspector.md)
+- [ADR 0012: Reviewed local sample cloning](decisions/0012-reviewed-local-sample-cloning.md)
 - [Adding a feature](adding-a-feature.md)
 - [HTTP/browser integration contract](platform-contract.md)
 

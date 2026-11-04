@@ -1,29 +1,32 @@
 /** Creation and build requests stay bound to the workspace and reviewed inputs. */
 import {activeJob, filterBoards} from "./environment-state.js";
 import {copyFragments, fragmentFormatError, fragmentKinds, fragmentModes, fragmentSelectionError, needsFragmentFiles, profileFragments} from "./fragment-state.js";
+import {isLocalSample, validateSampleCatalogue, readySample, sampleSelectionError, sampleLabel} from "./sample-state.js";
 
-const defaults = () => ({name: "my_app", destination: "", search: "", board_id: "", target: "", sdk_id: "", template_id: "minimal-c"});
+const defaults = () => ({name: "my_app", destination: "", search: "", board_id: "", target: "", sdk_id: "", template_id: "minimal-c", sample_id: ""});
 const configurationDefaults = () => ({name: "", search: "", board_id: "", target: "", sdk_id: ""});
 const array = (value) => Array.isArray(value) ? value : [];
-const templateLanguages = {"minimal-c": "C", "minimal-cpp": "C++"};
+const templateLanguages = {"minimal-c": "C", "minimal-cpp": "C++", "local-sample": "C"};
 export function creatorTemplates(value) {
-  if (!Array.isArray(value) || value.length > 2 || new Set(value.map((entry) => entry?.id)).size !== value.length) return [];
+  if (!Array.isArray(value) || value.length > 3 || new Set(value.map((entry) => entry?.id)).size !== value.length) return [];
   if (!value.every((entry) => entry && Object.hasOwn(templateLanguages, entry.id) && entry.version === 1 && entry.language === templateLanguages[entry.id]
     && typeof entry.title === "string" && entry.title.trim() && typeof entry.description === "string" && entry.description.trim())) return [];
   return value;
 }
 export const creatorTemplateId = (form) => form.template_id === undefined ? "minimal-c" : form.template_id;
 export const selectedCreatorTemplate = (state) => creatorTemplates(state.templates).find((entry) => entry.id === creatorTemplateId(state.form)) || null;
-export function creatorTemplateLabel(template, templates) {
+export function creatorTemplateLabel(template, templates, sample) {
+  if (template?.id === "local-sample" && template.version === 1) return sampleLabel(sample);
   const descriptor = creatorTemplates(templates).find((entry) => entry.id === template?.id && entry.version === template?.version);
   const title = descriptor?.title || (template?.version === 1 && Object.hasOwn(templateLanguages, template?.id) ? `Minimal ${templateLanguages[template.id]}` : template?.id);
   return title ? `${title} · version ${template.version ?? "unknown"}` : "Template unknown";
 }
 export const creatorBoards = (snapshot, query = "") => filterBoards(array(snapshot?.boards).filter((board) => board.status === "discovered" && array(board.targets).length), array(snapshot?.socs), {query});
 export const creatorSdks = (snapshot) => array(snapshot?.sdks).filter((sdk) => sdk.status === "discovered" && array(sdk.toolchains).some((toolchain) => toolchain.family === "GNU" && toolchain.compiler));
-export function creatorBody(form) {
+export function creatorBody(form, sample) {
   return {...Object.fromEntries(["name", "destination", "board_id", "target", "sdk_id"].map((key) => [key, String(form[key] || "").trim()])),
-    ...(creatorTemplateId(form) === "minimal-c" ? {} : {template_id: form.template_id})};
+    ...(creatorTemplateId(form) === "minimal-c" ? {} : {template_id: form.template_id}),
+    ...(isLocalSample(form) ? {sample_id: form.sample_id, sample_fingerprint: sample?.fingerprint} : {})};
 }
 export function configurationBody(form) {
   return {...Object.fromEntries(["name", "board_id", "target", "sdk_id"].map((key) => [key, String(form[key] || "").trim()])),
@@ -36,7 +39,7 @@ export function selectedConfiguration(state, project) {
 export function currentCreatorJob(state) {
   return array(state.jobs).find(activeJob) || array(state.jobs).find((job) => job.id === state.jobId) || array(state.jobs)[0] || null;
 }
-export function createCreatorSession({api, state, workspace, onChange, pendingBoard, schedule = setTimeout, unschedule = clearTimeout}) {
+export function createCreatorSession({api, state, workspace, onChange, pendingBoard, isCreating = () => false, schedule = setTimeout, unschedule = clearTimeout}) {
   const lifetime = new AbortController();
   let disposed = false;
   let epoch = 0;
@@ -47,6 +50,7 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
   let reading = false;
   let readSequence = 0;
   let fileSequence = 0;
+  let sampleSequence = 0;
   Object.assign(state, {loading: false, busy: "", error: "", cancelling: false});
   // Review plans are server-session capabilities; fetch new ones after remount.
   state.plan = null;
@@ -57,6 +61,7 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
   state.configurationEditor ||= "";
   state.configurationNotice = null;
   state.configurationFiles = {};
+  state.sampleCatalogue = null;
   const publish = () => { if (!disposed) onChange(); };
   const current = (path, captured) => !disposed && workspace() === path && state.workspace === path && epoch === captured;
   const request = (path, options = {}) => api(path, {...options, signal: lifetime.signal});
@@ -67,8 +72,8 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
       state.formsByWorkspace ||= {};
       state.formsByWorkspace[state.workspace] = {...state.form};
     }
-    epoch++; formRevision++; buildRevision++; configurationRevision++; fileSequence++;
-    Object.assign(state, {workspace: path, snapshot: null, templates: [], projects: [], jobs: [], diagnostics: [], jobId: null, plan: null, buildPlan: null, error: "", loading: false, busy: "", cancelling: false, form: {...defaults(), ...state.formsByWorkspace?.[path]}, configurationSelections: {}, configurationDrafts: {}, configurationEditor: "", configurationNotice: null, configurationFiles: {}});
+    epoch++; formRevision++; buildRevision++; configurationRevision++; fileSequence++; sampleSequence++;
+    Object.assign(state, {workspace: path, snapshot: null, templates: [], projects: [], jobs: [], diagnostics: [], jobId: null, plan: null, buildPlan: null, error: "", loading: false, busy: "", cancelling: false, form: {...defaults(), ...state.formsByWorkspace?.[path]}, configurationSelections: {}, configurationDrafts: {}, configurationEditor: "", configurationNotice: null, configurationFiles: {}, sampleCatalogue: null});
     return true;
   }
   function choosePending() {
@@ -87,7 +92,10 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
     if (JSON.stringify(templates) !== JSON.stringify(state.templates)) { state.plan = null; formRevision++; }
     state.templates = templates;
     const snapshot = data.snapshot?.workspace?.path === state.workspace ? data.snapshot : null;
-    if (snapshot?.fingerprint !== state.snapshot?.fingerprint) { state.plan = null; state.buildPlan = null; formRevision++; buildRevision++; configurationRevision++; }
+    if (snapshot?.fingerprint !== state.snapshot?.fingerprint || snapshot?.zephyr?.path !== state.snapshot?.zephyr?.path) {
+      state.plan = null; state.buildPlan = null; formRevision++; buildRevision++; configurationRevision++;
+      sampleSequence++; state.sampleCatalogue = null;
+    }
     const previousProjects = array(state.projects);
     state.snapshot = snapshot;
     state.projects = array(data.projects).filter((project) => project.workspace === state.workspace);
@@ -139,7 +147,30 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
     } finally {
       if (current(path, captured) && sequence === readSequence) { state.loading = false; publish(); }
     }
+    if (!background && current(path, captured) && sequence === readSequence) await ensureSamples();
   }
+  async function loadSamples() {
+    if (disposed) return;
+    followWorkspace();
+    if (!isLocalSample(state.form) || !selectedCreatorTemplate(state) || !state.snapshot || state.snapshot.status === "stale") return;
+    const path = state.workspace;
+    const captured = epoch;
+    const sequence = ++sampleSequence;
+    const catalogue = {loading: true, ready: false, error: "", samples: [], diagnostics: []};
+    state.sampleCatalogue = catalogue;
+    formRevision++; state.plan = null;
+    publish();
+    try {
+      const data = await request("/api/projects/samples", {method: "POST", body: {workspace: path}});
+      if (!current(path, captured) || sequence !== sampleSequence) return;
+      Object.assign(catalogue, validateSampleCatalogue(data, path, state.snapshot?.zephyr?.path), {ready: true});
+    } catch (error) {
+      if (current(path, captured) && sequence === sampleSequence && error.name !== "AbortError") catalogue.error = error.message || String(error);
+    } finally {
+      if (current(path, captured) && sequence === sampleSequence) { catalogue.loading = false; publish(); }
+    }
+  }
+  const ensureSamples = () => isCreating() && isLocalSample(state.form) && !state.sampleCatalogue ? loadSamples() : Promise.resolve();
   function changeField(key, value) {
     if (disposed) return;
     followWorkspace();
@@ -149,6 +180,7 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
     if (key === "board_id") state.form.target = "";
     formRevision++; state.plan = null; state.error = "";
     publish();
+    if (key === "template_id") ensureSamples();
   }
   function selectConfiguration(projectId, configurationId) {
     if (disposed) return;
@@ -278,7 +310,9 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
   }
   const preview = () => action("preview", "/api/projects/preview", () => {
     if (!selectedCreatorTemplate(state)) throw new Error("Choose an available application template before previewing. Refresh the list if no templates are available.");
-    return creatorBody(state.form);
+    const sampleError = sampleSelectionError(state);
+    if (sampleError) throw new Error(sampleError);
+    return creatorBody(state.form, readySample(state));
   }, (data) => {
     if (data.plan?.workspace === state.workspace) state.plan = data.plan;
   }, {review: () => formRevision});
@@ -347,7 +381,7 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
   }
   function queue() { timer = schedule(async () => { await tick(); if (!disposed) queue(); }, 1200); }
   followWorkspace(); queue();
-  return {load, refresh: () => tick({force: true}), preview, create, previewBuild, build, cancel, changeField,
+  return {load, loadSamples, ensureSamples, refresh: () => tick({force: true}), preview, create, previewBuild, build, cancel, changeField,
     selectConfiguration, editConfiguration, closeConfiguration, changeConfigurationField, saveConfiguration, loadConfigurationFiles, changeFragment,
     tick, dispose() { disposed = true; epoch++; lifetime.abort(); if (timer !== undefined) unschedule(timer); }};
 }

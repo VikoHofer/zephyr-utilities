@@ -13,6 +13,7 @@ def register(router, context):
     creator = CreatorService(context, service.store)
     context.services["project_creator"] = creator
     router.add("GET", "/api/projects/creator", lambda request: creator.current())
+    router.add("POST", "/api/projects/samples", lambda request: creator.samples(request.body))
     router.add("POST", "/api/projects/preview", lambda request: creator.preview(request.body))
     router.add("POST", "/api/projects/create", lambda request: Response(creator.create(request.body), status=202))
     router.add("POST", "/api/projects/configurations", lambda request: creator.save_configuration(request.body))

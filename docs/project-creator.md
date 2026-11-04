@@ -1,8 +1,8 @@
 # Project Creator
 
 Project Creator implements P2, the named-configuration/fragment slices of P4 and the
-C++ starter slice of P5 from the [master plan](project-creator-masterplan.md): a
-minimal C or C++ application in the existing workspace, with an exact board target and an
+C++ starter and curated local sample slices of P5 from the [master plan](project-creator-masterplan.md): a
+minimal C/C++ application or supported sample copy in the existing workspace, with an exact board target and an
 explicit installed GNU Zephyr SDK. Creation, configuration and compilation are separate
 reviewed actions. Saved applications can have several named target/SDK configurations
 with ordered Kconfig and overlay file selections. Device Tree editing and existing-project
@@ -21,8 +21,9 @@ Advanced inspection is available separately under **Advanced → Build Inspector
 2. Open **Project Creator → Environment**, then **Analyze workspace**. Resolve missing
    tools or unsupported module metadata before creation. Select a board and use
    **Use this board**, or open **Create application** directly.
-3. Choose **Minimal C** or **Minimal C++** as the application template, then enter its
-   name and destination. Minimal C remains the default. The default destination is
+3. Choose **Minimal C**, **Minimal C++**, or **Local Zephyr sample** as the application
+   template. For a sample, choose an available entry and read its requirements. Enter
+   the new application's name and destination. Minimal C remains the default. The default destination is
    `<workspace>/applications/<name>`. The destination must be new, even if an existing
    directory is empty.
 4. Choose the board, its exact declared target and an installed GNU SDK. Target choices
@@ -179,8 +180,53 @@ Profile migration and portable recipe export are later work.
 Template selection is retained in the reviewed plan and saved application. Changing it
 clears the preview. Existing C applications and generated file contents are unchanged;
 choosing C++ creates a new destination and does not convert an existing app. Only the
-trusted built-in templates are accepted. Local sample cloning remains a later slice
-with separate file-layout, license and dependency checks.
+trusted built-in templates and the curated local samples described below are accepted.
+
+## Clone a local sample
+
+Choose **Local Zephyr sample** to inspect the supported samples in the selected
+checkout. **Refresh samples** reads current files without executing CMake, downloading
+anything or starting a build. Opening Applications and polling jobs do not scan samples.
+
+| Sample | Starting point and requirements |
+| --- | --- |
+| Hello World | Console output; no application-specific peripheral alias |
+| Blinky | GPIO LED with a `led0` alias |
+| Button | Button/input hardware; the local source determines whether it uses input KEY events or the older `sw0` GPIO interface |
+
+These are curated source paths, not bundled sample copies. Availability follows the
+selected checkout. Missing samples remain visible; unsupported layouts show the reason
+and cannot be previewed. This first adapter accepts only a simple CMake application
+whose source files stay inside the copied tree. It rejects additional build scripts,
+external source references, unsupported license metadata, symlinks, special/binary
+files, output directories and incomplete or oversized scans. An unsupported sample
+needs an explicit adapter extension, not a best-effort partial copy.
+
+The preview contains the complete supported sample tree, including upstream README,
+`sample.yaml`, configuration files and board overlays. Upstream contents and CMake
+project names are preserved. The chosen application name names its new directory and
+saved entry. Root `LICENSE` and `REUSE.toml`, and an applicable root `NOTICE` when
+present, accompany the copy. `ZEPHYR-SAMPLE.md` adds independent build commands and
+`zephyr-sample.json` records origin and file hashes. All added files appear in the
+review; original copyright and SPDX declarations remain intact.
+
+The catalogue fingerprint binds the selected files to the preview. Creation rechecks
+the source tree, license inputs and identities before writing and before publication.
+Changed, added, removed or redirected source files require a refreshed selection and
+new preview. Publication uses a new destination and never replaces an existing app.
+After creation, the copy is independent: reopening or building it does not require the
+original sample directory, and no updates flow back to upstream.
+
+Availability means the copy meets this adapter's requirements. It does not establish
+that the selected board supplies the required peripherals. Review the preserved local
+README and run Configure/Build explicitly; no board aliases or wiring are created for
+you. See upstream [Blinky](https://docs.zephyrproject.org/latest/samples/basic/blinky/README.html)
+and [Button](https://docs.zephyrproject.org/latest/samples/basic/button/README.html) requirements.
+Visual overlay editing, arbitrary sample paths, custom modules/blobs, scripts and
+multi-image sample composition remain future slices.
+`sample.yaml` stays available as upstream test metadata; cloning does not select or
+run a Twister scenario or apply its `extra_args`. Use named configurations and fragment
+selection for subsequent explicit build choices.
 
 ## Supported scope
 
@@ -188,7 +234,7 @@ with separate file-layout, license and dependency checks.
 | --- | --- |
 | Host | Linux, with atomic no-replacement directory publication supported by the filesystem |
 | Workspace | Existing local west workspace with a resolved manifest and a nonempty resolved module list |
-| Template | Minimal C or Minimal C++; one image |
+| Template | Minimal C, Minimal C++, or curated local Hello World/Blinky/Button copy; one image |
 | Target | Exact discovered hardware-model-v2 board target, including declared revisions and qualifiers |
 | Toolchain | Explicit discovered Zephyr SDK with installed GNU compiler components |
 | Local tools | Selected Python environment, CMake and Ninja; discovered dtc when available |
@@ -257,7 +303,8 @@ not accepted back from an edited browser payload.
 | Method and path | Request | Result |
 | --- | --- | --- |
 | `GET /api/projects/creator` | None | `{workspace, snapshot, templates, projects, jobs, diagnostics}`; saved projects include their configurations and attempts; no execution |
-| `POST /api/projects/preview` | `{workspace, name, destination?, board_id, target, sdk_id, template_id?}` | `{plan}` with exact files, template identity, profile, recipe and destination identity |
+| `POST /api/projects/samples` | `{workspace}` | `{workspace, zephyr, samples, diagnostics}`; read-only source catalogue with availability, requirements and fingerprints |
+| `POST /api/projects/preview` | `{workspace, name, destination?, board_id, target, sdk_id, template_id?, sample_id?, sample_fingerprint?}` | `{plan}` with exact files, template identity, optional sample provenance, profile, recipe and destination identity |
 | `POST /api/projects/create` | `{workspace, plan_id}` | HTTP 202 shared create job; completed result contains `project` |
 | `POST /api/projects/configuration-files` | `{workspace, project_id}` | `{workspace, project_id, files: {kconfig, overlays}, diagnostics}`; bounded read-only relative-path catalogue |
 | `POST /api/projects/configurations` | `{workspace, project_id, name, board_id, target, sdk_id, fragments?}` | `{configuration}`; saves metadata only |
@@ -272,10 +319,18 @@ selections are rejected. Failure/cancellation attempts remain readable through t
 creator GET even when the shared job has been evicted from in-memory history.
 
 `templates` contains the built-in catalogue's `id`, `version`, `title`, `description`
-and `language`. `template_id` accepts `minimal-c` or `minimal-cpp`; omission selects
+and `language`. `template_id` accepts `minimal-c`, `minimal-cpp` or `local-sample`; omission selects
 `minimal-c` for earlier clients. Unknown, empty or null IDs are rejected. Publication
 validates the template identity/version and its exact permitted file paths before
 writing. The existing `{id, version}` template identity needs no persistent migration.
+
+`local-sample` additionally requires a supported `sample_id` and its 64-character
+SHA-256 `sample_fingerprint` from the current catalogue. Other templates reject both
+sample fields. The catalogue returns `available`, `missing` or `unsupported` entries;
+only available entries have a usable fingerprint. The version-1 `sample` provenance
+envelope is retained in the plan/project and independently revalidated during creation.
+Copies are bounded to 128 files, 1 MiB per file, 4 MiB total and eight path components.
+Generated origin/build files and license copies count toward publication limits.
 
 An omitted, null or empty `configuration_id` selects the original project profile,
 preserving earlier clients. A supplied configuration must belong to this application
@@ -307,7 +362,7 @@ Project, configuration and attempt records are feature-owned JSON under
 
 | Record | Main fields |
 | --- | --- |
-| Project | `schema_version`, `id`, `workspace`, `name`, `path`, `profile`, template identity/version, generated file hashes, directory identity, creation time |
+| Project | `schema_version`, `id`, `workspace`, `name`, `path`, `profile`, template identity/version, optional versioned `sample` provenance, generated file hashes, directory identity, creation time |
 | Profile | Exact requested target/board, selected SDK and tools, Zephyr identity, modules/roots, environment observation identity and execution guard, analysis choices; version 2 adds the versioned `fragments` selection |
 | Configuration | `schema_version`, `id`, `project_id`, `workspace`, `name`, `created_at`, complete `profile` |
 | Attempt | `schema_version`, `id`, `project_id`, `workspace`, selected `configuration` and `profile`, operation/status, recipe, source hashes, output path, times, context, artifacts, diagnostics, error and bounded log |
@@ -346,6 +401,21 @@ P2 does not import another feature's private implementation or introduce a share
 `BuildContext` API. See [ADR 0004](decisions/0004-reviewed-project-creation.md).
 
 ## Validation scope
+
+The local-sample slice passed 373 Python tests and 158 frontend tests, quick checks
+and installed-wheel verification. Browser checks covered available/unsupported/missing
+entries, hardware requirements, nested file previews, review invalidation on selection
+and refresh, workspace-specific drafts, leaving/reopening the feature, saved origins,
+collapsed technical details, keyboard navigation and a 600-pixel layout.
+
+Real source copies built with SDK 1.0.1 for Hello World on
+`qemu_cortex_m3/ti_lm3s6965`, Blinky on `frdm_k64f/mk64f12`, and Button on
+`nrf52833dk/nrf52820`. Hello World's exact generated standalone commands also produced
+an ELF. All copied upstream files, nested board files, licenses and provenance were
+retained; source and upstream hashes and the original project records stayed unchanged.
+Publication used a temporary synthetic workspace; the normal Creator build service
+used the real analyzed environment with isolated registrations of those temporary
+sources. These checks establish compilation, not operation on hardware.
 
 The C++ template slice passed 343 Python tests and 143 frontend tests, quick checks
 and installed-wheel verification. Browser checks covered template selection, file
