@@ -14,7 +14,8 @@ src/zephyr_utilities/
     __init__.py          # Explicit built-in feature registry
     memory/              # Existing analysis modules, service and HTTP routes
       web/               # index.js, view.html, style.css
-    devicetree/          # Read-only resolved tree inspection
+    devicetree/           # Planned visual overlay/hardware/pin editor
+    inspector/            # Advanced read-only builds, trees, sources and bindings
     projects/            # Environment analyser, creator, build attempts, API and web assets
     tinyml/              # Planned feature manifest and scope
   web/                   # index.html, shell.js, shell.css; shared client helpers
@@ -30,11 +31,14 @@ servers, ports or environments. `zephyr-utils memory` opens the same app directl
 
 - `GET /api/session` retains `token`, `initial_path`, `storage_path`, `version`.
 - `GET /api/features` returns `{features: [descriptor]}`.
-- Descriptor: `{id, title, description, status, entry_path, frontend}`.
+- Descriptor: `{id, title, description, status, entry_path, frontend, navigation, navigation_group}`.
   `status` is `available` or `planned`.
   Available frontend: `{module, template, stylesheet}` URL strings, e.g.
   `/assets/memory/index.js`, `/assets/memory/view.html`, `/assets/memory/style.css`.
-  Planned frontend is null. IDs: `memory`, `devicetree`, `projects`, `tinyml`.
+  Planned frontend is null. IDs: `memory`, `devicetree`, `inspector`, `projects`, `tinyml`.
+  Optional navigation items contain `{label, view, match_views}` with validated relative
+  views. Nested paths match their parent view; aliases allow a source detail path to
+  select its sidebar item. `navigation_group` is `tools` (default) or `advanced`.
 - `GET /api/workspace` returns `{path}`. `PATCH /api/workspace` accepts `{path}`.
   Validate that the directory exists; changes affect future operations only.
 - `GET /api/folders?path=...` remains a shared folder browser.
@@ -44,10 +48,12 @@ servers, ports or environments. `zephyr-utils memory` opens the same app directl
   `snapshots`, `snapshots/:id`, `snapshots/:id/export`, `import`, and `compare`.
   Preserve legacy unnamespaced memory endpoints as compatibility aliases.
 - Legacy memory job fields (`snapshot_id`, logs, status) remain available.
-- Device Tree source navigation uses `POST /api/devicetree/sources`, `/bindings` and
+- Inspector source navigation uses `POST /api/inspector/sources`, `/bindings` and
   `/source-file`. Requests retain expected workspace/inspection/domain; binding/file
   reads also carry a transient `catalog_id` and a node path or opaque file ID. No arbitrary
   source-path read route is exposed. See the [inspection contract](build-inspection.md).
+  Original `/api/devicetree/*` and Projects build-inspection routes remain aliases to
+  Inspector's read-only services. Planned Device Tree Editor registers no implementation.
 - `POST /api/memory/inspection` previews an inspected image without starting work.
   `POST /api/memory/jobs` optionally accepts `selection: {workspace, inspection_id, domain}`
   alongside `build_path` to preserve that image's verified ELF and context through capture.
@@ -93,16 +99,25 @@ active feature after changing the workspace; the view name may be unchanged. Lea
 feature does not cancel server jobs. On re-entry,
 memory can resume its last job through context.state and the shared jobs API. Projects
 reloads the current workspace's saved observation/latest retained job and keeps discovery
-path options separately per workspace in browser-session state. Its Environment and
-Create application and Builds subviews dispose their local requests/timers when switching. Creator
-form choices are workspace-scoped; reviewed plans are discarded on remount. Projects and
+path options separately per workspace in browser-session state. Its Applications and
+Create application views share one creator session; Environment switches dispose it.
+Inspector's Build outputs and source/tree views have separate state and dispose their
+local requests when switching. Creator form choices are workspace-scoped; reviewed plans
+are discarded on remount. Projects and
 attempts persist separately from the shared job manager's in-memory retention.
 
 The Home view is a working feature catalog. Planned features are clearly labeled and do
-not pretend to implement editors or model training. Project Creator exposes environment
+not pretend to implement editors or model training. Device Tree Editor describes future
+visual overlays, hardware modules and pin assignment. Project Creator exposes environment
 analysis and a minimal workspace-app creation/configure/build workflow. Advanced project
 composition remains planned. Existing-build inspection hands a workspace-bound shared
-observation ID and domain to the read-only Device Tree reader and Memory's explicit
+observation ID and domain to Inspector's read-only Device Tree reader and Memory's explicit
 report review (`memory/inspect/<id>/<encoded-domain>`). See the
 [build inspection contract](build-inspection.md).
 UI remains English and offline. No runtime CDN or hosted service dependency.
+
+Sidebar subnavigation comes from feature descriptors. The optional Advanced group opens
+when navigating to Inspector; primary project work does not require it. Legacy
+`projects/builds/...`, `devicetree/inspect/...` and `devicetree/application/...` hashes
+redirect to corresponding Inspector views. Bare `devicetree` remains the planned editor.
+See [ADR 0009](decisions/0009-project-navigation-and-inspector.md).

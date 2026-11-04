@@ -5,10 +5,10 @@ One local application for Zephyr development, build analysis and experiments.
 **Zephyr Utilities 0.2** provides an English, offline interface with shared navigation,
 workspace selection and background jobs. Memory Explorer and Project Creator's environment
 analysis, minimal C application creation and explicit configure/build workflow are available.
-Existing-build inspection connects to a read-only resolved Device Tree reader and carries
-the selected image into Memory Explorer for explicit report generation.
-Device Tree also opens recorded source files and current binding YAML, with include navigation.
-Device Tree editing and TinyML model/experiment analysis remain planned.
+Advanced Build Inspector reads existing outputs, resolved Device Trees, current sources
+and bindings, and carries the selected image into Memory Explorer for report generation.
+Device Tree Editor is planned as a visual overlay, hardware-module and pin editor.
+TinyML model/experiment analysis also remains planned.
 
 ## Start
 
@@ -82,7 +82,8 @@ src/zephyr_utilities/
   core/                  # Shared HTTP, feature contracts, workspace and jobs
   features/
     memory/              # Working Memory Explorer and its web/ assets
-    devicetree/          # Read-only Device Tree inspection; editing planned
+    devicetree/           # Planned visual overlay, hardware and pin editor
+    inspector/            # Advanced build, resolved tree and source inspection
     projects/            # Environment analysis, reviewed creation and explicit builds
     tinyml/              # Planned model and experiment analysis
   web/                   # Shared browser shell and helpers
@@ -146,10 +147,15 @@ creation and explicit configure/build jobs. See the
 
 ## Application creation and builds
 
+Project Creator opens **Applications**. Its sidebar links separate application management,
+**Create application**, and **Environment**. Detailed build/source inspection lives in
+the optional **Advanced → Build Inspector** area. **Device Tree Editor** is planned as
+a visual tool for overlays, hardware modules and pin assignment, after the creator workflow.
+
 Use **Create application** or `/#/projects/create` after analysis. Choose the name, new
 destination, exact target and installed GNU SDK; inspect **Preview application**, then
 click **Create application**. Creation writes the reviewed files without starting a build.
-From the saved application, choose **Configure** or **Build**, review the exact command and
+Open **Applications** in the Project Creator sidebar. Choose **Configure** or **Build**, review the exact command and
 new output path, then start that operation. Each attempt retains its outcome and bounded
 log; leaving the view does not cancel it.
 
@@ -160,15 +166,22 @@ workspace update or existing-project import is included. Device Tree editing rem
 planned. Generated source files and their README commands work independently of the
 utilities' metadata.
 
-Use **Project Creator → Inspect builds** to open an existing build, select its image/domain and
-inspect saved outputs. **Open Device Tree** shows that image's resolved nodes and
+Use **Advanced → Build Inspector → Build outputs** to open an existing build, select its image/domain and
+inspect saved outputs. **Inspect Device Tree** shows that image's resolved nodes and
 properties without running tools or changing source files. Changed outputs require
 re-inspection; source freshness remains unknown. **Open Memory Explorer** reviews the
 same image before explicit report generation from its archived ELF. See the
 [build inspection guide](docs/build-inspection.md) for the available P3 workflows and limits.
-In Device Tree, use **Browse sources** for recorded inputs or **Find bindings** on a node.
+In Build Inspector, use **Browse sources** for recorded inputs or **Find bindings** on a node.
 Current source text, binding candidates and binding paths recorded in generated output
 remain distinct; this navigation does not validate or edit hardware configuration.
+
+Before the first build, expand **Advanced details** on a workspace application and choose
+**Browse sources**, or enter a directory in Build Inspector’s **Sources and Device Tree** view. This opens its current overlays, DTS files,
+configuration fragments and local bindings without running tools. The application must
+be inside the selected workspace and contain `CMakeLists.txt`. Include links use local
+and conventional workspace Zephyr locations; they do not establish configured inputs,
+an effective board or a resolved tree.
 
 ## Requirements and interpretation
 
@@ -224,7 +237,7 @@ python scripts/new_feature.py telemetry --title "Telemetry"
 
 This creates a planned skeleton without overwriting existing work or registering an
 unfinished workflow. Follow [the feature guide](docs/adding-a-feature.md) to implement
-and register it. Extend the existing `devicetree`, `projects` and `tinyml` modules for
+and register it. Extend the existing `devicetree`, `inspector`, `projects` and `tinyml` modules for
 those tools rather than generating replacements.
 
 The application uses a standard-library Python HTTP server and bundled HTML/CSS/JS.

@@ -1,4 +1,4 @@
-# Existing builds, Device Tree inspection and Memory handoff
+# Build Inspector: advanced outputs, sources and Memory handoff
 
 P3 reads existing build outputs in the selected workspace. Inspection does not
 configure, compile, flash, install tools, import an application into the creator, or
@@ -6,12 +6,12 @@ edit source files. Environment analysis is not required to inspect an existing b
 
 ## Open a build
 
-1. Open **Project Creator → Inspect builds** and enter the existing build directory, or choose
+1. Open **Advanced → Build Inspector → Build outputs** and enter the existing build directory, or choose
    **Inspect build** on a saved Configure/Build attempt.
 2. Choose **Open build**. For a sysbuild root, select the image/domain to inspect.
 3. Review the recorded target, application and output availability. Technical metadata,
    input lists and text output previews are optional disclosures.
-4. Choose **Open Device Tree** to inspect that image's resolved tree. Search node names,
+4. Choose **Inspect Device Tree** to inspect that image's resolved tree. Search node names,
    paths or compatible values, then select a node to read its properties. **Browse sources**
    opens recorded input files; **Find bindings** opens binding navigation for a node.
 5. Choose **Open Memory Explorer** to review that image for RAM/ROM analysis. Opening
@@ -28,7 +28,7 @@ necessarily represent a separate CPU. See [sysbuild definitions](https://docs.ze
 
 ## What the observation means
 
-Projects, Device Tree and the Memory handoff share one workspace-bound observation ID. It records the
+Build Inspector and the Memory handoff share one workspace-bound observation ID. It records the
 selected root, each readable image, metadata-derived context, output paths and hashes.
 Opening a different build creates a distinct observation, even for the same application.
 Reopening a view rechecks the retained observation rather than silently assigning new
@@ -112,6 +112,43 @@ are opened through server-issued catalogue IDs, never arbitrary client paths. No
 preprocessor, checkout Python module or pickle is executed. There are no write endpoints.
 See [ADR 0007](decisions/0007-source-and-binding-navigation.md).
 
+## Browse an application before configuration
+
+Expand **Advanced details** on a saved workspace application and choose **Browse sources**,
+or enter its directory in Build Inspector’s **Sources and Device Tree** view. Relative paths start at the selected workspace. The directory must be a
+non-symlink descendant of that workspace with a readable `CMakeLists.txt`; this marker
+is not executed or treated as proof of a valid Zephyr configuration. No creator profile,
+environment analysis, build inspection, generated DTS or ELF is required.
+
+The application view lists current `.dts`, `.dtsi`, `.overlay`, configuration fragments,
+`Kconfig*`, `*_defconfig` and YAML under the application's `dts/bindings`. It searches
+within the application and excludes version-control, virtual-environment, dependency
+and build directories. Headers can be followed through literal include links. Arbitrary
+project code and general YAML metadata are not part of this catalogue.
+
+Include navigation considers the current file's directory, the application and its
+`include` directory, plus conventional `<workspace>/zephyr/include` and
+`<workspace>/zephyr/dts` locations. Binding includes search the application's
+`dts/bindings` and conventional `<workspace>/zephyr/dts/bindings`. These are current
+candidate locations, not discovered CMake search paths. Custom Zephyr locations, module
+roots and profile-specific inputs require a configured build's recorded context in this
+slice. Conditional preprocessing, effective overlay selection and target selection are
+not inferred. There is no resolved tree or node-binding lookup in this mode.
+
+Catalogues pin the application directory and `CMakeLists.txt` identity. Deletion,
+replacement or marker changes require reopening; changed source text requires
+**Refresh source list**. File reads still use opaque catalogue/file IDs and current
+hashes. Leaving and reopening revalidates the application; workspace or mode changes
+discard old source text. No source or generated output is written.
+
+Application discovery and binding indexing exclude `.git`, `.hg`, `.svn`, `.west`, `.venv`, `venv`, `__pycache__`,
+`node_modules`, `build`, `build-*` and `build_*` directories, plus directories containing
+`CMakeCache.txt` or `build.ninja`. Limits and incomplete coverage are reported explicitly.
+An application path that is itself a build directory is rejected. Explicit literal DTS
+includes may still link to files in excluded directories, labeled as current referenced
+content. Exclusions filter automatic discovery; they do not identify every possible
+custom output location. See [ADR 0008](decisions/0008-application-source-browsing.md).
+
 ## Supported scope and limits
 
 - Existing single-image Zephyr builds and up to 16 readable sysbuild domains inside the
@@ -129,7 +166,8 @@ See [ADR 0007](decisions/0007-source-and-binding-navigation.md).
   build context.
 - Source catalogues retain at most 1,000 references with a 16 MiB read budget and 2 MiB
   per document. They expire after 30 minutes, with at most 16 retained, and cannot outlive
-  the original build inspection. Missing/blocked files remain explicit.
+  the original build inspection in build mode. Application catalogues have an independent
+  lifetime and pin their application directory instead. Missing/blocked files remain explicit.
 - Binding indexes search at most 64 recorded roots, 10,000 YAML files and a 16 MiB read
   budget, with 256 KiB per YAML file. Directory depth/count and YAML event/depth limits
   also apply. Unsupported tags, aliases, duplicate keys and invalid YAML yield diagnostics;
@@ -137,25 +175,33 @@ See [ADR 0007](decisions/0007-source-and-binding-navigation.md).
 - Results and include lookup counts are bounded. Hitting a limit yields a diagnostic or
   an actionable catalogue limit error, never a claim of a complete schema.
 
-Per-property source attribution, browsing before a first configuration, effective binding
+Per-property source attribution, effective binding
 resolution and durable inspection history remain later work. Reviewable
 overlay and configuration editing remain P4. Existing Memory Explorer workflows continue
 to operate independently.
 
 ## API
 
+Build Inspector owns these read-only routes. The old `/api/projects/inspect`,
+`/api/projects/inspections/:id`, `/api/projects/inspection-text` and `/api/devicetree/*`
+read routes remain compatibility aliases. Old inspection/application deep links also
+redirect to Inspector. The bare Device Tree Editor entry now describes its planned visual
+workflow; it has no editing implementation.
+
 All routes use the shared authenticated router. Requests carry the expected `workspace`
 so a changed selection cannot redirect an earlier view's request.
 
 | Method and route | Input | Result |
 | --- | --- | --- |
-| `POST /api/projects/inspect` | `{workspace, build_dir}` | New observation of an existing build |
-| `GET /api/projects/inspections/:id` | `workspace` query parameter | Original context/hashes with rechecked availability |
-| `POST /api/projects/inspection-text` | `{workspace, inspection_id, domain, kind}` | Verified allowlisted text output: `{path, text, sha256}` |
-| `POST /api/devicetree/inspect` | `{workspace, inspection_id, domain}` | Shared observation/domain, verified document and structural tree |
-| `POST /api/devicetree/sources` | `{workspace, inspection_id, domain}` | Bounded current-source catalogue with `catalog_id` and file references |
-| `POST /api/devicetree/bindings` | Selection fields plus `{catalog_id, node_path}` | Current compatible candidates and supported generated-header binding-path evidence |
-| `POST /api/devicetree/source-file` | Selection fields plus `{catalog_id, file_id}` | Verified current text/hash, literal include references and direct binding properties |
+| `POST /api/inspector/inspect` | `{workspace, build_dir}` | New observation of an existing build |
+| `GET /api/inspector/inspections/:id` | `workspace` query parameter | Original context/hashes with rechecked availability |
+| `POST /api/inspector/inspection-text` | `{workspace, inspection_id, domain, kind}` | Verified allowlisted text output: `{path, text, sha256}` |
+| `POST /api/inspector/devicetree` | `{workspace, inspection_id, domain}` | Shared observation/domain, verified document and structural tree |
+| `POST /api/inspector/sources` | `{workspace, inspection_id, domain}` | Bounded current-source catalogue with `catalog_id` and file references |
+| `POST /api/inspector/bindings` | Selection fields plus `{catalog_id, node_path}` | Current compatible candidates and supported generated-header binding-path evidence |
+| `POST /api/inspector/source-file` | Selection fields plus `{catalog_id, file_id}` | Verified current text/hash, literal include references and direct binding properties |
+| `POST /api/inspector/application-sources` | `{workspace, application_path}` | Application source catalogue with `mode: "application"`, absolute `application_path`, opaque IDs and coverage diagnostics |
+| `POST /api/inspector/application-source-file` | Application selection plus `{catalog_id, file_id}` | Verified current source or binding text, includes and direct properties; no build identity |
 | `POST /api/memory/inspection` | `{workspace, inspection_id, domain}` | Read-only report readiness for the exact selected image and ELF |
 | `POST /api/memory/jobs` | `{build_path, name?, notes?, selection?: {workspace, inspection_id, domain}}` | Explicit report job, bound to the inspection when `selection` is supplied |
 

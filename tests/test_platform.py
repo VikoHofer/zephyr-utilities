@@ -11,7 +11,7 @@ from urllib.error import HTTPError
 from urllib.request import Request as HTTPRequest, urlopen
 
 from zephyr_utilities.app import Application, create_server
-from zephyr_utilities.core.features import FeatureDefinition, FrontendDefinition
+from zephyr_utilities.core.features import FeatureDefinition, FrontendDefinition, NavigationItem
 from zephyr_utilities.core.http import MethodNotAllowed, Request, Response, Router
 from zephyr_utilities.core.jobs import JobManager
 from zephyr_utilities.features import builtin_features
@@ -65,7 +65,7 @@ class PlatformTests(unittest.TestCase):
         self.assertEqual(catalog[-1]["frontend"]["module"], "/assets/demo/index.js")
         self.assertEqual(app.asset("/assets/demo/index.js").data, b"export function mount() {}")
         planned = [item for item in catalog if item["status"] == "planned"]
-        self.assertEqual({item["id"] for item in planned}, {"tinyml"})
+        self.assertEqual({item["id"] for item in planned}, {"devicetree", "tinyml"})
         self.assertTrue(all(item["frontend"] is None for item in planned))
 
     def test_workspace_changes_future_operations_but_keeps_submitted_inputs(self):
@@ -136,6 +136,27 @@ class PlatformTests(unittest.TestCase):
                            "overview", "explorer", "compare", "snapshots"):
             with self.subTest(identifier=identifier), self.assertRaisesRegex(ValueError, "reserved"):
                 FeatureDefinition(identifier, "Collision", "Conflicts with shared navigation")
+
+    def test_feature_sidebar_contract_supports_nested_views_without_cross_feature_paths(self):
+        feature = FeatureDefinition("demo", "Demo", "Test extension", navigation_group="advanced",
+                                    navigation=(NavigationItem("Results", "results", ("inspect",)),
+                                                NavigationItem("History", "results/history")))
+        descriptor = feature.descriptor()
+        self.assertEqual(descriptor["navigation_group"], "advanced")
+        self.assertEqual(descriptor["navigation"], [
+            {"label": "Results", "view": "results", "match_views": ["results", "inspect"]},
+            {"label": "History", "view": "results/history", "match_views": ["results/history"]},
+        ])
+        self.assertEqual(FeatureDefinition("simple", "Simple", "No subviews").descriptor()["navigation"], [])
+        for view in ("", "/memory", "../memory", "https://outside.invalid", "results?x=1", "results#anchor"):
+            with self.subTest(view=view), self.assertRaises(ValueError):
+                NavigationItem("Bad", view)
+        for options in ({"status": "planned", "navigation": (NavigationItem("Results", "results"),)},
+                        {"navigation_group": "other"},
+                        {"navigation": (NavigationItem("One", "results"), NavigationItem("Two", "results"))},
+                        {"navigation": (NavigationItem("One", "results", ("inspect",)), NavigationItem("Two", "inspect"))}):
+            with self.subTest(options=options), self.assertRaises(ValueError):
+                FeatureDefinition("invalid", "Invalid", "Bad navigation", **options)
 
 
 class JobTests(unittest.TestCase):

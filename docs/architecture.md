@@ -5,7 +5,7 @@ shared shell owns navigation and workspace selection. Features supply domain ser
 HTTP routes and scoped browser modules through an explicit registry.
 
 Memory Explorer, Project Creator's analyser/creation/build workflow, existing-build
-inspection and a read-only Device Tree reader are working features. Device Tree editing
+inspection in Build Inspector are working features. Visual Device Tree editing
 and TinyML experiments remain planned workflows inside the same application.
 
 ## Dependency direction
@@ -16,7 +16,8 @@ CLI
      ├─ core/ (HTTP, feature contracts, workspace, jobs)
      └─ explicit feature registry
          ├─ features/memory/
-         ├─ features/devicetree/  [read-only inspection; editing planned]
+         ├─ features/devicetree/  [visual editor planned]
+         ├─ features/inspector/   [advanced read-only build/source inspection]
          ├─ features/projects/    [analysis, creation and single-image builds]
          └─ features/tinyml/      [planned]
 
@@ -44,7 +45,8 @@ src/zephyr_utilities/
     __init__.py             # Explicit built-in registrations
     memory/                 # Report discovery/generation/model/snapshots/comparison
       web/                  # Feature entry module, template and stylesheet
-    devicetree/             # Read-only resolved tree inspection; editing planned
+    devicetree/              # Planned visual overlay, hardware and pin editor
+    inspector/              # Build outputs, resolved trees, sources and bindings
     projects/               # Environment analysis, creation, builds, storage and UI
     tinyml/                 # Planned model/experiment-analysis scope
   web/                      # Shared HTML shell, styles and JavaScript helpers
@@ -60,6 +62,9 @@ docs/                       # Contracts, decisions, contributor guides and roadm
 assets and a registration callback. `FrontendDefinition` identifies a feature's bundled
 asset directory and entry filenames. `features/__init__.py` explicitly selects the built-in
 definitions; there is no implicit import of arbitrary workspace code as an application plugin.
+Optional `NavigationItem` entries describe sidebar subviews and their nested-route
+matches. `navigation_group` places a feature in the primary tools or the optional
+Advanced section. The shell renders this metadata without importing feature internals.
 
 An available feature's `register(router, context)` callback registers its routes and owns
 its service instances. A planned definition has no registration callback or frontend.
@@ -142,8 +147,11 @@ After the shared workspace picker changes the workspace, the shell navigates the
 feature to its current view again. Features must reconcile workspace-bound state on this
 notification, even when the view name is unchanged.
 
-The canonical paths are `/#/home` and `/#/memory/overview` (with other memory views below
-the same prefix), plus `/#/projects/environment` and `/#/projects/create`. Earlier hashes such as `#overview` map to the equivalent memory view.
+The canonical paths are `/#/home`, `/#/memory/overview`, `/#/projects/applications`,
+`/#/projects/create`, `/#/projects/environment`, and `/#/inspector/builds` or
+`/#/inspector/sources`. Earlier memory hashes retain their destinations. Old
+`projects/builds`, `devicetree/inspect` and `devicetree/application` deep links map to
+Inspector; bare `/#/devicetree` opens the planned visual editor's scope.
 All browser assets are bundled with the Python package and served by the same process.
 
 ## Local access boundary
@@ -169,17 +177,24 @@ and a fresh output directory. Application/Zephyr/toolchain code runs only for an
 configure/build action. It is not sandboxed by output-directory separation.
 
 Project/profile and attempt context remain feature-owned. The shared build-inspection
-service captures separate transient observations of existing outputs for Projects,
-Device Tree and Memory handoff. It preserves original context/hashes and rechecks live artifacts, with
+service captures separate transient observations of existing outputs for Build Inspector
+and Memory handoff. It preserves original context/hashes and rechecks live artifacts, with
 source freshness explicitly unknown. This is a focused read interface, not the full
 future editor/change-plan contract. See [ADR 0005](decisions/0005-read-only-build-inspection.md).
 Memory report jobs detach a verified selection at submission and revalidate it before
 generation and snapshot publication; cache expiry and workspace changes cannot retarget
 accepted work. See [ADR 0006](decisions/0006-inspected-image-memory-handoff.md).
-Device Tree's source catalogues use the public `core/source_files.py` reader for bounded,
+Build Inspector's source catalogues use the public `core/source_files.py` reader for bounded,
 workspace-confined current text and directory reads. The feature owns reference selection,
 binding YAML interpretation and transient file IDs. Generated-output evidence remains
 separate from current source hashes. See [ADR 0007](decisions/0007-source-and-binding-navigation.md).
+Standalone application catalogues reuse that reader with bounded scan filters and a
+pinned application directory instead of a build selection. Projects hands off only the
+application path; Build Inspector validates it without importing Projects internals or
+creating a profile. See [ADR 0008](decisions/0008-application-source-browsing.md).
+Inspector now owns the read-only implementation previously under Device Tree and
+Projects. Legacy HTTP paths remain aliases, and persistence is unchanged. The visual
+editor has no executable registration. See [ADR 0009](decisions/0009-project-navigation-and-inspector.md).
 
 ## Measurement boundary
 
@@ -202,6 +217,8 @@ or worst-case resource demand. The [research roadmap](roadmap.md) and
 - [ADR 0005: Shared read-only build observations](decisions/0005-read-only-build-inspection.md)
 - [ADR 0006: Inspected image handoff to Memory Explorer](decisions/0006-inspected-image-memory-handoff.md)
 - [ADR 0007: Read-only source and binding navigation](decisions/0007-source-and-binding-navigation.md)
+- [ADR 0008: Application source browsing before configuration](decisions/0008-application-source-browsing.md)
+- [ADR 0009: Project navigation and advanced Build Inspector](decisions/0009-project-navigation-and-inspector.md)
 - [Adding a feature](adding-a-feature.md)
 - [HTTP/browser integration contract](platform-contract.md)
 

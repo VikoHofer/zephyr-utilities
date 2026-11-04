@@ -198,6 +198,7 @@ class CreatorServiceTests(unittest.TestCase):
             result = wait_job(self.app.context.jobs, job["id"])
         self.assertEqual(result["status"], "completed", result.get("error"))
         self.assertEqual(execute.call_args.args[2], plan["build_dir"])
+        self.assertEqual(job["metadata"]["view"], "applications")
         self.assertEqual(source_inputs(project["path"]), inputs)
         attempt = self.call("GET", "creator").data["projects"][0]["attempts"][0]
         self.assertEqual(attempt["status"], "built")

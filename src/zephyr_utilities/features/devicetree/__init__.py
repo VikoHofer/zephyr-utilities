@@ -1,1 +1,1 @@
-"""Read-only inspection of resolved Device Trees; source editing remains planned."""
+"""Planned visual Device Tree editing; read-only inspection lives in inspector."""

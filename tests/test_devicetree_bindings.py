@@ -11,7 +11,7 @@ import yaml
 
 from zephyr_utilities.app import Application
 from zephyr_utilities.core.http import Request
-from zephyr_utilities.features.devicetree.bindings import binding_mapping
+from zephyr_utilities.features.inspector.bindings import binding_mapping
 import test_build_inspection_api as build_fixtures
 import test_projects_api as http_fixtures
 
@@ -144,9 +144,9 @@ class BindingNavigationTests(unittest.TestCase):
         for text in cases:
             with self.subTest(text=text), self.assertRaises(ValueError):
                 binding_mapping(text)
-        with patch("zephyr_utilities.features.devicetree.bindings.MAX_YAML_EVENTS", 3), self.assertRaisesRegex(ValueError, "limits"):
+        with patch("zephyr_utilities.features.inspector.bindings.MAX_YAML_EVENTS", 3), self.assertRaisesRegex(ValueError, "limits"):
             binding_mapping('compatible: test,uart\nproperties: {}\n')
-        with patch("zephyr_utilities.features.devicetree.bindings.MAX_BINDING_BYTES", 2), self.assertRaisesRegex(ValueError, "limit"):
+        with patch("zephyr_utilities.features.inspector.bindings.MAX_BINDING_BYTES", 2), self.assertRaisesRegex(ValueError, "limit"):
             binding_mapping('compatible: test,uart')
 
     def test_current_file_edits_require_explicit_source_catalogue_refresh(self):
@@ -190,8 +190,8 @@ class BindingNavigationTests(unittest.TestCase):
         service = self.app.context.services["devicetree"]
         scope = service.sources.get(**self.catalogue_body())
         with patch.object(scope.reader, "read_text", wraps=scope.reader.read_text) as read, patch(
-                "zephyr_utilities.features.devicetree.bindings.MAX_BINDING_BYTES", 4), patch(
-                "zephyr_utilities.features.devicetree.bindings.MAX_INDEX_BYTES", 8):
+                "zephyr_utilities.features.inspector.bindings.MAX_BINDING_BYTES", 4), patch(
+                "zephyr_utilities.features.inspector.bindings.MAX_INDEX_BYTES", 8):
             index = service.bindings.index(scope)
         self.assertEqual(read.call_count, 2)
         self.assertTrue(any("reading limit" in message for message in index["diagnostics"]))
@@ -225,7 +225,7 @@ class BindingNavigationTests(unittest.TestCase):
         self.assertNotIn("should not be read", json.dumps(result))
 
     def test_partial_index_limits_and_unsafe_document_ids_are_explicit(self):
-        with patch("zephyr_utilities.features.devicetree.bindings.MAX_INDEX_BYTES", 1):
+        with patch("zephyr_utilities.features.inspector.bindings.MAX_INDEX_BYTES", 1):
             result = self.find()
         self.assertTrue(any("limit" in message for message in result["diagnostics"]))
         body = self.catalogue_body()

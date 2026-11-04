@@ -8,8 +8,8 @@ import unittest
 from unittest.mock import Mock, patch
 
 from zephyr_utilities.core.http import Request, Router
-from zephyr_utilities.features.devicetree.api import register
-from zephyr_utilities.features.devicetree.parser import parse_resolved_dts
+from zephyr_utilities.features.inspector.api import register
+from zephyr_utilities.features.inspector.parser import parse_resolved_dts
 
 
 DTS = '''/dts-v1/;
@@ -81,7 +81,7 @@ class ResolvedTreeTests(unittest.TestCase):
     def test_structural_resource_limits_have_explicit_raw_text_fallback(self):
         limits = {"MAX_BYTES": 10, "MAX_TOKENS": 10, "MAX_NODES": 2, "MAX_PROPERTIES": 2, "MAX_DEPTH": 1}
         for name, limit in limits.items():
-            with self.subTest(limit=name), patch(f"zephyr_utilities.features.devicetree.parser.{name}", limit):
+            with self.subTest(limit=name), patch(f"zephyr_utilities.features.inspector.parser.{name}", limit):
                 tree = parse_resolved_dts(DTS)
                 self.assertEqual(tree["status"], "unsupported")
                 self.assertEqual(tree["nodes"], [])

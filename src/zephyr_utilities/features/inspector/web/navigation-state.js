@@ -15,19 +15,23 @@ export function createSourceNavigation({api, state, workspace, onChange}) {
   let request;
   let tree;
   let nodePath;
-  Object.assign(state, {catalog: null, bindings: null, file: null, panel: "", loading: "", error: "", query: "", limit: 100});
+  Object.assign(state, {mode: "", catalog: null, bindings: null, file: null, panel: "", loading: "", error: "", query: "", limit: 100});
   const publish = () => { if (!disposed) onChange(); };
   function cancel() { revision++; request?.abort(); }
   function reset() {
     cancel();
-    Object.assign(state, {catalog: null, bindings: null, file: null, panel: "", loading: "", error: "", query: "", limit: 100});
+    Object.assign(state, {mode: "", catalog: null, bindings: null, file: null, panel: "", loading: "", error: "", query: "", limit: 100});
   }
   function selection() {
-    if (!tree || tree.workspace !== workspace() || !tree.inspection?.id || !tree.domain?.name) return null;
+    if (!tree || tree.workspace !== workspace()) return null;
+    if (tree.mode === "application") return tree.application_path ? {workspace: tree.workspace, application_path: tree.application_path} : null;
+    if (!tree.inspection?.id || !tree.domain?.name) return null;
     return {workspace: tree.workspace, inspection_id: tree.inspection.id, domain: tree.domain.name};
   }
   function identity(value, selected) {
-    return value?.workspace === selected.workspace && value.inspection_id === selected.inspection_id && value.domain === selected.domain;
+    if (value?.workspace !== selected.workspace) return false;
+    if (selected.application_path) return value.mode === "application" && value.application_path === selected.application_path;
+    return value.mode !== "application" && value.inspection_id === selected.inspection_id && value.domain === selected.domain;
   }
   function knownFile(id) {
     return [...array(state.catalog?.files), ...array(state.bindings?.bindings).map((entry) => entry.file),
@@ -46,10 +50,11 @@ export function createSourceNavigation({api, state, workspace, onChange}) {
   }
   async function catalog(operation) {
     if (state.catalog) return state.catalog;
-    const response = await api("/api/devicetree/sources", {method: "POST", signal: operation.signal, body: operation.selected});
+    const endpoint = operation.selected.application_path ? "/api/inspector/application-sources" : "/api/inspector/sources";
+    const response = await api(endpoint, {method: "POST", signal: operation.signal, body: operation.selected});
     if (!operation.current()) return null;
     if (!identity(response, operation.selected) || typeof response.catalog_id !== "string" || !response.catalog_id || !Array.isArray(response.files)) {
-      throw new Error("The source list does not belong to this image. Refresh the source list.");
+      throw new Error(`The source list does not belong to this ${operation.selected.application_path ? "application" : "image"}. Refresh the source list.`);
     }
     state.catalog = response;
     return response;
@@ -70,6 +75,7 @@ export function createSourceNavigation({api, state, workspace, onChange}) {
     await finish(operation, () => catalog(operation));
   }
   async function findBindings(path = nodePath) {
+    if (tree?.mode === "application") return;
     if (!array(tree?.tree?.nodes).some((node) => node.path === path) || path !== nodePath) return;
     const operation = begin("bindings", "bindings");
     if (!operation) return;
@@ -78,7 +84,7 @@ export function createSourceNavigation({api, state, workspace, onChange}) {
     await finish(operation, async () => {
       const currentCatalog = await catalog(operation);
       if (!currentCatalog || !operation.current() || nodePath !== path) return;
-      const response = await api("/api/devicetree/bindings", {method: "POST", signal: operation.signal,
+      const response = await api("/api/inspector/bindings", {method: "POST", signal: operation.signal,
         body: {...operation.selected, catalog_id: currentCatalog.catalog_id, node_path: path}});
       if (!operation.current() || nodePath !== path) return;
       if (!identity(response, operation.selected) || response.catalog_id !== currentCatalog.catalog_id || response.node_path !== path || !Array.isArray(response.bindings)) {
@@ -96,7 +102,8 @@ export function createSourceNavigation({api, state, workspace, onChange}) {
     state.file = null;
     publish();
     await finish(operation, async () => {
-      const response = await api("/api/devicetree/source-file", {method: "POST", signal: operation.signal,
+      const endpoint = operation.selected.application_path ? "/api/inspector/application-source-file" : "/api/inspector/source-file";
+      const response = await api(endpoint, {method: "POST", signal: operation.signal,
         body: {...operation.selected, catalog_id: catalogId, file_id: id}});
       if (!operation.current()) return;
       if (!identity(response, operation.selected) || response.catalog_id !== catalogId || response.file?.id !== id ||
@@ -111,7 +118,7 @@ export function createSourceNavigation({api, state, workspace, onChange}) {
     browse, findBindings, openFile,
     sync(data, selectedPath) {
       if (disposed) return;
-      if (data !== tree || (data && data.workspace !== workspace())) { reset(); tree = data; }
+      if (data !== tree || (data && data.workspace !== workspace())) { reset(); tree = data; state.mode = data?.mode === "application" ? "application" : "build"; }
       if (selectedPath !== nodePath) {
         nodePath = selectedPath;
         if (state.panel === "bindings") {

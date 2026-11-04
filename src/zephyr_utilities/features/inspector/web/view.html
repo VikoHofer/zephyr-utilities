@@ -1,0 +1,85 @@
+<section class="inspector-feature" data-inspector-root>
+  <div class="inspection-feature" data-builds-view hidden>
+    <header class="inspection-heading"><div><span class="inspection-eyebrow">BUILD INSPECTOR · BUILD OUTPUTS</span><h1>Understand an existing build.</h1><p>Inspect generated files and open the resolved Device Tree for the selected image.</p></div><span class="inspection-label">Read only</span></header>
+    <section class="inspection-workspace" aria-label="Build inspection workspace"><div class="inspection-workspace-info"><span class="inspection-eyebrow">SELECTED WORKSPACE</span><p class="inspection-path" data-build-workspace></p><p class="inspection-muted">Choose an existing build directory inside this workspace.</p></div></section>
+    <p class="inspection-scope">Inspection reads existing files. It does not configure, compile, flash or change the application.</p>
+    <form class="inspection-panel" data-build-form aria-label="Open an existing build"><label>Build directory<input type="text" data-build-path required spellcheck="false" autocomplete="off" placeholder="/path/to/workspace/application/build"></label><p class="inspection-muted inspection-apply-note">Use a single-image build directory or a sysbuild directory containing domains.yaml.</p><button class="inspection-button primary" type="submit" data-build-open>Open build</button></form>
+    <div class="inspection-error" role="alert" data-build-error hidden></div>
+    <p class="inspection-banner" role="status" aria-live="polite" data-build-progress hidden></p>
+    <div class="inspection-empty" data-build-empty><h2>Choose a build to inspect.</h2><p>Open a build from an application attempt, or enter the path to an existing build here.</p></div>
+    <section class="inspection-panel" data-build-results hidden aria-label="Build observation">
+      <div class="inspection-section-heading"><div><h2>Build context</h2><p class="inspection-muted">Select the image whose generated files you want to inspect.</p></div><div class="inspection-actions"><button type="button" class="inspection-button" data-build-check>Check for changes</button><button type="button" class="inspection-button" data-build-reinspect>Re-inspect directory</button></div></div>
+      <label class="inspection-build-domain">Image / domain<select data-build-domain></select></label>
+      <p class="inspection-banner" data-build-freshness></p>
+      <dl class="inspection-identity" data-build-identity></dl>
+      <p class="inspection-muted inspection-apply-note">Source freshness is unknown: unchanged output files do not establish that this build matches the current application sources or hardware.</p>
+      <div class="inspection-actions"><button type="button" class="inspection-button primary" data-build-tree>Inspect Device Tree</button><button type="button" class="inspection-button" data-build-memory>Open Memory Explorer</button></div>
+      <details class="inspection-technical-details"><summary>Toolchain and observation details</summary><dl class="inspection-identity" data-build-metadata></dl></details>
+      <details class="inspection-technical-details"><summary>Recorded configuration and Device Tree inputs</summary><div data-build-inputs></div></details>
+      <details class="inspection-technical-details"><summary>Generated files</summary><div data-build-artifacts></div></details>
+      <details class="inspection-technical-details" data-build-file-panel hidden><summary data-build-file-title>File preview</summary><p class="inspection-path inspection-apply-note" data-build-file-path></p><pre data-build-file-text></pre></details>
+      <div data-build-diagnostics hidden></div>
+    </section>
+  </div>
+
+<div data-tree-view hidden>
+<section class="dt-feature" data-dt-root>
+  <header class="dt-heading"><div><span class="dt-eyebrow">BUILD INSPECTOR · SOURCES AND DEVICE TREE</span><h1>Inspect sources and resolved hardware.</h1><p>Browse application sources, resolved nodes and their binding references.</p></div><span class="dt-badge">Read only</span></header>
+  <div class="dt-toolbar"><a class="dt-button" href="#/inspector/builds">Open build outputs</a><button type="button" class="dt-button" data-dt-refresh hidden>Recheck artifacts</button></div>
+  <p class="dt-scope">Source editing and binding validation remain planned.</p>
+  <details class="dt-panel dt-application-picker" data-dt-application-picker open><summary>Browse an application before building</summary>
+    <form data-dt-application-form class="dt-application-form">
+      <label>Application directory<input type="text" data-dt-application-directory placeholder="applications/my_app" required maxlength="4096" aria-describedby="dt-application-help"></label>
+      <button type="submit" class="dt-button">Browse application sources</button>
+    </form>
+    <p class="dt-muted" id="dt-application-help">Choose a directory with CMakeLists.txt inside the selected workspace. Relative paths start at the workspace.</p>
+  </details>
+  <div class="dt-error" data-dt-error role="alert" hidden></div>
+  <p class="dt-status" data-dt-loading role="status" hidden>Reading the resolved Device Tree…</p>
+  <section class="dt-empty" data-dt-empty><h2>Sources now, resolved hardware after configuration.</h2><p>Choose an application above to browse its files. For resolved nodes and properties, open a configured application or sysbuild directory in Build outputs and choose an image.</p><a class="dt-button" href="#/inspector/builds">Inspect an existing build</a></section>
+  <section class="dt-panel" data-dt-application-context aria-label="Current application sources" hidden><h2>Application sources</h2><p class="dt-path" data-dt-application-path></p></section>
+  <div data-dt-results hidden>
+    <section class="dt-panel" aria-label="Device Tree build context">
+      <div class="dt-section-heading"><h2>Selected image</h2><label>Image / domain<select data-dt-domain></select></label></div>
+      <dl class="dt-facts" data-dt-context></dl>
+      <p class="dt-notice">This is the saved build output. Whether it matches the current source files is unknown; enabled nodes do not establish driver availability or hardware operation.</p>
+      <div class="dt-toolbar"><button type="button" class="dt-button" data-dt-browse-sources>Browse sources</button></div>
+      <details><summary>Build and source details</summary><div data-dt-sources></div></details>
+    </section>
+    <div data-dt-diagnostics></div>
+    <section class="dt-panel" data-dt-browser aria-label="Device Tree node browser">
+      <div class="dt-section-heading"><div><h2>Nodes and properties</h2><p class="dt-muted" data-dt-count role="status"></p></div><label>Find a node<input type="search" data-dt-search placeholder="Path, label or compatible…"></label></div>
+      <div class="dt-browser"><div><div class="dt-nodes" data-dt-nodes></div><button type="button" class="dt-button dt-more" data-dt-more hidden>Show more nodes</button></div><aside class="dt-node-detail" data-dt-detail aria-label="Selected node"></aside></div>
+    </section>
+    <details class="dt-panel dt-raw"><summary>Resolved DTS text</summary><p class="dt-path" data-dt-document-path></p><pre data-dt-document></pre></details>
+  </div>
+    <section class="dt-panel dt-source-navigation" data-dt-source-navigation aria-label="Source and binding navigation" hidden>
+      <div class="dt-section-heading"><h2 data-dt-source-navigation-title>Current source files</h2><div class="dt-toolbar"><button type="button" class="dt-button" data-dt-source-refresh>Refresh source list</button><button type="button" class="dt-button" data-dt-source-close>Close navigation</button></div></div>
+      <p class="dt-notice" data-dt-source-notice>These are current files. They may differ from the files used to build this image. Source editing and binding validation remain planned.</p>
+      <div class="dt-error" data-dt-source-error role="alert" hidden></div>
+      <p class="dt-status" data-dt-source-loading role="status" hidden></p>
+      <div data-dt-source-files>
+        <div class="dt-section-heading"><p class="dt-muted" data-dt-source-count role="status"></p><label>Find a source file<input type="search" data-dt-source-search placeholder="Filename, path or origin…"></label></div>
+        <div class="dt-source-files" data-dt-source-list></div>
+        <button type="button" class="dt-button dt-more" data-dt-source-more hidden>Show more files</button>
+        <div data-dt-source-diagnostics></div>
+      </div>
+      <div data-dt-binding-results hidden>
+        <p class="dt-path" data-dt-binding-node></p><p class="dt-muted" data-dt-binding-compatible></p>
+        <p class="dt-muted dt-binding-note">Compatible candidates share a compatible string with this node; bus rules and include inheritance are not evaluated. Recorded references come from saved generated output, but the files shown here are current.</p>
+        <div data-dt-binding-list></div><div data-dt-binding-diagnostics></div>
+      </div>
+      <section class="dt-source-document" data-dt-source-document aria-label="Current file contents" hidden>
+        <div class="dt-section-heading"><h3 data-dt-source-file-title>Current file</h3><span class="dt-badge">Read only · current file</span></div>
+        <p class="dt-path" data-dt-source-file-path></p>
+        <details data-dt-source-file-details><summary>File identity</summary><dl class="dt-facts"><div><dt>Kind</dt><dd data-dt-source-file-kind></dd></div><div><dt>Current SHA-256</dt><dd class="dt-path" data-dt-source-file-hash></dd></div></dl></details>
+        <pre data-dt-source-file-text tabindex="0" aria-label="Current source text"></pre>
+        <section data-dt-source-includes-section hidden><h3>Included files</h3><div data-dt-source-includes></div></section>
+        <details data-dt-binding-properties-section hidden><summary>Properties declared in this file</summary><p class="dt-muted">Includes are not merged here; inherited definitions may add or change properties.</p><div data-dt-binding-properties></div></details>
+        <div data-dt-source-file-diagnostics></div>
+      </section>
+    </section>
+</section>
+
+</div>
+</section>

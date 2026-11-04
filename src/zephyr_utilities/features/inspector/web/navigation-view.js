@@ -8,6 +8,7 @@ export function createSourceView(root, context) {
   let disposed = false;
   let renderedFile;
   let session;
+  let selection;
   function element(tag, className, text) {
     const result = document.createElement(tag);
     if (className) result.className = className;
@@ -53,7 +54,7 @@ export function createSourceView(root, context) {
     $("source-more").hidden = shown.length >= files.length;
     const target = $("source-list"); target.replaceChildren();
     for (const file of shown) target.append(fileRow(file));
-    if (state.catalog && !shown.length) target.append(element("p", "dt-muted", state.query ? "No source files match this search." : "No source files are available from this build's recorded inputs."));
+    if (state.catalog && !shown.length) target.append(element("p", "dt-muted", state.query ? "No source files match this search." : state.mode === "application" ? "No Device Tree files, configuration fragments or local bindings were found in this application." : "No source files are available from this build's recorded inputs."));
     diagnostics($("source-diagnostics"), state.catalog?.diagnostics);
   }
   function renderBindings() {
@@ -119,9 +120,13 @@ export function createSourceView(root, context) {
   function render() {
     if (disposed) return;
     $("source-navigation").hidden = !state.panel;
+    $("source-close").hidden = state.mode === "application";
+    $("source-notice").textContent = state.mode === "application"
+      ? "Browse current application files before configuring. Include links are candidates; the files used by a build and the resolved hardware are unknown."
+      : "These are current files. They may differ from the files used to build this image. Source editing and binding validation remain planned.";
     $("source-navigation-title").textContent = state.panel === "bindings" ? "Bindings for the selected node" : "Current source files";
     $("source-loading").hidden = !state.loading;
-    $("source-loading").textContent = state.loading === "file" ? "Reading the current file…" : state.loading === "bindings" ? "Finding bindings in the recorded directories…" : "Reading the recorded source list…";
+    $("source-loading").textContent = state.loading === "file" ? "Reading the current file…" : state.loading === "bindings" ? "Finding bindings in the recorded directories…" : state.mode === "application" ? "Finding application source files…" : "Reading the recorded source list…";
     $("source-error").hidden = !state.error; $("source-error").textContent = state.error;
     $("source-refresh").disabled = Boolean(state.loading);
     $("source-search").disabled = !state.catalog || Boolean(state.loading);
@@ -148,7 +153,12 @@ export function createSourceView(root, context) {
   session = createSourceNavigation({api: context.api, state, workspace: context.workspace, onChange: render});
   render();
   return {
-    sync(data, path) { session.sync(data, path); $("browse-sources").disabled = !data; render(); },
+    sync(data, path) {
+      const changed = data !== selection; selection = data;
+      session.sync(data, path); $("browse-sources").disabled = !data || data.mode === "application";
+      if (changed && data?.mode === "application") session.browse();
+      render();
+    },
     findBindings(path) { session.findBindings(path); $("source-navigation").scrollIntoView({block: "start"}); },
     dispose() { disposed = true; lifetime.abort(); session.dispose(); },
   };

@@ -19,15 +19,15 @@ export function mountBuilds(root, context) {
     return item;
   }
   function fact(parent, label, value, path = false) {
-    const item = node("div", "projects-fact");
-    item.append(node("dt", "", label), node("dd", path ? "projects-path" : "", text(value)));
+    const item = node("div", "inspection-fact");
+    item.append(node("dt", "", label), node("dd", path ? "inspection-path" : "", text(value)));
     parent.append(item);
   }
   function paths(parent, heading, values) {
     const entries = array(values);
     parent.append(node("h3", "", heading));
-    if (!entries.length) { parent.append(node("p", "projects-muted", "Not recorded in this build.")); return; }
-    const list = node("ol", "projects-source-list projects-path");
+    if (!entries.length) { parent.append(node("p", "inspection-muted", "Not recorded in this build.")); return; }
+    const list = node("ol", "inspection-source-list inspection-path");
     for (const path of entries) list.append(node("li", "", path));
     parent.append(list);
   }
@@ -88,16 +88,16 @@ export function mountBuilds(root, context) {
     paths(inputs, "Binding directories", domain?.context?.devicetree?.binding_dirs);
     paths(inputs, "Include directories", domain?.context?.devicetree?.include_dirs);
     const artifacts = $("artifacts"); artifacts.replaceChildren();
-    if (!array(domain?.artifacts).length) artifacts.append(node("p", "projects-muted", "No supported generated files were found for this image."));
+    if (!array(domain?.artifacts).length) artifacts.append(node("p", "inspection-muted", "No supported generated files were found for this image."));
     for (const artifact of array(domain?.artifacts)) {
-      const row = node("div", "projects-build-artifact");
+      const row = node("div", "inspection-build-artifact");
       const info = node("div");
-      info.append(node("strong", "", labels[artifact.kind] || artifact.kind), node("p", "projects-path", artifact.path), node("p", "projects-muted", `${text(artifact.availability)} · ${artifact.size ?? "Unknown"} bytes`));
-      const hash = node("details", "projects-technical-details");
-      hash.append(node("summary", "", "Recorded SHA-256"), node("p", "projects-path", artifact.sha256 || "Not recorded"));
+      info.append(node("strong", "", labels[artifact.kind] || artifact.kind), node("p", "inspection-path", artifact.path), node("p", "inspection-muted", `${text(artifact.availability)} · ${artifact.size ?? "Unknown"} bytes`));
+      const hash = node("details", "inspection-technical-details");
+      hash.append(node("summary", "", "Recorded SHA-256"), node("p", "inspection-path", artifact.sha256 || "Not recorded"));
       info.append(hash); row.append(info);
       if (buildTextKinds.has(artifact.kind)) {
-        const button = node("button", "projects-button", "View file");
+        const button = node("button", "inspection-button", "View file");
         button.type = "button"; button.dataset.buildFile = artifact.kind;
         button.setAttribute("aria-label", `View ${labels[artifact.kind] || artifact.kind}`);
         button.disabled = !canReadBuildArtifact(state, artifact.kind) || Boolean(state.fileLoading);
@@ -114,7 +114,7 @@ export function mountBuilds(root, context) {
     $("file-path").textContent = file?.path || "";
     $("file-text").textContent = file?.text || "";
     const diagnostics = $("diagnostics"); diagnostics.replaceChildren();
-    for (const item of [...array(observation.diagnostics), ...array(domain?.diagnostics)]) diagnostics.append(node("p", "projects-banner", item.message || item));
+    for (const item of [...array(observation.diagnostics), ...array(domain?.diagnostics)]) diagnostics.append(node("p", "inspection-banner", item.message || item));
     $("diagnostics").hidden = !diagnostics.childNodes.length;
   }
   const listen = (element, event, callback) => element.addEventListener(event, callback, {signal: lifetime.signal});

@@ -12,7 +12,8 @@ from later ideas. The [feature proposal](templates/feature-proposal.md) includes
 prompts for larger work.
 
 Choose a stable lowercase identifier such as `telemetry`. Existing planned areas already
-have IDs: `devicetree`, `projects`, and `tinyml`; extend those modules rather than creating
+have IDs: `devicetree`, `projects`, and `tinyml`; the implemented advanced reader uses
+`inspector`. Extend the appropriate module rather than creating
 competing names for the same tool.
 
 ## 2. Generate the starting files

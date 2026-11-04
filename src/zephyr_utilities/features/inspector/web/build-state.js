@@ -71,13 +71,13 @@ export function createBuildSession({api, state, workspace, onChange, navigate}) 
     if (!requested) { state.error = "Enter an existing build directory."; publish(); return; }
     state.path = requested;
     if (state.observation?.root_build_dir !== requested) { state.observation = null; state.domain = ""; }
-    await read("open", "/api/projects/inspect", {method: "POST", body: {workspace: state.workspace, build_dir: requested}});
+    await read("open", "/api/inspector/inspect", {method: "POST", body: {workspace: state.workspace, build_dir: requested}});
   }
   async function check() {
     if (disposed) return;
     if (followWorkspace()) publish();
     if (!state.observation || state.busy) return;
-    await read("check", `/api/projects/inspections/${encodeURIComponent(state.observation.id)}?workspace=${encodeURIComponent(state.workspace)}`);
+    await read("check", `/api/inspector/inspections/${encodeURIComponent(state.observation.id)}?workspace=${encodeURIComponent(state.workspace)}`);
   }
   function selectDomain(name) {
     if (disposed) return;
@@ -99,7 +99,7 @@ export function createBuildSession({api, state, workspace, onChange, navigate}) 
     Object.assign(state, {file: null, fileLoading: kind, error: ""});
     publish();
     try {
-      const file = await request("/api/projects/inspection-text", {method: "POST", body: {workspace: path, inspection_id: inspectionId, domain, kind}});
+      const file = await request("/api/inspector/inspection-text", {method: "POST", body: {workspace: path, inspection_id: inspectionId, domain, kind}});
       if (current(path, captured) && fileRevision === fileRequest && state.domain === domain) state.file = {...file, kind, domain};
     } catch (error) {
       if (current(path, captured) && fileRevision === fileRequest && error.name !== "AbortError") {
@@ -112,7 +112,7 @@ export function createBuildSession({api, state, workspace, onChange, navigate}) 
   function openDeviceTree() {
     if (disposed) return;
     if (followWorkspace()) { publish(); return; }
-    if (canOpenDeviceTree(state)) navigate(`devicetree/inspect/${encodeURIComponent(state.observation.id)}/${encodeURIComponent(state.domain)}`);
+    if (canOpenDeviceTree(state)) navigate(`inspector/inspect/${encodeURIComponent(state.observation.id)}/${encodeURIComponent(state.domain)}`);
   }
   function openMemory() {
     if (disposed) return;

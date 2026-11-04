@@ -48,6 +48,14 @@ class WorkspaceSourceReader:
         if _directory_identity(self.workspace) != self._identity:
             raise ValueError("The workspace directory changed. Open the sources again.")
 
+    def directory_identity(self, path):
+        """Identify a workspace directory without following any symbolic links."""
+        path = self.path(path)
+        self._verify_workspace()
+        identity = _directory_identity(path)
+        self._verify_workspace()
+        return identity
+
     def read_text(self, path, limit=MAX_SOURCE_BYTES):
         path = self.path(path)
         if not isinstance(limit, int) or not 0 < limit <= MAX_SOURCE_BYTES:
@@ -63,32 +71,45 @@ class WorkspaceSourceReader:
             raise ValueError("This source contains binary data.")
         return {"path": str(path), "text": text, "sha256": identity["sha256"]}
 
-    def list_files(self, root, suffixes, max_files=10000, max_dirs=2000):
+    def list_files(self, root, suffixes, max_files=10000, max_dirs=2000, *, names=(), prefixes=(), endings=(),
+                   exclude_dirs=(), exclude_prefixes=(), stop_names=(), max_depth=32):
         """List regular candidates without following links; fail on incomplete scans."""
         root = self.path(root)
         if not isinstance(max_files, int) or not 0 < max_files <= 10000 or not isinstance(max_dirs, int) or not 0 < max_dirs <= 2000:
             raise ValueError("Choose supported source directory limits.")
+        if not isinstance(max_depth, int) or not 0 <= max_depth <= 32:
+            raise ValueError("Choose a supported source directory depth.")
         suffixes = frozenset(suffixes)
+        names, prefixes, endings = frozenset(names), tuple(prefixes), tuple(endings)
+        exclude_dirs, exclude_prefixes, stop_names = frozenset(exclude_dirs), tuple(exclude_prefixes), frozenset(stop_names)
         self._verify_workspace()
         files, directories, entries = [], 0, 0
 
         def visit(path, descriptor, depth):
             nonlocal directories, entries
             directories += 1
-            if directories > max_dirs or depth > 32:
+            if directories > max_dirs or depth > max_depth:
                 raise ValueError("Source directory scan exceeded its directory limit.")
             before = os.fstat(descriptor)
-            names = []
+            for marker in stop_names:
+                try:
+                    os.stat(marker, dir_fd=descriptor, follow_symlinks=False)
+                except FileNotFoundError:
+                    continue
+                return
+            children = []
             with os.scandir(descriptor) as listing:
                 for entry in listing:
                     entries += 1
                     if entries > max_files + max_dirs:
                         raise ValueError("Source directory scan exceeded its entry limit.")
-                    names.append(entry.name)
-            for name in sorted(names):
+                    children.append(entry.name)
+            for name in sorted(children):
                 info = os.stat(name, dir_fd=descriptor, follow_symlinks=False)
                 child = path / name
                 if stat.S_ISDIR(info.st_mode):
+                    if name in exclude_dirs or name.startswith(exclude_prefixes):
+                        continue
                     opened = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptor)
                     try:
                         actual = os.fstat(opened)
@@ -97,7 +118,7 @@ class WorkspaceSourceReader:
                         visit(child, opened, depth + 1)
                     finally:
                         os.close(opened)
-                elif stat.S_ISREG(info.st_mode) and child.suffix in suffixes:
+                elif stat.S_ISREG(info.st_mode) and (child.suffix in suffixes or name in names or name.startswith(prefixes) or name.endswith(endings)):
                     files.append(child)
                     if len(files) > max_files:
                         raise ValueError("Source directory scan exceeded its file limit.")

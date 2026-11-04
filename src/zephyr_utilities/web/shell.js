@@ -1,18 +1,20 @@
-import {parseRoute, routeHash, featureAssets, activeJobRoute} from "/assets/shell/shared/routes.js";
+import {parseRoute, routeHash, featureAssets, activeJobRoute, navigationEntries, activeNavigationEntry} from "/assets/shell/shared/routes.js";
 import {createApi} from "/assets/shell/shared/api.js";
 
 const $ = (id) => document.getElementById(id);
 const state = {session: null, workspace: {path: ""}, features: [], instances: new Map(), mounted: null, routeRevision: 0, folder: null, activeJobs: []};
 const stylesheets = new Map();
-const icons = {memory: "▥", devicetree: "⑂", projects: "＋", tinyml: "◈"};
+const icons = {memory: "▥", devicetree: "⑂", projects: "＋", inspector: "⌕", tinyml: "◈"};
 const toolDetails = {
   memory: ["RAM & ROM reports", "Symbol-level exploration", "Snapshot comparisons"],
-  devicetree: ["Read-only resolved tree inspection", "Search nodes and inspect properties", "Build and image context"],
-  projects: ["Environment, board and SDK discovery", "Create, configure and build", "Inspect existing build outputs"],
+  devicetree: ["Visual overlay editing", "Hardware modules and pin assignment", "Planned after the core project workflow"],
+  projects: ["Workspace applications", "Create, configure and build", "Environment, board and SDK discovery"],
+  inspector: ["Existing build outputs and image context", "Resolved nodes, sources and bindings", "Read-only advanced inspection"],
   tinyml: ["Model and experiment metadata", "Memory, latency and accuracy", "Reproducible framework comparisons"],
 };
 let api;
 let noticeTimer;
+let navigationFeature;
 
 function node(tag, className, text) {
   const element = document.createElement(tag);
@@ -59,15 +61,50 @@ async function refreshWorkspace() {
 function renderNavigation() {
   const nav = $("app-navigation");
   nav.replaceChildren();
+  const advanced = node("details", "app-nav-advanced"); advanced.id = "app-nav-advanced";
+  advanced.append(node("summary", "", "Advanced"));
   for (const feature of [{id: "home", title: "Home", entry_path: "home", status: "available"}, ...state.features]) {
+    const group = node("div", "app-nav-feature"); group.dataset.feature = feature.id;
     const link = node("a", "app-nav");
     link.href = routeHash(feature.entry_path || feature.id);
     const icon = node("span", "app-nav-icon", icons[feature.id] || "◫"); icon.setAttribute("aria-hidden", "true");
     link.append(icon, node("span", "app-nav-label", feature.title));
     link.dataset.feature = feature.id;
     if (feature.status === "planned") link.append(node("small", "app-nav-status", "Planned"));
-    nav.append(link);
+    group.append(link);
+    const entries = navigationEntries(feature);
+    if (entries.length) {
+      const children = node("div", "app-subnav"); children.hidden = true;
+      children.setAttribute("role", "group"); children.setAttribute("aria-label", `${feature.title} views`);
+      for (const entry of entries) {
+        const child = node("a", "app-subnav-link", entry.label);
+        child.href = routeHash(entry.path); child.dataset.view = entry.view;
+        children.append(child);
+      }
+      group.append(children);
+    }
+    (feature.navigation_group === "advanced" ? advanced : nav).append(group);
   }
+  if (advanced.querySelector(".app-nav-feature")) nav.append(advanced);
+}
+
+function updateNavigation(route, feature, selected) {
+  const nav = $("app-navigation");
+  for (const group of nav.querySelectorAll(".app-nav-feature")) {
+    const active = group.dataset.feature === route.feature;
+    const link = group.querySelector(".app-nav"); link.classList.toggle("active", active);
+    if (active && !selected) link.setAttribute("aria-current", "page"); else link.removeAttribute("aria-current");
+    const children = group.querySelector(".app-subnav");
+    if (children) children.hidden = !active;
+    for (const child of group.querySelectorAll(".app-subnav-link")) {
+      const current = active && child.dataset.view === selected?.view;
+      child.classList.toggle("active", current);
+      if (current) child.setAttribute("aria-current", "page"); else child.removeAttribute("aria-current");
+    }
+  }
+  // Opening an advanced destination reveals it; later workspace refreshes respect a manual collapse.
+  if (feature?.navigation_group === "advanced" && navigationFeature !== route.feature) $("app-nav-advanced").open = true;
+  navigationFeature = route.feature;
 }
 
 function renderHome(root) {
@@ -82,6 +119,7 @@ function renderHome(root) {
   workspace.append(text, change); home.append(workspace);
   const label = node("div", "home-section-heading"); label.append(node("h2", "", "Your tools"), node("span", "", "One application · Shared workspace")); home.append(label);
   const grid = node("div", "tool-grid");
+  const advancedGrid = node("div", "tool-grid");
   for (const feature of state.features) {
     const available = feature.status === "available";
     const card = node("article", `tool-card${available ? " available" : " planned"}`);
@@ -93,9 +131,14 @@ function renderHome(root) {
     for (const detail of toolDetails[feature.id] || []) capabilities.append(node("li", "", detail));
     card.append(capabilities);
     const link = node("a", available ? "app-button primary tool-open" : "tool-scope", available ? `Open ${feature.title} →` : "View planned scope →");
-    link.href = routeHash(feature.entry_path || feature.id); card.append(link); grid.append(card);
+    link.href = routeHash(feature.entry_path || feature.id); card.append(link);
+    (feature.navigation_group === "advanced" ? advancedGrid : grid).append(card);
   }
   home.append(grid);
+  if (advancedGrid.childElementCount) {
+    const advanced = node("details", "home-advanced");
+    advanced.append(node("summary", "", "Advanced tools"), advancedGrid); home.append(advanced);
+  }
   const note = node("div", "home-note");
   note.append(node("span", "app-dot"), node("p", "", "Your reports, snapshots and workspace stay on this computer. Planned tools will open here as they become available."));
   home.append(note); root.append(home);
@@ -130,12 +173,10 @@ async function renderRoute() {
   const route = parseRoute(location.hash);
   if (location.hash !== routeHash(route.path)) history.replaceState(null, "", routeHash(route.path));
   const feature = state.features.find((item) => item.id === route.feature);
-  const title = route.feature === "home" ? "Home" : feature?.title || "Tool not found";
+  const selected = activeNavigationEntry(feature, route);
+  const title = route.feature === "home" ? "Home" : feature ? [feature.title, selected?.label].filter(Boolean).join(" · ") : "Tool not found";
   $("app-title").textContent = title; document.title = `${title} · Zephyr Utilities`;
-  document.querySelectorAll(".app-nav").forEach((link) => {
-    const active = link.dataset.feature === route.feature; link.classList.toggle("active", active);
-    if (active) link.setAttribute("aria-current", "page"); else link.removeAttribute("aria-current");
-  });
+  updateNavigation(route, feature, selected);
   if (state.mounted?.id === route.feature) { state.mounted.instance.navigate(route.view); return; }
   state.mounted?.instance.dispose(); state.mounted = null;
   const root = $("app-main"); root.replaceChildren();
@@ -217,8 +258,9 @@ async function init() {
   const [registry] = await Promise.all([api("/api/features"), refreshWorkspace()]);
   state.features = registry.features || [];
   $("app-version").textContent = state.session.version ? `v${state.session.version}` : "";
-  renderNavigation(); await renderRoute();
+  // Listen before the sidebar becomes interactive; the initial feature may load slowly.
   window.addEventListener("hashchange", () => run(renderRoute));
+  renderNavigation(); await renderRoute();
   $("app-notice-close").addEventListener("click", () => { $("app-notice").hidden = true; });
   $("workspace-open").addEventListener("click", () => run(openWorkspace));
   $("workspace-close").addEventListener("click", () => $("workspace-dialog").close());

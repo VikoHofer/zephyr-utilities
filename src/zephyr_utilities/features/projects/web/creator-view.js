@@ -12,6 +12,7 @@ export function mountCreator(root, context) {
   let renderedPlan;
   let renderedProjects;
   let renderedBuildPlan;
+  let view = "applications";
   const array = (value) => Array.isArray(value) ? value : [];
   const text = (value, fallback = "Unknown") => value === null || value === undefined || value === "" ? fallback : String(value);
   const time = (value) => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString() : "Unknown time";
@@ -67,7 +68,7 @@ export function mountCreator(root, context) {
   }
   function renderPlan() {
     const plan = state.plan;
-    $("creator-preview").hidden = !plan;
+    $("creator-preview").hidden = view !== "create" || !plan;
     if (plan === renderedPlan) return;
     renderedPlan = plan;
     if (!plan) return;
@@ -100,7 +101,7 @@ export function mountCreator(root, context) {
     const buildDirectory = attempt.build_dir || attempt.context?.build_dir || attempt.context?.build_directory;
     if (buildDirectory) {
       const inspect = node("a", "projects-button", "Inspect build");
-      inspect.href = `#/projects/builds/${encodeURIComponent(buildDirectory)}`;
+      inspect.href = `#/inspector/builds/${encodeURIComponent(buildDirectory)}`;
       detail.append(inspect);
     }
     const technical = disclosure("Compiler and output files", `${key}:outputs`);
@@ -130,7 +131,10 @@ export function mountCreator(root, context) {
       renderedProjects = signature;
       const expanded = new Set([...target.querySelectorAll("details[open][data-disclosure]")].map((detail) => detail.dataset.disclosure));
       target.replaceChildren();
-      if (!projects.length) target.append(node("p", "projects-muted", "No applications found at their saved locations. Create an application here to get started. Existing applications are not imported in this release."));
+      if (!projects.length) {
+        target.append(node("p", "projects-muted", "No saved applications were found at their workspace locations. Create an application to get started."));
+        const create = node("a", "projects-button primary", "Create application"); create.href = "#/projects/create"; target.append(create);
+      }
       for (const project of projects) {
         const card = node("article", "projects-created-app");
         card.append(node("h3", "", project.name), node("p", "projects-path", project.path));
@@ -139,7 +143,11 @@ export function mountCreator(root, context) {
         for (const [operation, label] of [["configure", "Configure"], ["build", "Build"]]) {
           const button = node("button", `projects-button${operation === "build" ? " primary" : ""}`, label); button.type = "button"; button.dataset.projectId = project.id; button.dataset.buildOperation = operation; actions.append(button);
         }
+        const sources = node("a", "projects-button", "Browse sources");
+        sources.href = `#/inspector/application/${encodeURIComponent(project.path)}`;
         card.append(actions);
+        card.append(disclosure("Advanced details", `project:${project.id}:advanced`,
+          node("p", "projects-muted", "Open current source and binding details in Build Inspector."), sources));
         for (const attempt of array(project.attempts)) renderAttempt(card, attempt);
         target.append(card);
       }
@@ -149,7 +157,7 @@ export function mountCreator(root, context) {
   }
   function renderBuildPlan() {
     const plan = state.buildPlan;
-    $("build-preview").hidden = !plan;
+    $("build-preview").hidden = view !== "applications" || !plan;
     if (plan === renderedBuildPlan) return;
     renderedBuildPlan = plan;
     if (!plan) return;
@@ -165,7 +173,8 @@ export function mountCreator(root, context) {
     const operation = {create: "Create application", configure: "Configure", build: "Build"}[job.metadata?.operation] || "Project operation";
     const status = {queued: "queued", running: "running", completed: "complete", failed: "failed", cancelled: "cancelled"}[job.status] || job.status;
     $("creator-job-title").textContent = `${operation} ${status}`;
-    $("creator-job-status").textContent = activeJob(job) ? "You can leave this view while the operation continues in its captured workspace." : job.error || (job.status === "completed" ? "Review the saved application or attempt below." : "Partial output, if any, is retained with this attempt.");
+    $("creator-job-status").textContent = activeJob(job) ? "You can leave this view while the operation continues in its captured workspace." : job.error || (job.status === "completed" ? "Review the saved application or attempt in Applications." : "Partial output, if any, is retained with this attempt.");
+    $("creator-job-applications").hidden = view !== "create" || job.status !== "completed";
     $("creator-logs").textContent = array(job.logs).join("\n") || "No log messages yet.";
     $("creator-cancel").hidden = !activeJob(job); $("creator-cancel").disabled = state.cancelling;
     $("creator-cancel").textContent = state.cancelling ? "Cancelling…" : "Cancel operation";
@@ -173,11 +182,20 @@ export function mountCreator(root, context) {
   function render() {
     if (disposed) return;
     const snapshot = state.snapshot;
+    const creating = view === "create";
     const busy = Boolean(state.busy || state.loading || array(state.jobs).some(activeJob));
+    $("creator-eyebrow").textContent = creating ? "PROJECT CREATOR · NEW APPLICATION" : "PROJECT CREATOR · APPLICATIONS";
+    $("creator-title").textContent = creating ? "Create an application." : "Your workspace applications.";
+    $("creator-intro").textContent = creating ? "Choose a destination, board and SDK, then review the files before creation." : "Open a saved application, configure it or start a build.";
+    $("creator-page-link").textContent = creating ? "View applications" : "Create application";
+    $("creator-page-link").href = creating ? "#/projects/applications" : "#/projects/create";
+    $("creator-scope").textContent = creating ? "Creation writes the files you review. Configure or build the new app from Applications when you are ready." : "Configure and Build each use a new output directory and a separate command review. Neither action flashes hardware.";
+    $("creator-form").hidden = !creating;
+    $("creator-applications").hidden = creating;
     $("creator-workspace").textContent = state.workspace || context.workspace.path;
-    $("creator-environment").textContent = state.loading ? "Loading workspace applications…" : snapshot ? `Zephyr ${snapshot.zephyr?.version || "version unknown"} · ${snapshot.freshness === "saved-observation" ? "Saved observation; inputs are rechecked before creation and builds" : "Local environment observation"}` : "Analyze the environment to get started.";
+    $("creator-environment").textContent = state.loading ? "Loading workspace applications…" : snapshot ? `Zephyr ${snapshot.zephyr?.version || "version unknown"} · ${snapshot.freshness === "saved-observation" ? "Saved observation; inputs are rechecked before creation and builds" : "Local environment observation"}` : creating ? "Analyze the environment to choose a board and SDK." : "Applications created here are listed at their saved locations.";
     $("creator-error").textContent = state.error || ""; $("creator-error").hidden = !state.error;
-    $("creator-requirement").hidden = Boolean(snapshot) && snapshot.status !== "stale";
+    $("creator-requirement").hidden = !creating || Boolean(snapshot) && snapshot.status !== "stale";
     $("creator-requirement").textContent = snapshot?.status === "stale" ? "Environment inputs changed during the scan. Analyze again before creating an application." : "Analyze this workspace in Environment before choosing a board and SDK.";
     renderChoices();
     for (const input of Object.values(fields)) input.disabled = Boolean(state.busy === "create" || activeJob(currentCreatorJob(state)));
@@ -210,5 +228,14 @@ export function mountCreator(root, context) {
     return pending;
   }});
   render(); session.load();
-  return {navigate() { session.tick(); }, dispose() { disposed = true; lifetime.abort(); session.dispose(); }};
+  return {
+    navigate(next = "applications") {
+      const changed = view !== next;
+      view = next === "create" ? "create" : "applications";
+      render();
+      if (changed && view === "applications") session.refresh();
+      else session.tick();
+    },
+    dispose() { disposed = true; lifetime.abort(); session.dispose(); },
+  };
 }

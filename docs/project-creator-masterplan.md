@@ -1,12 +1,19 @@
 # Zephyr Project Creator and environment analyser master plan
 
 Status: P0 foundation, P1 environment analysis and P2 minimal application creation with
-explicit configure/build actions are implemented on 2026-11-04. Device Tree Editor
-(`devicetree`) now provides read-only resolved-tree inspection through P3's
-existing-build inspection. A verified image handoff to Memory Explorer is also available.
-P3 now includes current-source and binding/include navigation for an inspected image.
+explicit configure/build actions are implemented on 2026-11-04. Build Inspector
+(`inspector`) provides advanced read-only build/resolved-tree inspection, current source
+and binding/include navigation, including application sources before configuration.
+A verified image handoff to Memory Explorer is also available.
 The rest of P3 and P4 onward remain planned. The agreed first creation priority is
 **new applications inside the existing `zephyrproject` workspace**.
+
+Product direction clarified on 2026-11-04: finish the ordinary Project Creator workflow
+first, with sidebar guidance for Applications, Create application and Environment.
+Inspection belongs in the separate optional Advanced area. Device Tree Editor
+(`devicetree`) is reserved for a future visual overlay editor with hardware modules and
+pin assignment; its detailed interaction design comes later. Further inspection depth
+is deferred and is not the automatic next task. See [ADR 0009](decisions/0009-project-navigation-and-inspector.md).
 
 Delivered records are `EnvironmentSnapshot` version 1 and feature-owned version-1
 project/profile and attempt records. The first creator is Linux only, minimal C, one
@@ -331,9 +338,10 @@ build path: another configure/build can overwrite it. Retain immutable copies wh
 durable evidence is needed; otherwise mark an older reference replaced or unavailable.
 Never show a new file under an earlier attempt's provenance.
 
-Add narrow shared interfaces in `core/` when Projects and Device Tree actually consume
-them, assembled by `app.py`. Domain generation remains in `features/projects/`; tree
-inspection/editing remains in `features/devicetree/`. Neither feature imports the other's
+Add narrow shared interfaces in `core/` when implemented consumers actually need
+them, assembled by `app.py`. Generation remains in `features/projects/`; advanced
+inspection lives in `features/inspector/` and the future visual editor belongs in
+`features/devicetree/`. No feature imports another's
 private services. Do not move Memory Explorer wholesale; extract only reused metadata
 reading at the integration stage and preserve its existing behaviour and snapshots.
 
@@ -418,7 +426,7 @@ expansion based on actual projects.
 | P0 | Observation contract, capability policy and synthetic fixtures | Available | Existing platform | Small |
 | P1 | Offline environment analyser and target catalogue | Available | P0 | Medium |
 | P2 | New workspace application and explicit single-image build | Available within documented limits | P1 | Medium |
-| P3 | Existing-build inspection and tool handoffs | Device Tree, Memory and current source/binding navigation available; pre-configuration browsing and deeper attribution pending | P2; editor reader | Medium |
+| P3 | Existing-build inspection and tool handoffs | Device Tree, Memory, current source/binding navigation and pre-configuration browsing available; deeper attribution pending | P2; editor reader | Medium |
 | P4 | Reviewable configuration and overlay editing | Planned | P3 | Large |
 | P5 | Reusable components and advanced project layouts | Planned | P2; P4 for integrated editing | Large, split into slices |
 | P6 | Environment comparison and upgrade trials | Planned | P1/P2; later stages for their profiles | Medium to large |
@@ -503,14 +511,19 @@ Source catalogues now list recorded inputs and preprocessor source references, w
 bounded read-only file/include navigation inside the selected workspace. Binding search
 shows current compatible candidates separately from supported generated-header path
 records. YAML/include/property browsing does not merge or validate effective schemas.
+Application source browsing is also available before configuration, with workspace-bound
+directory/file identity checks and explicit conventional include locations. It requires
+no inspection ID, generated outputs or saved creator profile, and claims no effective target.
 
-The remaining target for this stage is:
+The stage's target remains:
 
 Open an existing application/build without changing its files. Share the minimal build
 context and artifact interface with the Device Tree reader. Offer source browsing before
 configuration and a clearly labeled resolved view afterward. Recognize existing sysbuild
 domains even before creating multi-image projects. The delivered Memory handoff analyzes
 completed ELF artifacts without rebuilding firmware.
+Deeper per-property source attribution remains a separate slice; current file links do
+not prove which source expression contributed a resolved value.
 
 Exit gate: Projects and Device Tree show the same target, overlay inputs and domain;
 two builds of one application remain distinct; stale or missing artifacts are explicit;
@@ -627,10 +640,12 @@ selection and one image per project profile. Analysis and previews do not downlo
 or change firmware inputs. Profile/attempt persistence is versioned and feature-owned.
 
 P0 through P2, P3 inspection and the Memory handoff are available. The shared observation
-service now defines output freshness checks and read-root boundaries. Next P3 slices
-can add pre-configuration browsing and deeper source attribution. Current-source and
-binding navigation preserve existing creator and memory behavior. Do not treat output
+service now defines output freshness checks and read-root boundaries. Pre-configuration
+browsing is available; deeper source attribution is deferred while Project Creator's
+everyday workflow takes priority. Current-source
+and binding navigation preserve existing creator and memory behavior. Do not treat output
 identity or a current binding candidate as source/build consistency.
-Before P4, select the first edit operations. Before P5/P7, prioritize actual needs such
+Before P4, select the creator configuration/profile operations; defer visual hardware
+editing until the creator workflow is ready. Before P5/P7, prioritize actual needs such
 as sensors, networking, custom boards or multicore builds. These later stages are context,
 not authorization to implement them automatically.

@@ -56,7 +56,7 @@ class ProjectsServiceTests(unittest.TestCase):
     def test_analysis_and_reviewed_creation_share_the_feature(self):
         feature = next(item for item in self.call("GET", "/api/features").data["features"] if item["id"] == "projects")
         self.assertEqual(feature["status"], "available")
-        self.assertEqual(feature["entry_path"], "/#/projects/environment")
+        self.assertEqual(feature["entry_path"], "/#/projects/applications")
         self.assertIn("create", feature["description"])
         self.assertIn(b"mount", self.app.asset("/assets/projects/index.js").data)
         with self.assertRaises(ValueError):

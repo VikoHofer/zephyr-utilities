@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {createSourceNavigation, filterSourceFiles} from "../../src/zephyr_utilities/features/devicetree/web/navigation-state.js";
+import {createSourceNavigation, filterSourceFiles} from "../../src/zephyr_utilities/features/inspector/web/navigation-state.js";
 
 const workspace = "/workspace";
 const inspection_id = "a".repeat(32);
@@ -41,7 +41,7 @@ test("source navigation is idle until explicitly opened and uses the selected im
   const app = harness(standardApi(calls));
   assert.deepEqual(calls, []);
   await app.session.browse();
-  assert.deepEqual(calls.map(([path]) => path), ["/api/devicetree/sources"]);
+  assert.deepEqual(calls.map(([path]) => path), ["/api/inspector/sources"]);
   assert.deepEqual(calls[0][1].body, selection);
   assert.equal(app.state.catalog.catalog_id, "catalog-one");
   await app.session.browse();
@@ -53,7 +53,7 @@ test("binding lookup obtains a catalogue and asks for the exact selected node", 
   const calls = [];
   const app = harness(standardApi(calls));
   await app.session.findBindings();
-  assert.deepEqual(calls.map(([path]) => path), ["/api/devicetree/sources", "/api/devicetree/bindings"]);
+  assert.deepEqual(calls.map(([path]) => path), ["/api/inspector/sources", "/api/inspector/bindings"]);
   assert.deepEqual(calls[1][1].body, {...selection, catalog_id: "catalog-one", node_path: "/uart"});
   assert.equal(app.state.bindings.bindings[0].evidence, "compatible-candidate");
   await app.session.findBindings("/unknown");
@@ -72,7 +72,7 @@ test("only available known files can be opened, including returned include refer
   assert.equal(app.state.file.document.text, "current source text");
   await app.session.openFile("child.dtsi");
   assert.equal(app.state.file.file.id, "child.dtsi");
-  assert.deepEqual(calls.map(([path]) => path), ["/api/devicetree/sources", "/api/devicetree/source-file", "/api/devicetree/source-file"]);
+  assert.deepEqual(calls.map(([path]) => path), ["/api/inspector/sources", "/api/inspector/source-file", "/api/inspector/source-file"]);
   app.session.dispose();
 });
 
@@ -157,7 +157,7 @@ test("workspace changes reject late reads and prevent new reads from the old tre
   pending.resolve(catalogue()); await browsing;
   await app.session.browse();
   assert.equal(app.state.catalog, null); assert.equal(app.state.loading, "");
-  assert.deepEqual(calls, ["/api/devicetree/sources"]);
+  assert.deepEqual(calls, ["/api/inspector/sources"]);
   app.session.dispose();
 });
 

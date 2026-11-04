@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {createTreeSession, filterNodes, inspectionRoute} from "../../src/zephyr_utilities/features/devicetree/web/state.js";
+import {createTreeSession, filterNodes, inspectionRoute} from "../../src/zephyr_utilities/features/inspector/web/state.js";
 
 const workspace = "/workspace";
 const id = "a".repeat(32);
@@ -33,7 +33,7 @@ test("opening an image reads its shared observation without creating or building
   const app = harness(async (path, options) => { calls.push([path, options]); return result(); });
   await app.session.open(`inspect/${id}/app`);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0][0], "/api/devicetree/inspect");
+  assert.equal(calls[0][0], "/api/inspector/devicetree");
   assert.deepEqual(calls[0][1].body, {workspace, inspection_id: id, domain: "app"});
   assert.equal(app.state.selectedPath, "/");
   app.session.select("/soc/uart@1000"); app.session.search("uart");
@@ -41,7 +41,7 @@ test("opening an image reads its shared observation without creating or building
   assert.equal(app.state.selectedPath, "/soc/uart@1000");
   assert.equal(app.state.query, "uart");
   app.session.switchDomain("boot loader");
-  assert.deepEqual(app.navigation, [`devicetree/inspect/${id}/boot%20loader`]);
+  assert.deepEqual(app.navigation, [`inspector/inspect/${id}/boot%20loader`]);
   app.session.dispose();
 });
 

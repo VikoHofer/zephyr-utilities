@@ -31,15 +31,16 @@ def _supported(path, kind):
     return kind == "binding" and path.suffix in {".yaml", ".yml"}
 
 
-class SourceScope:
+class CurrentSourceScope:
     """A bounded catalog of current source identities, never a build-source snapshot."""
 
-    def __init__(self, builds, guard):
-        self.builds, self.guard = builds, guard
-        self.workspace, self.inspection_id, self.domain = guard.workspace, guard.inspection_id, guard.domain
-        self.context, self.build_dir = guard.context, guard.build_dir
+    def __init__(self, workspace, base_dir, guard, *, reader=None):
+        self.workspace, self.base_dir, self.guard = str(workspace), base_dir, guard
         self.catalog_id = uuid.uuid4().hex
-        self.reader = WorkspaceSourceReader(self.workspace)
+        self.reader = reader if reader is not None else WorkspaceSourceReader(self.workspace)
+        self.include_dirs, self.binding_dirs = [], []
+        self.binding_scan_options = {}
+        self.locations_description = "recorded"
         self.files, self.diagnostics = {}, []
         self._paths, self._hashes, self._bytes = {}, {}, 0
         self.lock = RLock()
@@ -49,7 +50,7 @@ class SourceScope:
             raise ValueError("Choose a supported source file kind.")
         raw = str(path)
         try:
-            candidate = self.reader.path(path, self.build_dir)
+            candidate = self.reader.path(path, self.base_dir)
             key = str(candidate)
             reason = None
         except (ValueError, TypeError) as exc:
@@ -109,6 +110,26 @@ class SourceScope:
         self.guard.verify()
         return document
 
+    def selection(self):
+        return {"workspace": self.workspace}
+
+    def payload(self):
+        with self.lock:
+            return {**self.selection(), "catalog_id": self.catalog_id,
+                    "files": deepcopy(list(self.files.values())),
+                    "diagnostics": list(self.diagnostics), "source_freshness": "unknown"}
+
+
+class SourceScope(CurrentSourceScope):
+    """Current sources selected by a verified configured-image observation."""
+
+    def __init__(self, builds, guard):
+        super().__init__(guard.workspace, guard.build_dir, guard)
+        self.builds, self.inspection_id, self.domain = builds, guard.inspection_id, guard.domain
+        self.context, self.build_dir = guard.context, guard.build_dir
+        self.include_dirs = self.context.get("devicetree", {}).get("include_dirs", [])
+        self.binding_dirs = self.context.get("devicetree", {}).get("binding_dirs", [])
+
     def artifact_text(self, kind):
         if kind not in OUTPUT_KINDS:
             raise ValueError("Choose a supported Device Tree output.")
@@ -117,11 +138,8 @@ class SourceScope:
         self.guard.verify()
         return value
 
-    def payload(self):
-        with self.lock:
-            return {"workspace": self.workspace, "inspection_id": self.inspection_id, "domain": self.domain,
-                    "catalog_id": self.catalog_id, "files": deepcopy(list(self.files.values())),
-                    "diagnostics": list(self.diagnostics), "source_freshness": "unknown"}
+    def selection(self):
+        return {"workspace": self.workspace, "inspection_id": self.inspection_id, "domain": self.domain}
 
 
 class SourceNavigation:
@@ -187,7 +205,8 @@ class SourceNavigation:
         scope.guard.verify()
         return scope
 
-    def document(self, scope, file_id):
+    @staticmethod
+    def document(scope, file_id):
         document = scope.read(file_id)
         item = deepcopy(scope.files[file_id])
         includes, diagnostics, seen = [], [], set()
@@ -210,7 +229,7 @@ class SourceNavigation:
                 diagnostics.append("Source include navigation stopped at its 128-reference limit.")
                 break
             candidates, failures = [], []
-            roots = [str(Path(document["path"]).parent), *scope.context.get("devicetree", {}).get("include_dirs", [])]
+            roots = [str(Path(document["path"]).parent), *scope.include_dirs]
             paths = set()
             for root in roots:
                 checks += 1
@@ -219,7 +238,7 @@ class SourceNavigation:
                     exhausted = True
                     break
                 try:
-                    parent = scope.reader.path(root, scope.build_dir)
+                    parent = scope.reader.path(root, scope.base_dir)
                     path = scope.reader.path(name, parent)
                 except (ValueError, OSError) as exc:
                     failures.append(str(exc))
@@ -237,7 +256,7 @@ class SourceNavigation:
                     candidates.append(ref)
             note = "Multiple current files match; no preprocessor selection is inferred." if len(candidates) > 1 else "Literal reference in the current source; preprocessor conditions and macros are not evaluated."
             if not candidates:
-                note = failures[0] if failures else "No supported current file was found in the recorded include locations."
+                note = failures[0] if failures else f"No supported current file was found in the {scope.locations_description} include locations."
             includes.append({"name": name, "files": candidates, **({"note": note} if note else {})})
             if exhausted:
                 break

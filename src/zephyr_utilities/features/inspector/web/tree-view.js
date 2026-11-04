@@ -11,6 +11,7 @@ export function mount(host, context) {
   let session;
   let renderedData;
   let renderedQuery;
+  let renderedSelection;
   state.sourceNavigation ||= {};
   const sourceView = createSourceView(root, {api: context.api, state: state.sourceNavigation, workspace: () => context.workspace.path});
   function node(tag, className, text) {
@@ -106,21 +107,37 @@ export function mount(host, context) {
   }
   function render() {
     if (disposed) return;
+    const application = state.data?.mode === "application";
+    const buildData = application ? null : state.data;
     $("error").hidden = !state.error; $("error").textContent = state.error || "";
     $("loading").hidden = !state.loading;
     $("empty").hidden = Boolean(state.data || state.loading);
-    $("results").hidden = !state.data;
+    $("results").hidden = !buildData;
+    $("application-context").hidden = !application;
+    $("application-path").textContent = application ? state.data.application_path : "";
+    if (state.workspace !== $("application-directory").dataset.workspace) {
+      $("application-directory").dataset.workspace = state.workspace || "";
+      $("application-directory").value = "";
+    }
+    if (state.data !== renderedSelection) {
+      renderedSelection = state.data;
+      $("application-picker").open = !state.data;
+      if (application) $("application-directory").value = state.data.application_path;
+    }
     $("refresh").hidden = !state.inspectionId;
     $("refresh").disabled = state.loading;
-    renderContext(state.data);
+    renderContext(buildData);
     sourceView.sync(state.data, state.selectedPath);
-    if (state.data) renderNodes(state.data);
+    if (buildData) renderNodes(buildData);
   }
   const listen = (element, event, callback) => element.addEventListener(event, callback, {signal: lifetime.signal});
   listen($("search"), "input", () => session.search($("search").value));
   listen($("domain"), "change", () => session.switchDomain($("domain").value));
   listen($("refresh"), "click", () => session.refresh());
   listen($("more"), "click", () => session.more());
+  listen($("application-form"), "submit", (event) => {
+    event.preventDefault(); session.chooseApplication($("application-directory").value);
+  });
   listen($("nodes"), "click", (event) => {
     const target = event.target.closest("[data-node-path]");
     if (target && root.contains(target)) session.select(target.dataset.nodePath);

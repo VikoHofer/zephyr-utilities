@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {canOpenDeviceTree, canOpenMemory, createBuildSession, selectedBuildDomain} from "../../src/zephyr_utilities/features/projects/web/build-state.js";
+import {canOpenDeviceTree, canOpenMemory, createBuildSession, selectedBuildDomain} from "../../src/zephyr_utilities/features/inspector/web/build-state.js";
 
 const one = "/workspace/one";
 const two = "/workspace/two";
@@ -31,7 +31,7 @@ test("Memory handoff carries the selected ELF image without starting a report jo
   assert.equal(canOpenMemory(app.state), true);
   app.session.openMemory();
   assert.deepEqual(app.routes, ["memory/inspect/observation-one/app%20%2F%20network"]);
-  assert.deepEqual(calls, ["/api/projects/inspect"]);
+  assert.deepEqual(calls, ["/api/inspector/inspect"]);
   selectedBuildDomain(app.state).artifacts[1].availability = "missing";
   assert.equal(canOpenMemory(app.state), false);
   selectedBuildDomain(app.state).artifacts[1].availability = "live";
@@ -60,10 +60,10 @@ test("opening an existing build selects its declared default domain and hands of
   const calls = [];
   const app = harness(async (path, options) => { calls.push([path, options.method, options.body]); return observation(); });
   await app.session.navigate(`builds/${encodeURIComponent(`${one}/build`)}`);
-  assert.deepEqual(calls, [["/api/projects/inspect", "POST", {workspace: one, build_dir: `${one}/build`}]]);
+  assert.deepEqual(calls, [["/api/inspector/inspect", "POST", {workspace: one, build_dir: `${one}/build`}]]);
   assert.equal(selectedBuildDomain(app.state).name, "boot");
   app.session.selectDomain("app"); app.session.openDeviceTree();
-  assert.deepEqual(app.routes, ["devicetree/inspect/observation-one/app"]);
+  assert.deepEqual(app.routes, ["inspector/inspect/observation-one/app"]);
   app.session.dispose();
 });
 
@@ -82,7 +82,7 @@ test("checking retains the observation identity and blocks changed files until e
   app.session.openDeviceTree(); await app.session.readText("resolved-dts");
   assert.deepEqual(app.routes, []);
   assert.equal(calls.length, 2);
-  assert.equal(calls[1][0], `/api/projects/inspections/observation-one?workspace=${encodeURIComponent(one)}`);
+  assert.equal(calls[1][0], `/api/inspector/inspections/observation-one?workspace=${encodeURIComponent(one)}`);
   await app.session.open();
   assert.equal(app.state.observation.id, "new-observation");
   assert.equal(canOpenDeviceTree(app.state), true);
@@ -98,7 +98,7 @@ test("text previews use the selected image and discard late data after changing 
   });
   await app.session.navigate("builds"); await app.session.open(`${one}/build`);
   const read = app.session.readText("resolved-dts");
-  assert.deepEqual(calls[1], ["/api/projects/inspection-text", {workspace: one, inspection_id: "observation-one", domain: "boot", kind: "resolved-dts"}]);
+  assert.deepEqual(calls[1], ["/api/inspector/inspection-text", {workspace: one, inspection_id: "observation-one", domain: "boot", kind: "resolved-dts"}]);
   app.session.selectDomain("app");
   pending.resolve({path: "boot.dts", text: "/ { boot; };", sha256: "boot-hash"}); await read;
   assert.equal(app.state.file, null);
@@ -177,7 +177,7 @@ test("reopening keeps the selected image but revalidates before handoff", async 
   pending.resolve(observation()); await check;
   assert.equal(reopened.state.domain, "app");
   assert.equal(canOpenDeviceTree(reopened.state), true);
-  assert.deepEqual(calls, [[`/api/projects/inspections/observation-one?workspace=${encodeURIComponent(one)}`, undefined]]);
+  assert.deepEqual(calls, [[`/api/inspector/inspections/observation-one?workspace=${encodeURIComponent(one)}`, undefined]]);
   reopened.session.dispose();
 });
 
@@ -193,7 +193,7 @@ test("disposal aborts requests and prevents late renders without cancelling serv
   pending.resolve(observation()); await open;
   assert.equal(signal.aborted, true);
   assert.equal(app.publications(), before);
-  assert.deepEqual(calls, ["/api/projects/inspect"]);
+  assert.deepEqual(calls, ["/api/inspector/inspect"]);
 });
 
 test("malformed and foreign handoffs leave an actionable error rather than a usable observation", async () => {

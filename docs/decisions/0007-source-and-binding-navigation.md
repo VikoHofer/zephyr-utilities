@@ -47,7 +47,8 @@ requests and discard source text; they do not cancel server jobs.
 
 - Users can navigate from a resolved node to binding evidence/candidates and read includes.
 - Source and generated-output identities remain distinct and independently rechecked.
-- Current source inspection requires a readable existing configured image in this slice.
+- Current source inspection requires a readable existing configured image in this slice;
+  [ADR 0008](0008-application-source-browsing.md) adds an independent application source context.
 - Source reads outside the selected workspace, effective binding resolution, full dependency
   expansion and per-property source attribution remain unsupported.
 - Source edits and binding validation still require later explicit workflows.

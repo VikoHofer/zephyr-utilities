@@ -230,5 +230,5 @@ class CreatorService:
             return {"attempt": attempt}
 
         return self.context.jobs.submit("projects", run, resource_key=f"project:{project['id']}",
-                                        metadata={"workspace": workspace, "operation": plan["operation"], "view": "create",
+                                        metadata={"workspace": workspace, "operation": plan["operation"], "view": "applications",
                                                   "project_id": project["id"], "attempt_id": plan["id"]})

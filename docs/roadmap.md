@@ -20,14 +20,19 @@ research master plan, not a general coding-assistant integration.
   handoff to the resolved Device Tree reader and Memory Explorer's explicit report review.
 - Current source-file and binding navigation from an inspected image, with literal
   include links and a distinction between recorded binding paths and current candidates.
+- Application source browsing before configuration, with bounded discovery and include
+  navigation independent of generated build outputs.
+- Sidebar subnavigation separates application management, creation and environment
+  discovery. Optional Advanced navigation contains Build Inspector.
 
 ## Feature ownership and next useful slices
 
 | Feature | State | Initial implementation direction |
 | --- | --- | --- |
 | Memory Explorer (`memory`) | Available | Existing-build reports, visualization, snapshots and comparisons |
-| Device Tree Editor (`devicetree`) | Resolved tree, current sources and binding navigation available; editing planned | Next: source attribution and deliberate validation/editing workflows |
-| Project Creator (`projects`) | Analysis, creation/build and existing-build inspection available | Next: source browsing before first configuration and richer profile integration |
+| Device Tree Editor (`devicetree`) | Planned visual editor | Define overlays, add hardware modules and assign pins after the creator workflow is ready |
+| Project Creator (`projects`) | Applications, creation/build and environment discovery available | Current priority: everyday project workflow and richer profile integration |
+| Build Inspector (`inspector`) | Advanced build, resolved-tree, current source and binding navigation available | Preserve available inspection; further depth deferred |
 | TinyML Experiments (`tinyml`) | Planned | Connect model/build/run identities and compare imported experiment measurements |
 
 Planned catalog entries are development boundaries. They do not yet edit Device Trees,
@@ -43,21 +48,21 @@ its evidence, proposed experiment, trade-offs and observed result.
 The detailed [memory master plan](memory-explorer-masterplan.md) remains the research and
 measurement reference. The architecture guide describes the current implementation layout.
 
-## Device Tree Editor
+## Build Inspector and the future Device Tree Editor
 
-The first reader opens an inspected image's resolved DTS, supports node/property
+Advanced → Build Inspector opens an inspected image's resolved DTS, supports node/property
 navigation and shares Projects' target/domain context. It checks output identity;
 source freshness remains unknown. See the [build inspection guide](build-inspection.md).
 Current-source browsing and compatible-based binding navigation are also available from
 the selected image. Generated header records are distinguished from current candidates;
 include links and direct property summaries do not perform schema resolution or validation.
-Continue toward a complete editor incrementally:
-
-1. Read a selected build's resolved Device Tree and expose node/property/source context.
-2. Navigate application overlays, board definitions and bindings without changing them.
-3. Add syntax/binding diagnostics with source locations from the selected Zephyr version.
-4. Preview proposed overlay edits and apply them to an explicit destination.
-5. Integrate deliberate validation/rebuild workflows through shared jobs.
+Applications can also be opened before configuration to browse current sources and local
+bindings. Conventional include locations are candidates, not configured search paths.
+The user-facing Device Tree Editor remains planned. Its goal is visual overlay creation,
+hardware-module placement and pin/signal assignment. Design that interaction after the
+Project Creator workflow is ready. Inspection capabilities can support it, but a source
+reader is not the editor itself. Further attribution and advanced inspection work are
+deferred while application management and creation take priority.
 
 The [Project Creator and environment analyser master plan](project-creator-masterplan.md)
 defines the proposed shared build context, source-overlay handoff and staged editor
@@ -97,8 +102,8 @@ The detailed [Project Creator and environment analyser master plan](project-crea
 prioritizes new applications in the existing workspace. P0 through P2 are delivered
 within their documented limits. P3 provides existing-build inspection,
 sysbuild domain selection, a read-only Device Tree connection and an explicit Memory
-report handoff. Current source/binding navigation is available for inspected builds;
-source attribution and browsing before a first configuration remain future work. Later stages cover editing, advanced
+report handoff. Current source/binding navigation is available for inspected builds and
+applications before configuration; deeper source attribution remains future work. Later stages cover editing, advanced
 composition and environment migration. Build evidence does not establish hardware operation.
 
 ## TinyML model and experiment analysis

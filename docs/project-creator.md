@@ -6,6 +6,13 @@ explicit installed GNU Zephyr SDK. Creation, configuration and compilation are s
 reviewed actions. Device Tree editing, existing-project import and profile editing remain
 planned.
 
+## Sidebar workflow
+
+Project Creator opens **Applications** for managing saved apps and running reviewed
+Configure/Build operations. Choose **Create application** for a new destination, or
+**Environment** for board, chip and SDK discovery. These are separate sidebar subviews.
+Advanced inspection is available separately under **Advanced → Build Inspector**.
+
 ## Create an application
 
 1. Start `zephyr-utils` in the existing Zephyr environment and select the workspace.
@@ -22,7 +29,7 @@ planned.
    and command recipe. Changing a form field discards the review.
 6. Click **Create application** to apply those files. The environment and destination
    are rechecked before publication. Creation does not configure or compile anything.
-7. In **Workspace applications**, choose **Configure** or **Build**. Review the exact
+7. Open **Applications** in the sidebar, then choose **Configure** or **Build**. Review the exact
    commands, environment and new output directory, then click **Run configure** or
    **Run build**.
 
@@ -46,11 +53,18 @@ A successful build establishes compilation for that attempt. It does not establi
 hardware operation, peripheral wiring, runtime memory limits or runner compatibility.
 There is no flash action in this release.
 
+Expand **Advanced details** and choose **Browse sources** on an application to open its current Device Tree files,
+configuration fragments and local bindings before configuring or building it. Build
+Inspector also accepts a workspace application directory directly, without creating a saved
+Project Creator profile. This is read-only source navigation, not project import or
+effective configuration discovery. Deleted or replaced application folders invalidate
+an open source catalogue. See the [source browsing limits](build-inspection.md#browse-an-application-before-configuration).
+
 ## Inspect existing build outputs
 
-Choose **Inspect build** on an attempt, or open the **Inspect builds** tab and enter an existing
+Choose **Inspect build** on an attempt, or open **Advanced → Build Inspector → Build outputs** and enter an existing
 build directory. Inspection is read-only and does not require a creator profile or an
-environment rescan. Select a sysbuild image/domain when present, then use **Open Device
+environment rescan. Select a sysbuild image/domain when present, then use **Inspect Device
 Tree** to inspect its resolved nodes and properties. Technical details remain optional.
 See the [build inspection guide](build-inspection.md) for freshness checks, supported
 metadata, API routes and the remaining P3 scope. Overlay editing remains planned.

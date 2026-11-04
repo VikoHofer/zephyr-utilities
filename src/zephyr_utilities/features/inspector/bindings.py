@@ -113,16 +113,17 @@ class BindingNavigator:
         scope.guard.verify()
         entries, by_name, diagnostics, seen = [], {}, [], set()
         total = 0
-        roots = scope.context.get("devicetree", {}).get("binding_dirs", [])
+        roots = scope.binding_dirs
         if not roots:
-            _diagnostic(diagnostics, "No binding search directories were recorded. Candidate search is unavailable.")
+            _diagnostic(diagnostics, "No binding search directories are available. Candidate search is unavailable.")
         if len(roots) > 64:
-            _diagnostic(diagnostics, "Only the first 64 recorded binding directories were searched.")
+            _diagnostic(diagnostics, f"Only the first 64 {scope.locations_description} binding directories were searched.")
         exhausted = False
         for root in roots[:64]:
             try:
-                directory = scope.reader.path(root, scope.build_dir)
-                paths = scope.reader.list_files(directory, {".yaml", ".yml"}, max_files=MAX_BINDING_FILES, max_dirs=2000)
+                directory = scope.reader.path(root, scope.base_dir)
+                paths = scope.reader.list_files(directory, {".yaml", ".yml"}, max_files=MAX_BINDING_FILES, max_dirs=2000,
+                                                 **scope.binding_scan_options)
             except (ValueError, OSError) as exc:
                 _diagnostic(diagnostics, f"Cannot search binding directory {root}: {exc}")
                 continue
@@ -254,7 +255,7 @@ class BindingNavigator:
                 files = [self._file(scope, entry, f"Included by {file['name']}") for entry in index["by_name"].get(name, [])]
             note = ""
             if not files:
-                note = "No supported include file was found in the recorded binding directories."
+                note = f"No supported include file was found in the {scope.locations_description} binding directories."
             elif len(files) > 1:
                 note = "Ambiguous include name; all candidates are shown."
             if isinstance(item, dict):

@@ -11,7 +11,7 @@ import yaml
 
 from zephyr_utilities.core.builds import BuildInspectionService
 from zephyr_utilities.core.source_files import WorkspaceSourceReader
-from zephyr_utilities.features.devicetree.sources import SourceNavigation
+from zephyr_utilities.features.inspector.sources import SourceNavigation
 
 
 class WorkspaceSourceReaderTests(unittest.TestCase):
@@ -76,6 +76,35 @@ class WorkspaceSourceReaderTests(unittest.TestCase):
         path.write_text("new")
         with self.assertRaisesRegex(ValueError, "workspace directory changed"):
             self.reader.read_text(path)
+
+    def test_scan_filters_skip_large_output_directories_before_enumerating_them(self):
+        app = self.workspace / "app"
+        app.mkdir()
+        (app / "Kconfig.board").write_text("config BOARD\n")
+        (app / "board_defconfig").write_text("CONFIG_BOARD=y\n")
+        (app / "build-release").mkdir()
+        (app / "build-release/skip.overlay").write_text("generated")
+        output = app / "custom-output"
+        output.mkdir()
+        (output / "CMakeCache.txt").write_text("generated")
+        for index in range(20):
+            (output / f"{index}.overlay").write_text("generated")
+        found = self.reader.list_files(app, {".overlay"}, prefixes=("Kconfig",), endings=("_defconfig",),
+                                         exclude_prefixes=("build-",), stop_names={"CMakeCache.txt"},
+                                         max_files=5, max_dirs=3)
+        self.assertEqual([path.name for path in found], ["Kconfig.board", "board_defconfig"])
+
+    def test_directory_identity_is_confined_and_does_not_follow_links(self):
+        app = self.workspace / "app"
+        app.mkdir()
+        identity = self.reader.directory_identity(app)
+        app.rename(self.workspace / "previous")
+        app.mkdir()
+        self.assertNotEqual(identity, self.reader.directory_identity(app))
+        (self.workspace / "alias").symlink_to(app, target_is_directory=True)
+        for path in (self.workspace / "alias", self.root, "../outside"):
+            with self.subTest(path=path), self.assertRaises((ValueError, OSError)):
+                self.reader.directory_identity(path)
 
 
 class SourceNavigationTests(unittest.TestCase):
@@ -242,7 +271,7 @@ class SourceNavigationTests(unittest.TestCase):
             scope.read(item["id"])
 
     def test_catalog_file_limit_is_partial_and_explicit(self):
-        with patch("zephyr_utilities.features.devicetree.sources.MAX_FILES", 2):
+        with patch("zephyr_utilities.features.inspector.sources.MAX_FILES", 2):
             payload, _ = self.open()
         self.assertEqual(len(payload["files"]), 2)
         self.assertIn("file limit", payload["diagnostics"][0])
@@ -260,7 +289,7 @@ class SourceNavigationTests(unittest.TestCase):
         good.write_text("ok")
         extra = self.application / "extra.dtsi"
         extra.write_text("extra")
-        with patch("zephyr_utilities.features.devicetree.sources.MAX_TOTAL_BYTES", 10):
+        with patch("zephyr_utilities.features.inspector.sources.MAX_TOTAL_BYTES", 10):
             self.assertEqual(scope.add_file(bad, "source", "test")["availability"], "blocked")
             self.assertEqual(scope.add_file(good, "source", "test")["availability"], "available")
             with self.assertRaisesRegex(ValueError, "text limit"):

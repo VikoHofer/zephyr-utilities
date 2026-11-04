@@ -1,5 +1,4 @@
 <section class="projects-feature" data-projects-root>
-  <nav class="projects-tabs" aria-label="Project Creator views"><a href="#/projects/environment" data-projects-tab="environment">Environment</a><a href="#/projects/create" data-projects-tab="create">Create application</a><a href="#/projects/builds" data-projects-tab="builds">Inspect builds</a></nav>
   <div data-environment-view>
   <header class="projects-heading">
     <div><span class="projects-eyebrow">PROJECT CREATOR · ENVIRONMENT</span><h1>Know your workspace.</h1><p>Discover the boards, chips and SDKs available in your local Zephyr environment.</p></div>
@@ -43,9 +42,9 @@
   </div>
   </div>
   <div data-creator-view hidden>
-    <header class="projects-heading"><div><span class="projects-eyebrow">PROJECT CREATOR · NEW APPLICATION</span><h1>Start with a clear foundation.</h1><p>Create a minimal C application in this workspace, then configure or build it with your selected tools.</p></div><span class="projects-label">Single image · Linux tested</span></header>
+    <header class="projects-heading"><div><span class="projects-eyebrow" data-creator-eyebrow>PROJECT CREATOR · APPLICATIONS</span><h1 data-creator-title>Your workspace applications.</h1><p data-creator-intro>Open a saved application, configure it or start a build.</p></div><a class="projects-button primary" data-creator-page-link href="#/projects/create">Create application</a></header>
     <section class="projects-workspace" aria-label="Creator workspace"><div class="projects-workspace-info"><span class="projects-eyebrow">SELECTED WORKSPACE</span><p class="projects-path" data-creator-workspace></p><p class="projects-muted" data-creator-environment></p></div><a class="projects-button" href="#/projects/environment">Review environment</a></section>
-    <p class="projects-scope">Preview every generated file before creating it. Configure and Build execute the selected local Zephyr tools; neither action flashes hardware.</p>
+    <p class="projects-scope" data-creator-scope>Configure and Build each use a new output directory and a separate command review. Neither action flashes hardware.</p>
     <div class="projects-error" role="alert" data-creator-error hidden></div>
     <div class="projects-banner" data-creator-requirement hidden>Analyze this workspace in Environment before choosing a board and SDK.</div>
     <form data-creator-form class="projects-panel" aria-label="New application">
@@ -70,31 +69,10 @@
       <p class="projects-muted projects-apply-note">Create applies only these files in a new directory. It does not configure or compile the application.</p>
       <button type="button" class="projects-button primary" data-create-submit>Create application</button>
     </section>
-    <section class="projects-job" data-creator-job hidden aria-label="Project operation progress"><div class="projects-section-heading"><div><h2 data-creator-job-title></h2><p role="status" aria-live="polite" data-creator-job-status></p></div><button type="button" class="projects-button" data-creator-cancel>Cancel operation</button></div><details><summary>Operation log</summary><pre data-creator-logs></pre></details></section>
-    <section class="projects-panel" aria-label="Created applications"><div class="projects-section-heading"><div><span class="projects-eyebrow">3 · CONFIGURE OR BUILD</span><h2>Workspace applications</h2><p class="projects-muted">Each attempt uses a new output directory. A successful build does not establish hardware operation.</p></div><button type="button" class="projects-button" data-creator-refresh>Refresh list</button></div><div data-created-projects></div></section>
+    <section class="projects-job" data-creator-job hidden aria-label="Project operation progress"><div class="projects-section-heading"><div><h2 data-creator-job-title></h2><p role="status" aria-live="polite" data-creator-job-status></p></div><button type="button" class="projects-button" data-creator-cancel>Cancel operation</button></div><details><summary>Operation log</summary><pre data-creator-logs></pre></details><a class="projects-button" data-creator-job-applications href="#/projects/applications" hidden>View applications</a></section>
+    <section class="projects-panel" data-creator-applications aria-label="Workspace applications"><div class="projects-section-heading"><div><h2>Applications</h2><p class="projects-muted">Each attempt uses a new output directory. A successful build does not establish hardware operation.</p></div><button type="button" class="projects-button" data-creator-refresh>Refresh list</button></div><div data-created-projects></div></section>
     <section class="projects-panel" data-build-preview hidden aria-label="Build preview"><div class="projects-section-heading"><div><span class="projects-eyebrow">REVIEW COMMAND</span><h2 data-build-preview-title></h2></div></div><div data-build-preview-recipe></div><p class="projects-muted projects-apply-note">This runs the selected local application and Zephyr CMake code. Existing build directories are preserved.</p><button type="button" class="projects-button primary" data-build-start>Start operation</button></section>
     <div data-creator-diagnostics></div>
   </div>
-  <div data-builds-view hidden>
-    <header class="projects-heading"><div><span class="projects-eyebrow">PROJECT CREATOR · BUILD INSPECTION</span><h1>Understand an existing build.</h1><p>Inspect generated files and open the resolved Device Tree for the selected image.</p></div><span class="projects-label">Read only</span></header>
-    <section class="projects-workspace" aria-label="Build inspection workspace"><div class="projects-workspace-info"><span class="projects-eyebrow">SELECTED WORKSPACE</span><p class="projects-path" data-build-workspace></p><p class="projects-muted">Choose an existing build directory inside this workspace.</p></div></section>
-    <p class="projects-scope">Inspection reads existing files. It does not configure, compile, flash or change the application.</p>
-    <form class="projects-panel" data-build-form aria-label="Open an existing build"><label>Build directory<input type="text" data-build-path required spellcheck="false" autocomplete="off" placeholder="/path/to/workspace/application/build"></label><p class="projects-muted projects-apply-note">Use a single-image build directory or a sysbuild directory containing domains.yaml.</p><button class="projects-button primary" type="submit" data-build-open>Open build</button></form>
-    <div class="projects-error" role="alert" data-build-error hidden></div>
-    <p class="projects-banner" role="status" aria-live="polite" data-build-progress hidden></p>
-    <div class="projects-empty" data-build-empty><h2>Choose a build to inspect.</h2><p>Open a build from an application attempt, or enter the path to an existing build here.</p></div>
-    <section class="projects-panel" data-build-results hidden aria-label="Build observation">
-      <div class="projects-section-heading"><div><h2>Build context</h2><p class="projects-muted">Select the image whose generated files you want to inspect.</p></div><div class="projects-actions"><button type="button" class="projects-button" data-build-check>Check for changes</button><button type="button" class="projects-button" data-build-reinspect>Re-inspect directory</button></div></div>
-      <label class="projects-build-domain">Image / domain<select data-build-domain></select></label>
-      <p class="projects-banner" data-build-freshness></p>
-      <dl class="projects-identity" data-build-identity></dl>
-      <p class="projects-muted projects-apply-note">Source freshness is unknown: unchanged output files do not establish that this build matches the current application sources or hardware.</p>
-      <div class="projects-actions"><button type="button" class="projects-button primary" data-build-tree>Open Device Tree</button><button type="button" class="projects-button" data-build-memory>Open Memory Explorer</button></div>
-      <details class="projects-technical-details"><summary>Toolchain and observation details</summary><dl class="projects-identity" data-build-metadata></dl></details>
-      <details class="projects-technical-details"><summary>Recorded configuration and Device Tree inputs</summary><div data-build-inputs></div></details>
-      <details class="projects-technical-details"><summary>Generated files</summary><div data-build-artifacts></div></details>
-      <details class="projects-technical-details" data-build-file-panel hidden><summary data-build-file-title>File preview</summary><p class="projects-path projects-apply-note" data-build-file-path></p><pre data-build-file-text></pre></details>
-      <div data-build-diagnostics hidden></div>
-    </section>
-  </div>
+
 </section>
