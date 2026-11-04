@@ -102,9 +102,11 @@ export function mountEnvironment(root, context) {
     pair(details, "Declared revisions", array(board.revisions).join(", "));
     target.append(details);
     list(target, "Targets declared by metadata", array(board.targets), true);
-    list(target, "Qualifiers", array(board.qualifiers), true);
-    list(target, "Origins", array(board.origins));
-    list(target, "Source files", array(board.source_files).length ? board.source_files : array(board.directories), true);
+    const sources = node("details"); sources.append(node("summary", "", "Hardware definition details"));
+    list(sources, "Qualifiers", array(board.qualifiers), true);
+    list(sources, "Origins", array(board.origins));
+    list(sources, "Source files", array(board.source_files).length ? board.source_files : array(board.directories), true);
+    target.append(sources);
     target.append(node("p", "projects-muted", "Targets are discovery candidates. Configuration may resolve revision defaults or reject unsupported combinations."));
     if (board.status === "discovered" && array(board.targets).length) {
       const button = node("button", "projects-button primary", "Use this board");
@@ -150,8 +152,13 @@ export function mountEnvironment(root, context) {
     for (const diagnostic of diagnostics) {
       const entry = node("article", `projects-diagnostic ${["error", "warning", "info"].includes(diagnostic.severity) ? diagnostic.severity : "info"}`);
       entry.append(node("span", "projects-eyebrow", diagnostic.severity || "Information"), node("p", "", diagnostic.message));
-      if (diagnostic.path) entry.append(node("p", "projects-path", diagnostic.path));
-      if (diagnostic.code) entry.append(node("small", "projects-muted", diagnostic.code)); target.append(entry);
+      if (diagnostic.path || diagnostic.code) {
+        const detail = node("details"); detail.append(node("summary", "", "Diagnostic details"));
+        if (diagnostic.path) detail.append(node("p", "projects-path", diagnostic.path));
+        if (diagnostic.code) detail.append(node("small", "projects-muted", diagnostic.code));
+        entry.append(detail);
+      }
+      target.append(entry);
     }
     const provenance = $("provenance"); provenance.replaceChildren();
     const fields = node("dl", "projects-identity"); pair(fields, "Snapshot", snapshot.id, true); pair(fields, "Schema", snapshot.schema_version); pair(fields, "Fingerprint", snapshot.fingerprint, true); pair(fields, "Observed", date(snapshot.created_at)); provenance.append(fields);

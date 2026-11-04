@@ -44,6 +44,61 @@ test("opening creator reads saved projects and jobs without creating or building
   app.session.dispose();
 });
 
+test("refresh removes missing applications and their build review while preserving form inputs", async () => {
+  const calls = [];
+  let projects = [project()];
+  const app = harness(async (path, options) => {
+    calls.push([path, options.method]);
+    return {...response(), projects};
+  }, {workspace: one, snapshot: snapshot(), projects, form: {...form}});
+  app.state.buildPlan = {id: "review", project_id: "project-one", workspace: one};
+  await app.session.tick();
+  assert.equal(calls.length, 0, "idle polling does not repeatedly read the catalogue");
+  projects = [];
+  await app.session.refresh();
+  assert.deepEqual(app.state.projects, []);
+  assert.equal(app.state.buildPlan, null);
+  assert.deepEqual(app.state.form, form);
+  await app.session.build();
+  assert.deepEqual(calls, [["/api/projects/creator", undefined]], "the missing app cannot use its old build review");
+  projects = [project()];
+  await app.session.refresh();
+  assert.equal(app.state.projects[0].id, "project-one", "a restored folder can reappear");
+  app.session.dispose();
+});
+
+test("refreshes do not overlap or continue after leaving the feature", async () => {
+  const pending = deferred();
+  let reads = 0;
+  const app = harness(async () => { reads++; return pending.promise; });
+  const refresh = app.session.refresh();
+  assert.equal(app.state.loading, true);
+  await app.session.refresh(); await app.session.tick();
+  assert.equal(reads, 1);
+  app.session.dispose();
+  const before = app.publications();
+  pending.resolve(response()); await refresh;
+  await app.session.refresh();
+  assert.equal(reads, 1);
+  assert.equal(app.publications(), before);
+});
+
+test("refresh preserves new reviews after a historical job failure", async () => {
+  const failed = {id: "old-failure", status: "failed", metadata: {workspace: one, operation: "build"}};
+  const app = harness(async (path) => {
+    if (path.endsWith("/preview")) return {plan: {id: "new-app-review", workspace: one}};
+    if (path.endsWith("/build-preview")) return {plan: {id: "new-build-review", workspace: one, project_id: "project-one"}};
+    return response(one, [failed]);
+  }, {workspace: one, snapshot: snapshot(), form: {...form}});
+  await app.session.load();
+  await app.session.preview();
+  await app.session.previewBuild("project-one", "build");
+  await app.session.refresh();
+  assert.equal(app.state.plan.id, "new-app-review");
+  assert.equal(app.state.buildPlan.id, "new-build-review");
+  app.session.dispose();
+});
+
 test("preview is bound to the reviewed form and create submits its plan once", async () => {
   const calls = [];
   const pending = deferred();

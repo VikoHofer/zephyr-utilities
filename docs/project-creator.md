@@ -26,11 +26,21 @@ planned.
    commands, environment and new output directory, then click **Run configure** or
    **Run build**.
 
+Source previews, commands, logs and technical evidence start collapsed. Open their
+dropdowns when you want to inspect them; operation status, errors and action buttons
+remain visible. Open attempt details stay open while job updates arrive.
+
 Configure generates a fresh build system and captures its resolved context. Build first
 configures another fresh output directory, then compiles. It does not reuse a preceding
 Configure directory. Each operation has a shared job, logs and cancellation. Leaving the
 view does not cancel the job, and switching workspace cannot redirect its captured
 inputs. Reopening reads saved projects and retained jobs without starting an operation.
+
+The workspace application list checks saved folder locations when opened, when the
+window regains focus, and when you choose **Refresh list**. Deleted or moved application
+folders are hidden from the list. Saved profiles and build history are retained, so
+restoring a folder to its original location makes its entry reappear. An unreadable
+location stays listed with a diagnostic rather than being treated as deleted.
 
 A successful build establishes compilation for that attempt. It does not establish
 hardware operation, peripheral wiring, runtime memory limits or runner compatibility.

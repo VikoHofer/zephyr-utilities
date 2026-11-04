@@ -112,6 +112,7 @@
 .projects-feature .projects-preview-file {border-top:1px solid #e5ebde;padding:3px 0 10px}
 .projects-feature .projects-preview-file summary {font-size:11px}
 .projects-feature .projects-recipe {margin-top:13px}
+.projects-feature .projects-technical-details {margin:10px 0}
 .projects-feature .projects-recipe pre,.projects-feature [data-build-preview-recipe] pre {margin-bottom:13px;max-height:320px}
 .projects-feature .projects-apply-note {margin:17px 0}
 .projects-feature .projects-created-app {padding:18px 0;border-top:1px solid #e2e9dc}

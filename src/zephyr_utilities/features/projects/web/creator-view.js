@@ -32,15 +32,20 @@ export function mountCreator(root, context) {
       const option = node("option", "", label); option.value = value; select.append(option);
     }
   }
-  function recipe(parent, value, operation) {
+  function disclosure(label, key, ...content) {
+    const detail = node("details", "projects-technical-details");
+    if (key) detail.dataset.disclosure = key;
+    detail.append(node("summary", "", label), ...content);
+    return detail;
+  }
+  function recipe(parent, value, operation, key = "recipe") {
     parent.replaceChildren();
     if (!value) { parent.append(node("p", "projects-muted", "Commands are unavailable. Generate a new preview.")); return; }
     const details = node("dl", "projects-identity"); fact(details, "Working directory", value.cwd, true); parent.append(details);
-    if (operation !== "build-only") { parent.append(node("h3", "", "Configure"), node("pre", "", value.display_configure || array(value.configure).join("\n"))); }
-    if (operation !== "configure") parent.append(node("h3", "", "Compile"), node("pre", "", value.display_build || array(value.build).join("\n")));
-    const detail = node("details"); detail.append(node("summary", "", "Argument arrays and environment"));
-    detail.append(node("pre", "", JSON.stringify({configure: value.configure, build: value.build, environment: value.environment}, null, 2)));
-    parent.append(detail);
+    if (operation !== "build-only") parent.append(disclosure("Configure command", `${key}:configure`, node("pre", "", value.display_configure || array(value.configure).join("\n"))));
+    if (operation !== "configure") parent.append(disclosure("Compile command", `${key}:compile`, node("pre", "", value.display_build || array(value.build).join("\n"))));
+    parent.append(disclosure("Argument arrays and environment", `${key}:environment`,
+      node("pre", "", JSON.stringify({configure: value.configure, build: value.build, environment: value.environment}, null, 2))));
   }
   function renderChoices() {
     const snapshot = state.snapshot;
@@ -76,7 +81,6 @@ export function mountCreator(root, context) {
     const files = $("preview-files"); files.replaceChildren();
     for (const file of array(plan.files)) {
       const detail = node("details", "projects-preview-file");
-      detail.open = file.path === "src/main.c";
       detail.append(node("summary", "projects-path", file.path), node("pre", "", file.content));
       files.append(detail);
     }
@@ -84,26 +88,32 @@ export function mountCreator(root, context) {
   }
   function renderAttempt(parent, attempt) {
     const detail = node("details", "projects-attempt");
+    const key = `attempt:${attempt.id}`;
+    detail.dataset.disclosure = key;
     detail.append(node("summary", "", `${text(attempt.status)} · ${attempt.operation === "configure" ? "Configure" : "Build"} · ${time(attempt.finished_at || attempt.created_at || attempt.started_at)}`));
     if (attempt.error) detail.append(node("p", "projects-error", attempt.error));
     if (attempt.status === "interrupted") detail.append(node("p", "projects-banner", "The application stopped before this operation recorded a final result. Its output may be incomplete."));
     const facts = node("dl", "projects-identity");
     fact(facts, "Output directory", attempt.build_dir || attempt.context?.build_dir || attempt.context?.build_directory, true);
     fact(facts, "Effective target", attempt.context?.effective_target || attempt.context?.target || attempt.context?.board, true);
-    fact(facts, "Compiler", attempt.context?.compiler || attempt.context?.c_compiler, true);
     detail.append(facts);
-    detail.append(node("p", "projects-muted", "These values were captured for this attempt. Live artifact paths may have changed since then."));
+    const technical = disclosure("Compiler and output files", `${key}:outputs`);
+    const compiler = node("dl", "projects-identity");
+    fact(compiler, "Compiler", attempt.context?.compiler || attempt.context?.c_compiler, true);
+    technical.append(compiler, node("p", "projects-muted", "These values were captured for this attempt. Live artifact paths may have changed since then."));
     if (array(attempt.artifacts).length) {
       const list = node("ul", "projects-source-list projects-path");
       for (const artifact of attempt.artifacts) list.append(node("li", "", `${artifact.kind || "Artifact"}: ${artifact.path} (${artifact.size ?? artifact.bytes ?? "unknown"} bytes)`));
-      detail.append(list);
+      technical.append(list);
     }
+    detail.append(technical);
     for (const diagnostic of array(attempt.diagnostics)) detail.append(node("p", "projects-muted", diagnostic.message || diagnostic));
-    const evidence = node("details"); evidence.append(node("summary", "", "Captured context and artifact identities"), node("pre", "", JSON.stringify({context: attempt.context, artifacts: attempt.artifacts}, null, 2))); detail.append(evidence);
+    detail.append(disclosure("Captured context and artifact identities", `${key}:context`, node("pre", "", JSON.stringify({context: attempt.context, artifacts: attempt.artifacts}, null, 2))));
     if (array(attempt.logs).length) {
-      const logs = node("details"); logs.append(node("summary", "", "Saved operation log"), node("pre", "", attempt.logs.join("\n"))); detail.append(logs);
+      detail.append(disclosure("Saved operation log", `${key}:logs`, node("pre", "", attempt.logs.join("\n"))));
     }
-    const command = node("details"); command.append(node("summary", "", "Commands used")); const commandBody = node("div"); recipe(commandBody, attempt.recipe, attempt.operation); command.append(commandBody); detail.append(command);
+    const commandBody = node("div"); recipe(commandBody, attempt.recipe, attempt.operation, key);
+    detail.append(disclosure("Commands used", `${key}:commands`, commandBody));
     parent.append(detail);
   }
   function renderProjects(busy) {
@@ -112,8 +122,9 @@ export function mountCreator(root, context) {
     const target = $("created-projects");
     if (signature !== renderedProjects) {
       renderedProjects = signature;
+      const expanded = new Set([...target.querySelectorAll("details[open][data-disclosure]")].map((detail) => detail.dataset.disclosure));
       target.replaceChildren();
-      if (!projects.length) target.append(node("p", "projects-muted", "Applications created here will appear after creation. Existing applications are not imported in this release."));
+      if (!projects.length) target.append(node("p", "projects-muted", "No applications found at their saved locations. Create an application here to get started. Existing applications are not imported in this release."));
       for (const project of projects) {
         const card = node("article", "projects-created-app");
         card.append(node("h3", "", project.name), node("p", "projects-path", project.path));
@@ -126,6 +137,7 @@ export function mountCreator(root, context) {
         for (const attempt of array(project.attempts)) renderAttempt(card, attempt);
         target.append(card);
       }
+      for (const detail of target.querySelectorAll("details[data-disclosure]")) detail.open = expanded.has(detail.dataset.disclosure);
     }
     for (const button of target.querySelectorAll("[data-build-operation]")) button.disabled = busy;
   }
@@ -168,6 +180,8 @@ export function mountCreator(root, context) {
     $("create-submit").disabled = busy || !state.plan;
     $("create-submit").textContent = state.busy === "create" ? "Starting creation…" : "Create application";
     $("build-start").disabled = busy || !state.buildPlan;
+    $("creator-refresh").disabled = Boolean(state.loading || state.busy);
+    $("creator-refresh").textContent = state.loading ? "Refreshing…" : "Refresh list";
     renderPlan(); renderJob(); renderProjects(busy); renderBuildPlan();
     const diagnostics = $("creator-diagnostics"); diagnostics.replaceChildren();
     for (const item of array(state.diagnostics)) diagnostics.append(node("p", "projects-banner", item.message || item));
@@ -178,6 +192,8 @@ export function mountCreator(root, context) {
   listen($("create-submit"), "click", () => session.create());
   listen($("build-start"), "click", () => session.build());
   listen($("creator-cancel"), "click", () => session.cancel());
+  listen($("creator-refresh"), "click", () => session.refresh());
+  listen(window, "focus", () => session.refresh());
   listen($("created-projects"), "click", (event) => {
     const button = event.target.closest("[data-build-operation]");
     if (button && root.contains(button)) session.previewBuild(button.dataset.projectId, button.dataset.buildOperation);

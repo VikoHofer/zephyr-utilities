@@ -5,6 +5,7 @@ from copy import deepcopy
 import hashlib
 import os
 from pathlib import Path
+import stat
 from threading import RLock
 import time
 import uuid
@@ -86,7 +87,17 @@ class CreatorService:
         jobs = [job for job in self.context.jobs.list("projects")
                 if job["metadata"].get("workspace") == workspace and job["metadata"].get("operation") != "analyze"]
         active = {job["metadata"].get("attempt_id") for job in jobs if job["status"] in {"queued", "running"}}
-        projects, diagnostics = self.store.list(workspace, active)
+        stored_projects, diagnostics = self.store.list(workspace, active)
+        projects = []
+        for project in stored_projects:
+            try:
+                if not stat.S_ISDIR(Path(project["path"]).stat().st_mode):
+                    continue
+            except (FileNotFoundError, NotADirectoryError):
+                continue
+            except OSError as exc:
+                diagnostics.append(f"Cannot check application directory {project['path']}: {exc}")
+            projects.append(project)
         snapshot = self.environments.latest(workspace)
         if snapshot:
             snapshot["freshness"] = "saved-observation"

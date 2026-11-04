@@ -93,6 +93,58 @@ class CreatorServiceTests(unittest.TestCase):
         self.assertEqual(data["projects"][0]["attempts"], [])
         self.assertIsNone(self.call("GET", "environment").data["job"])
 
+    def test_missing_application_is_hidden_and_restored_with_saved_history(self):
+        project = self.create()
+        attempt = {"schema_version": 1, "id": uuid.uuid4().hex, "project_id": project["id"],
+                   "workspace": str(self.workspace), "status": "built", "logs": ["Saved build evidence."]}
+        self.creator.store.save_attempt(attempt)
+        records = {path: path.read_bytes() for path in self.creator.store.root.rglob("*.json")}
+        source = Path(project["path"])
+        moved = self.root / "moved-application"
+        source.rename(moved)
+        self.analyze.reset_mock()
+        with patch("zephyr_utilities.features.projects.creator.execute_build") as execute:
+            data = self.call("GET", "creator").data
+            self.assertEqual(data["projects"], [])
+            self.assertEqual(data["diagnostics"], [])
+            self.assertEqual(self.creator.store.project(project["id"], self.workspace), project)
+            moved.rename(source)
+            restored = self.call("GET", "creator").data["projects"]
+            self.assertEqual([item["id"] for item in restored], [project["id"]])
+            self.assertEqual(restored[0]["attempts"], [attempt])
+            execute.assert_not_called()
+        self.analyze.assert_not_called()
+        self.assertEqual({path: path.read_bytes() for path in records}, records)
+
+    def test_application_path_or_parent_replaced_by_file_is_hidden(self):
+        project = self.create()
+        source = Path(project["path"])
+        source.rename(self.root / "moved-application")
+        source.write_text("This is no longer an application directory.\n")
+        self.assertEqual(self.call("GET", "creator").data["projects"], [])
+        source.unlink()
+        source.parent.rmdir()
+        source.parent.write_text("This is no longer the application parent directory.\n")
+        self.assertEqual(self.call("GET", "creator").data["projects"], [])
+        self.assertEqual(self.creator.store.project(project["id"], self.workspace), project)
+
+    def test_application_check_errors_keep_entry_and_report_diagnostic(self):
+        project = self.create()
+        source = Path(project["path"])
+        original_stat = Path.stat
+        for error in (PermissionError("Access denied."), OSError("Filesystem unavailable.")):
+            with self.subTest(error=type(error).__name__):
+                def checked_stat(path, *args, **kwargs):
+                    if path == source:
+                        raise error
+                    return original_stat(path, *args, **kwargs)
+
+                with patch.object(Path, "stat", checked_stat):
+                    data = self.call("GET", "creator").data
+                self.assertEqual([item["id"] for item in data["projects"]], [project["id"]])
+                self.assertTrue(any(str(source) in message and str(error) in message
+                                    for message in data["diagnostics"]))
+
     def test_changed_environment_prevents_creation_and_consumes_preview(self):
         plan = self.preview()
         self.analyze.return_value = {**self.snapshot, "zephyr": {**self.snapshot["zephyr"], "version": "5.0.0"}}

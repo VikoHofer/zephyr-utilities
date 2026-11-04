@@ -54,6 +54,7 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
     if (snapshot?.fingerprint !== state.snapshot?.fingerprint) { state.plan = null; state.buildPlan = null; formRevision++; }
     state.snapshot = snapshot;
     state.projects = array(data.projects).filter((project) => project.workspace === state.workspace);
+    if (state.buildPlan && !state.projects.some((project) => project.id === state.buildPlan.project_id)) state.buildPlan = null;
     state.jobs = array(data.jobs).filter((job) => !job.metadata?.workspace || job.metadata.workspace === state.workspace);
     state.diagnostics = array(data.diagnostics);
     state.needsReload = false;
@@ -63,8 +64,6 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
     if (!board) { form.board_id = ""; form.target = ""; }
     else if (!array(board.targets).includes(form.target)) form.target = "";
     if (!creatorSdks(snapshot).some((sdk) => sdk.id === form.sdk_id)) form.sdk_id = "";
-    const job = currentCreatorJob(state);
-    if (job?.status === "failed") { state.plan = null; state.buildPlan = null; }
   }
   async function load({background = false} = {}) {
     if (disposed) return;
@@ -152,15 +151,15 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
       if (current(path, captured) && error.name !== "AbortError") { state.error = error.message || String(error); state.plan = null; state.buildPlan = null; }
     } finally { if (current(path, captured)) { state.cancelling = false; publish(); } }
   }
-  async function tick() {
+  async function tick({force = false} = {}) {
     if (disposed || reading) return;
     const switched = followWorkspace();
     if (switched) publish();
-    if (!switched && (state.busy || (!state.needsReload && !array(state.jobs).some(activeJob)))) return;
+    if (!switched && (state.busy || state.loading || (!force && !state.needsReload && !array(state.jobs).some(activeJob)))) return;
     reading = true;
-    try { await load({background: !switched}); } finally { reading = false; }
+    try { await load({background: !switched && !force}); } finally { reading = false; }
   }
   function queue() { timer = schedule(async () => { await tick(); if (!disposed) queue(); }, 1200); }
   followWorkspace(); queue();
-  return {load, preview, create, previewBuild, build, cancel, changeField, tick, dispose() { disposed = true; epoch++; lifetime.abort(); if (timer !== undefined) unschedule(timer); }};
+  return {load, refresh: () => tick({force: true}), preview, create, previewBuild, build, cancel, changeField, tick, dispose() { disposed = true; epoch++; lifetime.abort(); if (timer !== undefined) unschedule(timer); }};
 }
