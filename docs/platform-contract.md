@@ -44,6 +44,10 @@ servers, ports or environments. `zephyr-utils memory` opens the same app directl
   `snapshots`, `snapshots/:id`, `snapshots/:id/export`, `import`, and `compare`.
   Preserve legacy unnamespaced memory endpoints as compatibility aliases.
 - Legacy memory job fields (`snapshot_id`, logs, status) remain available.
+- Device Tree source navigation uses `POST /api/devicetree/sources`, `/bindings` and
+  `/source-file`. Requests retain expected workspace/inspection/domain; binding/file
+  reads also carry a transient `catalog_id` and a node path or opaque file ID. No arbitrary
+  source-path read route is exposed. See the [inspection contract](build-inspection.md).
 - `POST /api/memory/inspection` previews an inspected image without starting work.
   `POST /api/memory/jobs` optionally accepts `selection: {workspace, inspection_id, domain}`
   alongside `build_path` to preserve that image's verified ELF and context through capture.

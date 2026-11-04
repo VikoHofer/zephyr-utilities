@@ -8,7 +8,7 @@ from .api import register
 FEATURE = FeatureDefinition(
     id='devicetree',
     title='Device Tree Editor',
-    description='Inspect resolved Device Tree nodes and properties from an existing build. Source editing remains planned.',
+    description='Inspect resolved nodes, browse current sources and navigate bindings for an existing build. Source editing remains planned.',
     entry_path="/#/devicetree",
     frontend=FrontendDefinition(Path(__file__).parent / "web"),
     register=register,

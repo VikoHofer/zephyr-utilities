@@ -7,6 +7,7 @@ workspace selection and background jobs. Memory Explorer and Project Creator's e
 analysis, minimal C application creation and explicit configure/build workflow are available.
 Existing-build inspection connects to a read-only resolved Device Tree reader and carries
 the selected image into Memory Explorer for explicit report generation.
+Device Tree also opens recorded source files and current binding YAML, with include navigation.
 Device Tree editing and TinyML model/experiment analysis remain planned.
 
 ## Start
@@ -165,6 +166,9 @@ properties without running tools or changing source files. Changed outputs requi
 re-inspection; source freshness remains unknown. **Open Memory Explorer** reviews the
 same image before explicit report generation from its archived ELF. See the
 [build inspection guide](docs/build-inspection.md) for the available P3 workflows and limits.
+In Device Tree, use **Browse sources** for recorded inputs or **Find bindings** on a node.
+Current source text, binding candidates and binding paths recorded in generated output
+remain distinct; this navigation does not validate or edit hardware configuration.
 
 ## Requirements and interpretation
 

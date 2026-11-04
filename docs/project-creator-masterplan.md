@@ -4,6 +4,7 @@ Status: P0 foundation, P1 environment analysis and P2 minimal application creati
 explicit configure/build actions are implemented on 2026-11-04. Device Tree Editor
 (`devicetree`) now provides read-only resolved-tree inspection through P3's
 existing-build inspection. A verified image handoff to Memory Explorer is also available.
+P3 now includes current-source and binding/include navigation for an inspected image.
 The rest of P3 and P4 onward remain planned. The agreed first creation priority is
 **new applications inside the existing `zephyrproject` workspace**.
 
@@ -417,7 +418,7 @@ expansion based on actual projects.
 | P0 | Observation contract, capability policy and synthetic fixtures | Available | Existing platform | Small |
 | P1 | Offline environment analyser and target catalogue | Available | P0 | Medium |
 | P2 | New workspace application and explicit single-image build | Available within documented limits | P1 | Medium |
-| P3 | Existing-build inspection and tool handoffs | Read-only Device Tree and Memory handoffs available; source/binding navigation pending | P2; editor reader | Medium |
+| P3 | Existing-build inspection and tool handoffs | Device Tree, Memory and current source/binding navigation available; pre-configuration browsing and deeper attribution pending | P2; editor reader | Medium |
 | P4 | Reviewable configuration and overlay editing | Planned | P3 | Large |
 | P5 | Reusable components and advanced project layouts | Planned | P2; P4 for integrated editing | Large, split into slices |
 | P6 | Environment comparison and upgrade trials | Planned | P1/P2; later stages for their profiles | Medium to large |
@@ -498,6 +499,10 @@ require re-inspection; source freshness remains unknown. No tools execute during
 inspection. Memory handoff carries the same selected image/ELF into an explicit report
 review, with revalidation before tool execution and snapshot publication. Saved Memory
 formats and manual workflows are preserved. See [scope and limits](build-inspection.md).
+Source catalogues now list recorded inputs and preprocessor source references, with
+bounded read-only file/include navigation inside the selected workspace. Binding search
+shows current compatible candidates separately from supported generated-header path
+records. YAML/include/property browsing does not merge or validate effective schemas.
 
 The remaining target for this stage is:
 
@@ -623,8 +628,9 @@ or change firmware inputs. Profile/attempt persistence is versioned and feature-
 
 P0 through P2, P3 inspection and the Memory handoff are available. The shared observation
 service now defines output freshness checks and read-root boundaries. Next P3 slices
-should add source/binding navigation, preserving existing
-creator and memory behavior. Do not treat output identity as source/build consistency.
+can add pre-configuration browsing and deeper source attribution. Current-source and
+binding navigation preserve existing creator and memory behavior. Do not treat output
+identity or a current binding candidate as source/build consistency.
 Before P4, select the first edit operations. Before P5/P7, prioritize actual needs such
 as sensors, networking, custom boards or multicore builds. These later stages are context,
 not authorization to implement them automatically.

@@ -13,7 +13,7 @@
 .dt-feature .dt-button:hover {background:#edf4e9;border-color:#b1c7b7}
 .dt-feature button,.dt-feature input,.dt-feature select {font:inherit}
 .dt-feature button:disabled {opacity:.55;cursor:not-allowed}
-.dt-feature button:focus-visible,.dt-feature input:focus-visible,.dt-feature select:focus-visible,.dt-feature summary:focus-visible,.dt-feature a:focus-visible {outline:3px solid #2c9b87;outline-offset:3px}
+.dt-feature button:focus-visible,.dt-feature input:focus-visible,.dt-feature select:focus-visible,.dt-feature summary:focus-visible,.dt-feature a:focus-visible,.dt-feature pre:focus-visible {outline:3px solid #2c9b87;outline-offset:3px}
 .dt-feature .dt-scope,.dt-feature .dt-muted {color:#708175;font-size:11px}
 .dt-feature .dt-scope {margin-bottom:20px}
 .dt-feature .dt-panel {background:#fff;border:1px solid #dce4d6;border-radius:9px;padding:22px;margin-bottom:21px;min-width:0}
@@ -43,6 +43,26 @@
 .dt-feature .dt-node-detail>h3 {font-size:14px;margin-top:0}
 .dt-feature .dt-labels {font-size:11px;color:#567460;margin-top:8px}
 .dt-feature .dt-property {margin-top:17px}
+.dt-feature .dt-find-bindings {margin-top:14px}
+.dt-feature .dt-source-navigation {scroll-margin-top:20px}
+.dt-feature .dt-source-navigation>.dt-section-heading .dt-toolbar {margin:0}
+.dt-feature .dt-source-files {max-height:360px;overflow:auto}
+.dt-feature .dt-source-row {display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 0;border-bottom:1px solid #e4ebdf;min-width:0}
+.dt-feature .dt-source-row>.dt-button {flex-shrink:0}
+.dt-feature .dt-source-description {min-width:0}
+.dt-feature .dt-source-description>p {margin-top:4px}
+.dt-feature .dt-binding-note {margin:12px 0 18px}
+.dt-feature .dt-binding-card {border:1px solid #dce6d4;background:#f8faf4;border-radius:7px;padding:16px;margin-top:12px}
+.dt-feature .dt-binding-heading {display:flex;justify-content:space-between;gap:15px;align-items:center;margin-bottom:8px}
+.dt-feature .dt-binding-heading h3 {margin:0}
+.dt-feature .dt-binding-description {white-space:pre-line;margin:10px 0}
+.dt-feature .dt-binding-card>.dt-button {margin-top:12px}
+.dt-feature .dt-source-document {border-top:1px solid #dce6d4;margin-top:24px;padding-top:24px;scroll-margin-top:20px}
+.dt-feature .dt-source-document>.dt-section-heading h3 {margin:0;font-size:17px}
+.dt-feature .dt-source-document>pre {max-height:520px;margin-top:12px;tab-size:4}
+.dt-feature .dt-include-row {margin:14px 0}
+.dt-feature .dt-binding-property {border-bottom:1px solid #e4ebdf;padding:12px 0;white-space:pre-line}
+.dt-feature .dt-binding-property>p {margin-top:6px}
 .dt-feature .dt-property h4 {font-weight:650;margin-bottom:5px}
 .dt-feature pre {max-height:260px;overflow:auto;background:#173430;color:#d2e7d6;border-radius:5px;padding:12px;font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}
 .dt-feature .dt-property pre {background:#edf2e9;color:#315944;max-height:150px;padding:9px}
@@ -51,4 +71,4 @@
 .dt-feature .dt-empty p {max-width:520px;margin:12px auto 20px;color:#708175}
 .dt-feature [hidden] {display:none!important}
 @media(max-width:900px) {.dt-feature {padding:28px 22px}.dt-feature .dt-browser {grid-template-columns:1fr}.dt-feature .dt-node-detail {position:static;max-height:none}.dt-feature .dt-nodes {max-height:380px}}
-@media(max-width:650px) {.dt-feature {padding:25px 17px}.dt-feature .dt-heading,.dt-feature .dt-section-heading {flex-direction:column;align-items:flex-start}.dt-feature .dt-facts {grid-template-columns:1fr}.dt-feature label {width:100%}.dt-feature .dt-panel {padding:17px}}
+@media(max-width:650px) {.dt-feature {padding:25px 17px}.dt-feature .dt-heading,.dt-feature .dt-section-heading,.dt-feature .dt-source-row,.dt-feature .dt-binding-heading {flex-direction:column;align-items:flex-start}.dt-feature .dt-facts {grid-template-columns:1fr}.dt-feature label {width:100%}.dt-feature .dt-panel {padding:17px}}

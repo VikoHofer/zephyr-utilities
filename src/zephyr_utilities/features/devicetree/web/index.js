@@ -1,4 +1,5 @@
 import {createTreeSession, filterNodes} from "./state.js";
+import {createSourceView} from "./navigation-view.js";
 
 export function mount(host, context) {
   const root = host.querySelector("[data-dt-root]");
@@ -10,6 +11,8 @@ export function mount(host, context) {
   let session;
   let renderedData;
   let renderedQuery;
+  state.sourceNavigation ||= {};
+  const sourceView = createSourceView(root, {api: context.api, state: state.sourceNavigation, workspace: () => context.workspace.path});
   function node(tag, className, text) {
     const element = document.createElement(tag);
     if (className) element.className = className;
@@ -56,7 +59,7 @@ export function mount(host, context) {
     sourceList(sources, "User overlays", [...array(build.devicetree?.user_files), ...array(build.devicetree?.extra_user_files)]);
     sourceList(sources, "Binding search directories", build.devicetree?.binding_dirs);
     sourceList(sources, "Configuration inputs", build.configuration?.files);
-    sources.append(node("p", "dt-muted", "Recorded input lists may be incomplete. The structural view does not resolve bindings or validate properties."));
+    sources.append(node("p", "dt-muted", "Recorded input lists may be incomplete. Browse current sources or find binding candidates for a selected node; property validation remains planned."));
     const diagnostics = $("diagnostics"); diagnostics.replaceChildren();
     for (const item of [...array(data.inspection.diagnostics), ...array(selected.diagnostics), ...array(data.tree.diagnostics)]) diagnostics.append(node("p", "dt-notice", item.message || item));
     $("document-path").textContent = data.document.path;
@@ -91,6 +94,9 @@ export function mount(host, context) {
     if (!selected) { detail.append(node("p", "dt-muted", "Choose a node to inspect its properties.")); return; }
     detail.append(node("h3", "dt-path", selected.path), node("p", "dt-muted", `Resolved DTS line ${selected.line} · ${array(selected.properties).length} properties`));
     if (array(selected.labels).length) detail.append(node("p", "dt-labels", `Labels: ${selected.labels.join(", ")}`));
+    const bindings = node("button", "dt-button dt-find-bindings", "Find bindings");
+    bindings.type = "button"; bindings.dataset.bindingNodePath = selected.path;
+    detail.append(bindings);
     if (!array(selected.properties).length) detail.append(node("p", "dt-muted", "This node has no properties."));
     for (const property of array(selected.properties)) {
       const row = node("div", "dt-property");
@@ -107,6 +113,7 @@ export function mount(host, context) {
     $("refresh").hidden = !state.inspectionId;
     $("refresh").disabled = state.loading;
     renderContext(state.data);
+    sourceView.sync(state.data, state.selectedPath);
     if (state.data) renderNodes(state.data);
   }
   const listen = (element, event, callback) => element.addEventListener(event, callback, {signal: lifetime.signal});
@@ -118,7 +125,11 @@ export function mount(host, context) {
     const target = event.target.closest("[data-node-path]");
     if (target && root.contains(target)) session.select(target.dataset.nodePath);
   });
+  listen($("detail"), "click", (event) => {
+    const target = event.target.closest("[data-binding-node-path]");
+    if (target && root.contains(target)) sourceView.findBindings(target.dataset.bindingNodePath);
+  });
   session = createTreeSession({api: context.api, state, workspace: () => context.workspace.path, onChange: render, navigate: context.navigate});
   render();
-  return {navigate(view) { return session.open(view); }, dispose() { disposed = true; lifetime.abort(); session.dispose(); }};
+  return {navigate(view) { return session.open(view); }, dispose() { disposed = true; lifetime.abort(); sourceView.dispose(); session.dispose(); }};
 }

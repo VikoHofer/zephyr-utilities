@@ -176,6 +176,10 @@ future editor/change-plan contract. See [ADR 0005](decisions/0005-read-only-buil
 Memory report jobs detach a verified selection at submission and revalidate it before
 generation and snapshot publication; cache expiry and workspace changes cannot retarget
 accepted work. See [ADR 0006](decisions/0006-inspected-image-memory-handoff.md).
+Device Tree's source catalogues use the public `core/source_files.py` reader for bounded,
+workspace-confined current text and directory reads. The feature owns reference selection,
+binding YAML interpretation and transient file IDs. Generated-output evidence remains
+separate from current source hashes. See [ADR 0007](decisions/0007-source-and-binding-navigation.md).
 
 ## Measurement boundary
 
@@ -197,6 +201,7 @@ or worst-case resource demand. The [research roadmap](roadmap.md) and
 - [ADR 0004: Reviewed creation and build attempts](decisions/0004-reviewed-project-creation.md)
 - [ADR 0005: Shared read-only build observations](decisions/0005-read-only-build-inspection.md)
 - [ADR 0006: Inspected image handoff to Memory Explorer](decisions/0006-inspected-image-memory-handoff.md)
+- [ADR 0007: Read-only source and binding navigation](decisions/0007-source-and-binding-navigation.md)
 - [Adding a feature](adding-a-feature.md)
 - [HTTP/browser integration contract](platform-contract.md)
 

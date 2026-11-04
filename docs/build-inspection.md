@@ -12,7 +12,8 @@ edit source files. Environment analysis is not required to inspect an existing b
 3. Review the recorded target, application and output availability. Technical metadata,
    input lists and text output previews are optional disclosures.
 4. Choose **Open Device Tree** to inspect that image's resolved tree. Search node names,
-   paths or compatible values, then select a node to read its properties.
+   paths or compatible values, then select a node to read its properties. **Browse sources**
+   opens recorded input files; **Find bindings** opens binding navigation for a node.
 5. Choose **Open Memory Explorer** to review that image for RAM/ROM analysis. Opening
    the review only checks existing files. Choose **Generate reports** explicitly to
    run the selected build's footprint tool and save a Memory snapshot.
@@ -70,6 +71,47 @@ metadata hashes identify the captured evidence; a transient inspection ID is not
 provenance guarantee. Source freshness remains unknown. Builds with a custom ELF path
 that differs from the inspector's supported filename require Memory's manual workflow.
 
+## Source and binding navigation
+
+**Browse sources** lists Device Tree inputs, explicit overlays and configuration files
+recorded in the build metadata, plus source filenames from the verified preprocessed
+DTS line markers. Search by filename/path and choose **Open file** to read current text.
+Literal source include references link to files in the current file's directory and
+recorded include directories. Comments and quoted strings are excluded from reference
+scanning. Conditional expressions and macros are not evaluated, and multiple matching
+files remain separate candidates. The catalogue is not a complete dependency graph or
+a mapping from every resolved property to its source location.
+
+**Find bindings** uses the selected resolved node's compatible strings and searches the
+recorded binding directories in the current workspace. It preserves duplicate and bus
+variants as **Compatible candidate** entries. When a supported generated header comment
+records a binding path for the node, that link is labeled **Recorded binding**. This is
+evidence about a path recorded by the build, not a hash of the historical YAML contents.
+Nodes using child bindings or inferred properties may have no recorded YAML path.
+
+**Open binding** displays current YAML, direct property declarations and linked includes.
+Scalar, list and named/filter include declarations are navigable. Duplicate include
+basenames are shown as ambiguous choices. Includes are followed only when selected;
+cycles do not trigger recursive loading. Property summaries are local to the opened file:
+include filtering, inheritance, bus matching and schema validation are not performed.
+These rules follow the distinction between compatible and bus matching described in
+Zephyr's [binding syntax](https://docs.zephyrproject.org/latest/build/dts/bindings-syntax.html)
+and [binding introduction](https://docs.zephyrproject.org/latest/build/dts/bindings-intro.html).
+
+Every source view is **current workspace content**. Source freshness relative to the
+build remains unknown. Opening a source list records current file hashes; a later edit
+requires **Refresh source list** before opening that file under a new catalogue.
+Rechecking the tree, changing workspace/image or leaving the feature clears loaded
+source text and pending requests. The resolved node/query selection is retained by the
+existing tree workflow. Technical file identity and diagnostics stay collapsed.
+
+Reads are restricted to regular, non-symlink UTF-8 files inside the selected workspace.
+External source paths remain visible with an unavailable reason, and external binding
+roots produce diagnostics. Metadata does not grant access outside the workspace. Files
+are opened through server-issued catalogue IDs, never arbitrary client paths. No compiler,
+preprocessor, checkout Python module or pickle is executed. There are no write endpoints.
+See [ADR 0007](decisions/0007-source-and-binding-navigation.md).
+
 ## Supported scope and limits
 
 - Existing single-image Zephyr builds and up to 16 readable sysbuild domains inside the
@@ -80,14 +122,23 @@ that differs from the inspector's supported filename require Memory's manual wor
   Missing optional outputs remain unavailable. Imported metadata is treated as data;
   no pickle, CMake, Python adapter or compiler is executed.
 - A structural reader for generated DTS nodes, labels and raw property values. It does
-  not resolve bindings, interpret register cells, verify driver enablement or validate
+  not resolve effective binding schemas, interpret register cells, verify driver enablement or validate
   hardware. Unsupported syntax yields a diagnostic and raw-text fallback.
 - Output files are hashed with size/total-read limits. Text previews are bounded to
   8 MiB; YAML metadata to 2 MiB. Oversized or malformed data cannot become a validated
   build context.
+- Source catalogues retain at most 1,000 references with a 16 MiB read budget and 2 MiB
+  per document. They expire after 30 minutes, with at most 16 retained, and cannot outlive
+  the original build inspection. Missing/blocked files remain explicit.
+- Binding indexes search at most 64 recorded roots, 10,000 YAML files and a 16 MiB read
+  budget, with 256 KiB per YAML file. Directory depth/count and YAML event/depth limits
+  also apply. Unsupported tags, aliases, duplicate keys and invalid YAML yield diagnostics;
+  explicitly opened unsupported YAML can still be read as text. No untrusted constructors run.
+- Results and include lookup counts are bounded. Hitting a limit yields a diagnostic or
+  an actionable catalogue limit error, never a claim of a complete schema.
 
-Source-file browsing, binding navigation, source-to-node attribution and durable
-inspection history remain subsequent P3 work. Reviewable
+Per-property source attribution, browsing before a first configuration, effective binding
+resolution and durable inspection history remain later work. Reviewable
 overlay and configuration editing remain P4. Existing Memory Explorer workflows continue
 to operate independently.
 
@@ -102,6 +153,9 @@ so a changed selection cannot redirect an earlier view's request.
 | `GET /api/projects/inspections/:id` | `workspace` query parameter | Original context/hashes with rechecked availability |
 | `POST /api/projects/inspection-text` | `{workspace, inspection_id, domain, kind}` | Verified allowlisted text output: `{path, text, sha256}` |
 | `POST /api/devicetree/inspect` | `{workspace, inspection_id, domain}` | Shared observation/domain, verified document and structural tree |
+| `POST /api/devicetree/sources` | `{workspace, inspection_id, domain}` | Bounded current-source catalogue with `catalog_id` and file references |
+| `POST /api/devicetree/bindings` | Selection fields plus `{catalog_id, node_path}` | Current compatible candidates and supported generated-header binding-path evidence |
+| `POST /api/devicetree/source-file` | Selection fields plus `{catalog_id, file_id}` | Verified current text/hash, literal include references and direct binding properties |
 | `POST /api/memory/inspection` | `{workspace, inspection_id, domain}` | Read-only report readiness for the exact selected image and ELF |
 | `POST /api/memory/jobs` | `{build_path, name?, notes?, selection?: {workspace, inspection_id, domain}}` | Explicit report job, bound to the inspection when `selection` is supplied |
 
@@ -140,3 +194,16 @@ changes and the same image in Device Tree. Automated cases also cover queue expi
 directory replacement, changed/added evidence and a transient live-ELF rewrite during
 analysis. Corrupted retained evidence is rejected before generation and publication.
 These are analysis checks, not hardware or runtime memory measurements.
+
+Source/binding verification used an isolated copy of the QEMU outputs and the selected
+checkout's 3,725 binding YAML files. Build metadata/preprocessor paths were remapped to
+the fixture, and synthetic overlay/config inputs exercised navigation only; they were
+not claimed as historical inputs to the retained ELF. Browser checks covered source
+lists, unavailable files, overlay-to-header navigation, the recorded UART binding and
+its `uart-controller.yaml` → `base.yaml` include chain, keyboard access, source edits
+requiring explicit refresh, image/workspace changes and leaving/reopening the feature.
+After restoring the deliberate source-edit fixture, all 4,359 files matched the baseline;
+generated build outputs stayed unchanged. No build tools or hardware operations ran.
+Python/frontend checks cover scope/hash isolation, hostile paths/YAML, missing/changed
+files, read limits, include ambiguity/cycles and late responses. Full repository and
+installed-package checks passed.
