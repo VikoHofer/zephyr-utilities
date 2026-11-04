@@ -14,7 +14,7 @@ research master plan, not a general coding-assistant integration.
 - Contributor guidance, agent instructions, repeatable checks and feature scaffolding.
 - Project environment analysis with local board/chip and installed-SDK discovery,
   bounded offline probes, saved observations, refresh and diagnostics.
-- Reviewed minimal-C workspace application creation, explicit configure/build jobs and
+- Reviewed minimal C/C++ workspace application creation, explicit configure/build jobs and
   versioned profiles/attempt evidence in fresh output directories.
 - Read-only existing-build inspection, sysbuild image selection and a shared observation
   handoff to the resolved Device Tree reader and Memory Explorer's explicit report review.
@@ -110,6 +110,9 @@ Saving changes metadata only. Ordered Kconfig/overlay selection is also availabl
 independent automatic, append and replacement modes, bounded app-local discovery and
 reviewed source checks. Visual overlay/hardware editing remains deferred until the
 creator workflow is ready.
+P5 begins with a Minimal C++ starter alongside the original C template, using the same
+reviewed publication and build workflow. Curated local sample cloning remains the next
+template expansion, with source provenance, licenses and dependency checks required.
 Later stages cover editing, advanced
 composition and environment migration. Build evidence does not establish hardware operation.
 

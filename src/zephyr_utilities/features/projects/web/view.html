@@ -48,8 +48,9 @@
     <div class="projects-error" role="alert" data-creator-error hidden></div>
     <div class="projects-banner" data-creator-requirement hidden>Analyze this workspace in Environment before choosing a board and SDK.</div>
     <form data-creator-form class="projects-panel" aria-label="New application">
-      <div class="projects-section-heading"><div><span class="projects-eyebrow">1 · APPLICATION</span><h2>Choose a destination and target.</h2></div><span class="projects-muted">Minimal C template</span></div>
+      <div class="projects-section-heading"><div><span class="projects-eyebrow">1 · APPLICATION</span><h2>Choose a template, destination and target.</h2></div></div>
       <div class="projects-option-grid">
+        <label class="projects-full-width">Application template<select data-create-field="template_id" required><option value="minimal-c">Minimal C</option></select><span class="projects-input-help" data-creator-template-note></span></label>
         <label>Application name<input data-create-field="name" required autocomplete="off" spellcheck="false" placeholder="my_app"></label>
         <label>Destination in workspace<input data-create-field="destination" autocomplete="off" spellcheck="false" placeholder="applications/my_app"><span class="projects-input-help">Leave blank for applications/&lt;name&gt;. The destination must be new.</span></label>
         <label class="projects-full-width">Find a board<input type="search" data-create-field="search" placeholder="Board name, chip, vendor or target…" autocomplete="off"></label>
@@ -58,7 +59,6 @@
         <label class="projects-full-width">Installed GNU SDK<select data-create-field="sdk_id" required><option value="">Choose an SDK installation</option></select></label>
       </div>
       <p class="projects-muted" data-creator-target-note>Choose the full target, including any SoC, CPU, variant and revision. Metadata discovery does not establish build compatibility.</p>
-      <div class="projects-template"><strong>Minimal C application</strong><p>A small main function, CMake build file and configuration fragment. No LED, sensor, overlay or other board-specific peripheral is required.</p></div>
       <div class="projects-actions"><button class="projects-button primary" data-preview-submit type="submit">Preview application</button></div>
     </form>
     <section class="projects-panel" data-creator-preview hidden aria-label="Application preview">

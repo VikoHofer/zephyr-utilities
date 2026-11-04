@@ -18,6 +18,7 @@ from .fragments import discover_fragment_files, profile_fragments, validate_frag
 from .metadata import read_regular
 from .probing import check_cancel
 from .records import ProjectStore, configuration_name, identifier, now
+from .templates import template_catalog
 
 
 def source_inputs(source, *, cancel=None):
@@ -103,10 +104,10 @@ class CreatorService:
         if snapshot:
             snapshot["freshness"] = "saved-observation"
         return {"workspace": workspace, "snapshot": snapshot, "projects": projects, "jobs": jobs,
-                "diagnostics": diagnostics}
+                "diagnostics": diagnostics, "templates": template_catalog()}
 
     def preview(self, body):
-        workspace = self._workspace(body, {"name", "destination", "board_id", "target", "sdk_id"})
+        workspace = self._workspace(body, {"name", "destination", "board_id", "target", "sdk_id", "template_id"})
         snapshot = self.environments.latest(workspace)
         if snapshot is None:
             raise ValueError("Analyze this workspace before creating an application.")

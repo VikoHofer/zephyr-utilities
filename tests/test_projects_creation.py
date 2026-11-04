@@ -3,6 +3,7 @@
 from concurrent.futures import CancelledError
 from copy import deepcopy
 import hashlib
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -80,6 +81,75 @@ class ProjectCreationTests(unittest.TestCase):
         for item in plan["files"]:
             self.assertEqual((destination / item["path"]).read_text(), item["content"])
         self.assertEqual({path.name for path in destination.parent.iterdir()}, {destination.name})
+
+    def test_default_and_explicit_c_preserve_version_one_generated_bytes(self):
+        # Recorded before introducing template selection; only the fixture root
+        # is normalized so the published version-one README is covered as well.
+        expected = "a8fc55462439aa95cdd0430653030ef4e2bfe0934aef20240f8af763a9757b36"
+        for changes in ({}, {"template_id": "minimal-c"}):
+            with self.subTest(changes=changes):
+                plan = self.preview(**changes)
+                contents = {item["path"]: item["content"].replace(str(self.root), "<ROOT>")
+                            for item in plan["files"]}
+                self.assertEqual(hashlib.sha256(json.dumps(contents, sort_keys=True).encode()).hexdigest(), expected)
+                self.assertEqual(plan["template"], {"id": "minimal-c", "version": 1})
+
+    def test_cpp_preview_and_publication_use_independent_cpp_sources(self):
+        plan = self.preview(template_id="minimal-cpp")
+        self.assertFalse(Path(plan["destination"]).parent.exists())
+        self.assertEqual(plan["template"], {"id": "minimal-cpp", "version": 1})
+        files = {item["path"]: item["content"] for item in plan["files"]}
+        self.assertEqual(set(files), {"CMakeLists.txt", "prj.conf", "src/main.cpp", ".gitignore", "README.md"})
+        self.assertIn("project(hello_test LANGUAGES C CXX)", files["CMakeLists.txt"])
+        self.assertIn("target_sources(app PRIVATE src/main.cpp)", files["CMakeLists.txt"])
+        self.assertEqual(files["prj.conf"].splitlines()[1:], ["CONFIG_CPP=y", "CONFIG_PRINTK=y"])
+        self.assertIn("constexpr", files["src/main.cpp"])
+        self.assertIn("A minimal Zephyr C++ application generated from the minimal-cpp template, version 1.",
+                      files["README.md"])
+        self.assertIn(plan["recipe"]["display_configure"], files["README.md"])
+        self.assertIn(plan["recipe"]["display_build"], files["README.md"])
+        for path in ("CMakeLists.txt", "prj.conf", "src/main.cpp"):
+            self.assertNotIn(self.body["target"], files[path])
+            self.assertNotIn(str(self.sdk), files[path])
+        project = apply_project(plan)
+        self.assertEqual(project["template"], {"id": "minimal-cpp", "version": 1})
+        for item in plan["files"]:
+            self.assertEqual((Path(project["path"]) / item["path"]).read_text(), item["content"])
+        self.assertFalse((Path(project["path"]) / "src/main.c").exists())
+        plan["template"]["id"] = "minimal-c"
+        self.assertEqual(project["template"]["id"], "minimal-cpp")
+
+    def test_invalid_template_selection_is_read_only(self):
+        for template_id in ("", None, "unknown", "MINIMAL-C", 1, {}, ["minimal-c"]):
+            with self.subTest(template_id=template_id), self.assertRaisesRegex(ValueError, "application template"):
+                self.preview(template_id=template_id)
+        self.assertFalse((self.workspace / "applications").exists())
+
+    def test_unknown_template_identity_or_version_cannot_be_published(self):
+        plan = self.preview()
+        identities = [None, {}, {"id": "unknown", "version": 1}, {"id": "minimal-c", "version": 2},
+                      {"id": "minimal-c", "version": True}, {"id": "minimal-c", "version": 1.0},
+                      {"id": "minimal-c", "version": "1"}, {"id": "minimal-c", "version": 1, "path": "custom"}]
+        for identity in identities:
+            with self.subTest(identity=identity), self.assertRaisesRegex(ValueError, "application template"):
+                apply_project({**plan, "template": identity})
+        without_template = {key: value for key, value in plan.items() if key != "template"}
+        with self.assertRaisesRegex(ValueError, "application template"):
+            apply_project(without_template)
+        self.assertFalse((self.workspace / "applications").exists())
+
+    def test_template_switches_or_forged_paths_cannot_be_published(self):
+        for template_id, other in (("minimal-c", "minimal-cpp"), ("minimal-cpp", "minimal-c")):
+            plan = self.preview(template_id=template_id)
+            with self.subTest(template_id=template_id):
+                with self.assertRaisesRegex(ValueError, "unsupported generated files"):
+                    apply_project({**plan, "template": {"id": other, "version": 1}})
+                for path in ("src/extra.cpp", "../outside.c", "src/nested/main.cpp", "CMakeLists.txt"):
+                    forged = deepcopy(plan)
+                    forged["files"][2]["path"] = path
+                    with self.subTest(path=path), self.assertRaisesRegex(ValueError, "unsupported generated files"):
+                        apply_project(forged)
+        self.assertFalse((self.workspace / "applications").exists())
 
     def test_publication_refreshes_a_filesystems_initial_empty_directory_listing(self):
         plan = self.preview()
@@ -236,26 +306,30 @@ class ProjectCreationTests(unittest.TestCase):
         self.assertEqual(list(destination.parent.iterdir()), [destination])
 
     def test_cancel_before_and_during_creation_cleans_owned_files(self):
-        plan = self.preview()
-        cancel = Event()
-        cancel.set()
-        with self.assertRaises(CancelledError):
-            apply_project(plan, cancel=cancel)
-        self.assertFalse((self.workspace / "applications").exists())
-        original = creation.check_cancel
-        calls = 0
+        for template_id in ("minimal-c", "minimal-cpp"):
+            with self.subTest(template_id=template_id):
+                plan = self.preview(template_id=template_id)
+                cancel = Event()
+                cancel.set()
+                with self.assertRaises(CancelledError):
+                    apply_project(plan, cancel=cancel)
+                self.assertFalse((self.workspace / "applications").exists())
+                original = creation.check_cancel
+                calls = 0
 
-        def cancel_midway(event):
-            nonlocal calls
-            calls += 1
-            if calls == 4:
-                raise CancelledError()
-            original(event)
+                def cancel_midway(event):
+                    nonlocal calls
+                    calls += 1
+                    # Cancel after the source was written, covering cleanup of
+                    # both main.c and main.cpp through their pinned directory.
+                    if calls == 5:
+                        raise CancelledError()
+                    original(event)
 
-        with patch.object(creation, "check_cancel", side_effect=cancel_midway):
-            with self.assertRaises(CancelledError):
-                apply_project(plan)
-        self.assertFalse((self.workspace / "applications").exists())
+                with patch.object(creation, "check_cancel", side_effect=cancel_midway):
+                    with self.assertRaises(CancelledError):
+                        apply_project(plan)
+                self.assertFalse((self.workspace / "applications").exists())
 
     def test_partial_write_failure_cleans_only_created_files_and_parents(self):
         plan = self.preview()

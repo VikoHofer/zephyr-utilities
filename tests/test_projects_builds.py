@@ -145,6 +145,7 @@ class BuildExecutionTests(unittest.TestCase):
         self.assertEqual(result["context"]["effective_target"], "test_board@1.0.0/chip/cpu0")
         self.assertEqual(result["context"]["sdk_path"], str(self.root / "SDK one"))
         self.assertEqual(result["context"]["status"], "captured")
+        self.assertIsNone(result["context"]["cxx_compiler"])
         self.assertFalse(result["context"]["hardware_validated"])
         self.assertNotIn("elf", [item["kind"] for item in result["artifacts"]])
 
@@ -233,6 +234,17 @@ class BuildExecutionTests(unittest.TestCase):
             result = self.run_build(mode="timeout")
         self.assertEqual(result["status"], "failed")
         self.assertIn("execution limit", result["error"])
+
+    def test_context_captures_both_compiler_paths_from_cmake_cache(self):
+        output = self.outputs / "cpp-context"
+        output.mkdir()
+        (output / "CMakeCache.txt").write_text(
+            "CMAKE_C_COMPILER:FILEPATH=/SDK with spaces/bin/target-gcc\n"
+            "CMAKE_CXX_COMPILER:FILEPATH=/SDK with spaces/bin/target-g++\n"
+        )
+        context, _, _ = capture_context(self.profile, self.source, output, configured=True)
+        self.assertEqual(context["compiler"], "/SDK with spaces/bin/target-gcc")
+        self.assertEqual(context["cxx_compiler"], "/SDK with spaces/bin/target-g++")
 
     def test_context_rejects_external_symlinks_and_malformed_build_info(self):
         output = self.outputs / "context"

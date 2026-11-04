@@ -1,5 +1,5 @@
 import {activeJob} from "./environment-state.js";
-import {createCreatorSession, creatorBoards, creatorSdks, currentCreatorJob} from "./creator-state.js";
+import {createCreatorSession, creatorBoards, creatorSdks, creatorTemplates, creatorTemplateId, creatorTemplateLabel, selectedCreatorTemplate, currentCreatorJob} from "./creator-state.js";
 import {createConfigurationView} from "./configuration-view.js";
 import {appendFragmentFacts} from "./fragment-view.js";
 
@@ -54,7 +54,7 @@ export function mountCreator(root, context) {
   function renderChoices() {
     const snapshot = state.snapshot;
     const form = state.form;
-    const key = JSON.stringify([snapshot?.id, snapshot?.fingerprint, form.search, form.board_id]);
+    const key = JSON.stringify([snapshot?.id, snapshot?.fingerprint, form.search, form.board_id, state.templates, creatorTemplateId(form)]);
     if (selectionKey !== key) {
       selectionKey = key;
       const allBoards = creatorBoards(snapshot);
@@ -64,9 +64,19 @@ export function mountCreator(root, context) {
       choices(fields.board_id, boards.map((board) => [board.id, `${board.full_name || board.name} · ${board.name}`]), `Choose a board (${boards.length})`);
       choices(fields.target, array(selected?.targets).map((target) => [target, target]), "Choose an exact target");
       choices(fields.sdk_id, creatorSdks(snapshot).map((sdk) => [sdk.id, `SDK ${sdk.version || "unknown version"} · ${sdk.path}`]), "Choose an SDK installation");
+      const templates = creatorTemplates(state.templates);
+      const templateId = creatorTemplateId(form);
+      const template = selectedCreatorTemplate(state);
+      const entries = templates.map((entry) => [entry.id, entry.title]);
+      if (templateId && !template) entries.unshift([templateId, `Unavailable template: ${templateId}`]);
+      choices(fields.template_id, entries, "Choose an application template");
+      $("creator-template-note").textContent = template?.description || (templates.length ? "This template is unavailable. Choose a listed template before previewing." : "No application templates are available. Refresh the list to load them.");
       $("creator-target-note").textContent = selected ? `${selected.name} · ${array(selected.socs).join(", ") || "Chip unknown"}. Select the full declared target; configuration validates compatibility and resolves defaults.` : "Choose the full target, including any SoC, CPU, variant and revision. Metadata discovery does not establish build compatibility.";
     }
-    for (const [name, input] of Object.entries(fields)) if (input.value !== state.form[name]) input.value = state.form[name];
+    for (const [name, input] of Object.entries(fields)) {
+      const value = name === "template_id" ? creatorTemplateId(form) : form[name];
+      if (input.value !== value) input.value = value ?? "";
+    }
     fields.destination.placeholder = `applications/${state.form.name || "my_app"}`;
   }
   function renderPlan() {
@@ -81,7 +91,7 @@ export function mountCreator(root, context) {
     fact(profile, "Exact target", plan.profile?.target, true);
     fact(profile, "SDK installation", plan.profile?.sdk?.path, true);
     fact(profile, "Zephyr checkout", plan.profile?.zephyr?.path, true);
-    fact(profile, "Template", "Minimal C · version 1");
+    fact(profile, "Template", creatorTemplateLabel(plan.template, state.templates));
     const files = $("preview-files"); files.replaceChildren();
     for (const file of array(plan.files)) {
       const detail = node("details", "projects-preview-file");
@@ -114,7 +124,8 @@ export function mountCreator(root, context) {
     }
     const technical = disclosure("Compiler and output files", `${key}:outputs`);
     const compiler = node("dl", "projects-identity");
-    fact(compiler, "Compiler", attempt.context?.compiler || attempt.context?.c_compiler, true);
+    fact(compiler, "C compiler", attempt.context?.compiler || attempt.context?.c_compiler, true);
+    if (attempt.context?.cxx_compiler) fact(compiler, "C++ compiler", attempt.context.cxx_compiler, true);
     technical.append(compiler, node("p", "projects-muted", "These values were captured for this attempt. Live artifact paths may have changed since then."));
     if (array(attempt.artifacts).length) {
       const list = node("ul", "projects-source-list projects-path");
@@ -133,7 +144,7 @@ export function mountCreator(root, context) {
   }
   function renderProjects(busy) {
     const projects = array(state.projects);
-    const signature = JSON.stringify(projects);
+    const signature = JSON.stringify([projects, state.templates]);
     const target = $("created-projects");
     let focus;
     if (signature !== renderedProjects) {
@@ -148,6 +159,7 @@ export function mountCreator(root, context) {
       for (const project of projects) {
         const card = node("article", "projects-created-app");
         card.append(node("h3", "", project.name), node("p", "projects-path", project.path));
+        card.append(node("p", "projects-muted", creatorTemplateLabel(project.template, state.templates)));
         card.append(configurations.create(project));
         const actions = node("div", "projects-actions");
         for (const [operation, label] of [["configure", "Configure"], ["build", "Build"]]) {
@@ -207,7 +219,7 @@ export function mountCreator(root, context) {
     const busy = Boolean(state.busy || state.loading || array(state.jobs).some(activeJob));
     $("creator-eyebrow").textContent = creating ? "PROJECT CREATOR · NEW APPLICATION" : "PROJECT CREATOR · APPLICATIONS";
     $("creator-title").textContent = creating ? "Create an application." : "Your workspace applications.";
-    $("creator-intro").textContent = creating ? "Choose a destination, board and SDK, then review the files before creation." : "Choose an application's build configuration, configure it or start a build.";
+    $("creator-intro").textContent = creating ? "Choose a template, destination, board and SDK, then review the files before creation." : "Choose an application's build configuration, configure it or start a build.";
     $("creator-page-link").textContent = creating ? "View applications" : "Create application";
     $("creator-page-link").href = creating ? "#/projects/applications" : "#/projects/create";
     $("creator-scope").textContent = creating ? "Creation writes the files you review. Configure or build the new app from Applications when you are ready." : "Configure and Build each use a new output directory and a separate command review. Neither action flashes hardware.";
@@ -220,7 +232,7 @@ export function mountCreator(root, context) {
     $("creator-requirement").textContent = snapshot?.status === "stale" ? "Environment inputs changed during the scan. Analyze again before creating an application." : "Analyze this workspace in Environment before choosing a board and SDK.";
     renderChoices();
     for (const input of Object.values(fields)) input.disabled = Boolean(state.busy === "create" || activeJob(currentCreatorJob(state)));
-    $("preview-submit").disabled = busy || !snapshot || snapshot.status === "stale" || !state.form.board_id || !state.form.target || !state.form.sdk_id || !state.form.name.trim();
+    $("preview-submit").disabled = busy || !selectedCreatorTemplate(state) || !snapshot || snapshot.status === "stale" || !state.form.board_id || !state.form.target || !state.form.sdk_id || !state.form.name.trim();
     $("preview-submit").textContent = state.busy === "preview" ? "Preparing preview…" : "Preview application";
     $("create-submit").disabled = busy || !state.plan;
     $("create-submit").textContent = state.busy === "create" ? "Starting creation…" : "Create application";

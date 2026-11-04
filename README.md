@@ -4,7 +4,7 @@ One local application for Zephyr development, build analysis and experiments.
 
 **Zephyr Utilities 0.2** provides an English, offline interface with shared navigation,
 workspace selection and background jobs. Memory Explorer and Project Creator's environment
-analysis, minimal C application creation and explicit configure/build workflow are available.
+analysis, minimal C/C++ application creation and explicit configure/build workflow are available.
 Advanced Build Inspector reads existing outputs, resolved Device Trees, current sources
 and bindings, and carries the selected image into Memory Explorer for report generation.
 Device Tree Editor is planned as a visual overlay, hardware-module and pin editor.
@@ -98,7 +98,7 @@ branches. See [architecture](docs/architecture.md) and [adding a feature](docs/a
 
 - Analyse the selected local Zephyr environment, browse declared board/chip targets and
   revisions, inspect installed SDKs, and retain environment observations with diagnostics.
-- Create a minimal C application inside the existing workspace from a reviewed file plan.
+- Create a minimal C or C++ application inside the existing workspace from a reviewed file plan.
   Select an exact board target and installed GNU SDK, then explicitly configure or build
   in a fresh output directory with saved commands, logs and attempt evidence.
 - Browse local folders and discover ordinary Zephyr builds and sysbuild images.
@@ -153,7 +153,7 @@ the optional **Advanced → Build Inspector** area. **Device Tree Editor** is pl
 a visual tool for overlays, hardware modules and pin assignment, after the creator workflow.
 
 Use **Create application** or `/#/projects/create` after analysis. Choose the name, new
-destination, exact target and installed GNU SDK; inspect **Preview application**, then
+destination, C or C++ template, exact target and installed GNU SDK; inspect **Preview application**, then
 click **Create application**. Creation writes the reviewed files without starting a build.
 Open **Applications** in the Project Creator sidebar. Choose **Configure** or **Build**, review the exact command and
 new output path, then start that operation. Each attempt retains its outcome and bounded
@@ -167,7 +167,7 @@ selection supports automatic discovery, ordered appended files, or replacement
 application-file lists for Kconfig and Device Tree overlays. Select existing files in
 the application; saving keeps their contents unchanged. Visual overlay editing remains planned.
 
-The first creator supports Linux, one minimal C application/image, an existing resolved
+The creator supports Linux, minimal C/C++ applications with one image, an existing resolved
 west workspace and installed GNU Zephyr SDKs. It rejects existing destinations, symlinked
 application paths and source paths containing whitespace. No flashing, SDK installation,
 workspace update or existing-project import is included. Device Tree editing remains

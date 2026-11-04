@@ -1,7 +1,8 @@
 # Project Creator
 
-Project Creator implements P2 and the named-configuration/fragment slices of the [master plan](project-creator-masterplan.md): a
-minimal C application in the existing workspace, with an exact board target and an
+Project Creator implements P2, the named-configuration/fragment slices of P4 and the
+C++ starter slice of P5 from the [master plan](project-creator-masterplan.md): a
+minimal C or C++ application in the existing workspace, with an exact board target and an
 explicit installed GNU Zephyr SDK. Creation, configuration and compilation are separate
 reviewed actions. Saved applications can have several named target/SDK configurations
 with ordered Kconfig and overlay file selections. Device Tree editing and existing-project
@@ -20,7 +21,8 @@ Advanced inspection is available separately under **Advanced → Build Inspector
 2. Open **Project Creator → Environment**, then **Analyze workspace**. Resolve missing
    tools or unsupported module metadata before creation. Select a board and use
    **Use this board**, or open **Create application** directly.
-3. Enter the application name and destination. The default is
+3. Choose **Minimal C** or **Minimal C++** as the application template, then enter its
+   name and destination. Minimal C remains the default. The default destination is
    `<workspace>/applications/<name>`. The destination must be new, even if an existing
    directory is empty.
 4. Choose the board, its exact declared target and an installed GNU SDK. Target choices
@@ -136,20 +138,31 @@ metadata, API routes and the remaining P3 scope. Overlay editing remains planned
 
 ## Generated files and independent use
 
-The `minimal-c` template, version 1, produces:
+Both built-in templates are version 1. They produce five files:
 
 ```text
 <application>/
   CMakeLists.txt
   prj.conf
-  src/main.c
+  src/main.c        # main.cpp for Minimal C++
   .gitignore
   README.md
 ```
 
-The source has no board-specific LED or sensor requirement. It does not require an
+| Template | Main source | Build setup |
+| --- | --- | --- |
+| Minimal C (`minimal-c`) | `src/main.c` | C application with `CONFIG_PRINTK=y` |
+| Minimal C++ (`minimal-cpp`) | `src/main.cpp` | C/CXX languages, `CONFIG_CPP=y` and `CONFIG_PRINTK=y` |
+
+The C++ starter uses a small `constexpr` greeting and Zephyr's printing API. It does not
+require STL components, exceptions or RTTI, or select a full C++ standard library.
+Additional C++ features can be configured in application fragments later. The selected
+SDK must provide a compatible C++ compiler; explicit configure/build establishes
+compatibility. See [Zephyr's C++ support](https://docs.zephyrproject.org/latest/develop/languages/cpp/index.html).
+
+The sources have no board-specific LED or sensor requirement. They do not require an
 application overlay. The board and SDK appear in build arguments, not in the portable
-C source. Zephyr defines the usual application files and permits direct CMake builds;
+C or C++ source. Zephyr defines the usual application files and permits direct CMake builds;
 see [Zephyr application development](https://docs.zephyrproject.org/latest/develop/application/index.html).
 
 The generated README contains the selected direct CMake/Ninja commands. These work
@@ -163,13 +176,19 @@ workspace, not a portable SDK bundle or a dependency lockfile. Moving a project 
 changing its environment may require adjusting the independent command-line recipe.
 Profile migration and portable recipe export are later work.
 
+Template selection is retained in the reviewed plan and saved application. Changing it
+clears the preview. Existing C applications and generated file contents are unchanged;
+choosing C++ creates a new destination and does not convert an existing app. Only the
+trusted built-in templates are accepted. Local sample cloning remains a later slice
+with separate file-layout, license and dependency checks.
+
 ## Supported scope
 
 | Area | Current support |
 | --- | --- |
 | Host | Linux, with atomic no-replacement directory publication supported by the filesystem |
 | Workspace | Existing local west workspace with a resolved manifest and a nonempty resolved module list |
-| Template | One minimal C application; one image |
+| Template | Minimal C or Minimal C++; one image |
 | Target | Exact discovered hardware-model-v2 board target, including declared revisions and qualifiers |
 | Toolchain | Explicit discovered Zephyr SDK with installed GNU compiler components |
 | Local tools | Selected Python environment, CMake and Ninja; discovered dtc when available |
@@ -237,8 +256,8 @@ not accepted back from an edited browser payload.
 
 | Method and path | Request | Result |
 | --- | --- | --- |
-| `GET /api/projects/creator` | None | `{workspace, snapshot, projects, jobs, diagnostics}`; saved projects include their configurations and attempts; no execution |
-| `POST /api/projects/preview` | `{workspace, name, destination?, board_id, target, sdk_id}` | `{plan}` with exact files, profile, recipe and destination identity |
+| `GET /api/projects/creator` | None | `{workspace, snapshot, templates, projects, jobs, diagnostics}`; saved projects include their configurations and attempts; no execution |
+| `POST /api/projects/preview` | `{workspace, name, destination?, board_id, target, sdk_id, template_id?}` | `{plan}` with exact files, template identity, profile, recipe and destination identity |
 | `POST /api/projects/create` | `{workspace, plan_id}` | HTTP 202 shared create job; completed result contains `project` |
 | `POST /api/projects/configuration-files` | `{workspace, project_id}` | `{workspace, project_id, files: {kconfig, overlays}, diagnostics}`; bounded read-only relative-path catalogue |
 | `POST /api/projects/configurations` | `{workspace, project_id, name, board_id, target, sdk_id, fragments?}` | `{configuration}`; saves metadata only |
@@ -251,6 +270,12 @@ not accepted back from an edited browser payload.
 catalogue; a target must belong to its selected board. Unknown fields and invalid
 selections are rejected. Failure/cancellation attempts remain readable through the
 creator GET even when the shared job has been evicted from in-memory history.
+
+`templates` contains the built-in catalogue's `id`, `version`, `title`, `description`
+and `language`. `template_id` accepts `minimal-c` or `minimal-cpp`; omission selects
+`minimal-c` for earlier clients. Unknown, empty or null IDs are rejected. Publication
+validates the template identity/version and its exact permitted file paths before
+writing. The existing `{id, version}` template identity needs no persistent migration.
 
 An omitted, null or empty `configuration_id` selects the original project profile,
 preserving earlier clients. A supplied configuration must belong to this application
@@ -321,6 +346,22 @@ P2 does not import another feature's private implementation or introduce a share
 `BuildContext` API. See [ADR 0004](decisions/0004-reviewed-project-creation.md).
 
 ## Validation scope
+
+The C++ template slice passed 343 Python tests and 143 frontend tests, quick checks
+and installed-wheel verification. Browser checks covered template selection, file
+preview, preview invalidation, workspace-specific drafts, leaving/reopening the
+feature, saved application identity, collapsed compiler details, keyboard navigation
+and a 600-pixel layout. No browser console warnings or errors were observed.
+
+The exact C++ preview was published in a temporary workspace. The normal Creator
+build service then used the real analyzed environment and an isolated registration
+of that temporary source to compile for `qemu_cortex_m3/ti_lm3s6965` with SDK 1.0.1.
+The generated README commands also configured and compiled independently. Both runs
+produced an ELF; `main.cpp` used `arm-zephyr-eabi-g++`, the captured C++ compiler
+matched, and the generated configuration enabled `CONFIG_CPP=y`. All five source
+files and the original project record stayed unchanged. Publication's workspace was
+synthetic; the build tools and Zephyr checkout were real. No hardware execution was
+validated.
 
 The fragment-selection slice passed 333 Python tests, 136 frontend tests, quick checks
 and installed-wheel verification. Browser checks covered both file categories, ordering,

@@ -2,13 +2,28 @@
 import {activeJob, filterBoards} from "./environment-state.js";
 import {copyFragments, fragmentFormatError, fragmentKinds, fragmentModes, fragmentSelectionError, needsFragmentFiles, profileFragments} from "./fragment-state.js";
 
-const defaults = () => ({name: "my_app", destination: "", search: "", board_id: "", target: "", sdk_id: ""});
+const defaults = () => ({name: "my_app", destination: "", search: "", board_id: "", target: "", sdk_id: "", template_id: "minimal-c"});
 const configurationDefaults = () => ({name: "", search: "", board_id: "", target: "", sdk_id: ""});
 const array = (value) => Array.isArray(value) ? value : [];
+const templateLanguages = {"minimal-c": "C", "minimal-cpp": "C++"};
+export function creatorTemplates(value) {
+  if (!Array.isArray(value) || value.length > 2 || new Set(value.map((entry) => entry?.id)).size !== value.length) return [];
+  if (!value.every((entry) => entry && Object.hasOwn(templateLanguages, entry.id) && entry.version === 1 && entry.language === templateLanguages[entry.id]
+    && typeof entry.title === "string" && entry.title.trim() && typeof entry.description === "string" && entry.description.trim())) return [];
+  return value;
+}
+export const creatorTemplateId = (form) => form.template_id === undefined ? "minimal-c" : form.template_id;
+export const selectedCreatorTemplate = (state) => creatorTemplates(state.templates).find((entry) => entry.id === creatorTemplateId(state.form)) || null;
+export function creatorTemplateLabel(template, templates) {
+  const descriptor = creatorTemplates(templates).find((entry) => entry.id === template?.id && entry.version === template?.version);
+  const title = descriptor?.title || (template?.version === 1 && Object.hasOwn(templateLanguages, template?.id) ? `Minimal ${templateLanguages[template.id]}` : template?.id);
+  return title ? `${title} · version ${template.version ?? "unknown"}` : "Template unknown";
+}
 export const creatorBoards = (snapshot, query = "") => filterBoards(array(snapshot?.boards).filter((board) => board.status === "discovered" && array(board.targets).length), array(snapshot?.socs), {query});
 export const creatorSdks = (snapshot) => array(snapshot?.sdks).filter((sdk) => sdk.status === "discovered" && array(sdk.toolchains).some((toolchain) => toolchain.family === "GNU" && toolchain.compiler));
 export function creatorBody(form) {
-  return Object.fromEntries(["name", "destination", "board_id", "target", "sdk_id"].map((key) => [key, String(form[key] || "").trim()]));
+  return {...Object.fromEntries(["name", "destination", "board_id", "target", "sdk_id"].map((key) => [key, String(form[key] || "").trim()])),
+    ...(creatorTemplateId(form) === "minimal-c" ? {} : {template_id: form.template_id})};
 }
 export function configurationBody(form) {
   return {...Object.fromEntries(["name", "board_id", "target", "sdk_id"].map((key) => [key, String(form[key] || "").trim()])),
@@ -53,7 +68,7 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
       state.formsByWorkspace[state.workspace] = {...state.form};
     }
     epoch++; formRevision++; buildRevision++; configurationRevision++; fileSequence++;
-    Object.assign(state, {workspace: path, snapshot: null, projects: [], jobs: [], diagnostics: [], jobId: null, plan: null, buildPlan: null, error: "", loading: false, busy: "", cancelling: false, form: {...defaults(), ...state.formsByWorkspace?.[path]}, configurationSelections: {}, configurationDrafts: {}, configurationEditor: "", configurationNotice: null, configurationFiles: {}});
+    Object.assign(state, {workspace: path, snapshot: null, templates: [], projects: [], jobs: [], diagnostics: [], jobId: null, plan: null, buildPlan: null, error: "", loading: false, busy: "", cancelling: false, form: {...defaults(), ...state.formsByWorkspace?.[path]}, configurationSelections: {}, configurationDrafts: {}, configurationEditor: "", configurationNotice: null, configurationFiles: {}});
     return true;
   }
   function choosePending() {
@@ -68,6 +83,9 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
   }
   function acceptData(data) {
     if (data.workspace !== state.workspace) return;
+    const templates = creatorTemplates(data.templates);
+    if (JSON.stringify(templates) !== JSON.stringify(state.templates)) { state.plan = null; formRevision++; }
+    state.templates = templates;
     const snapshot = data.snapshot?.workspace?.path === state.workspace ? data.snapshot : null;
     if (snapshot?.fingerprint !== state.snapshot?.fingerprint) { state.plan = null; state.buildPlan = null; formRevision++; buildRevision++; configurationRevision++; }
     const previousProjects = array(state.projects);
@@ -258,7 +276,10 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
     state.jobId = job.id; state.plan = null; state.buildPlan = null;
     state.needsReload = true;
   }
-  const preview = () => action("preview", "/api/projects/preview", () => creatorBody(state.form), (data) => {
+  const preview = () => action("preview", "/api/projects/preview", () => {
+    if (!selectedCreatorTemplate(state)) throw new Error("Choose an available application template before previewing. Refresh the list if no templates are available.");
+    return creatorBody(state.form);
+  }, (data) => {
     if (data.plan?.workspace === state.workspace) state.plan = data.plan;
   }, {review: () => formRevision});
   const create = () => {

@@ -14,10 +14,10 @@ import sys
 import uuid
 
 from .probing import check_cancel
+from .templates import render_template, select_template, template_paths, validate_template
 
 
 SCHEMA_VERSION = 1
-TEMPLATE = {"id": "minimal-c", "version": 1}
 _NAME = re.compile(r"[A-Za-z][A-Za-z0-9_-]{0,63}\Z")
 _DIRECTORY_FLAGS = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
 _RESERVED = {".west", ".venv", ".git", ".features", "build", "node_modules"}
@@ -222,8 +222,9 @@ def select_profile(workspace, body, snapshot):
 
 def preview_project(workspace, body, snapshot, *, recipe_factory=None):
     """Prepare all source bytes and identities without writing or configuring anything."""
-    if not isinstance(body, dict) or set(body) - {"name", "destination", "board_id", "target", "sdk_id"}:
+    if not isinstance(body, dict) or set(body) - {"name", "destination", "board_id", "target", "sdk_id", "template_id"}:
         raise ValueError("Unknown project creation option.")
+    template = select_template(body.get("template_id", "minimal-c"))
     name = body.get("name")
     if not isinstance(name, str) or not _NAME.fullmatch(name):
         raise ValueError("Application names need a leading letter and up to 64 letters, digits, underscores or hyphens.")
@@ -241,31 +242,9 @@ def preview_project(workspace, body, snapshot, *, recipe_factory=None):
         from .builds import command_recipe
         recipe_factory = command_recipe
     recipe = recipe_factory(profile, destination, destination / "build" / "manual")
-    readme = (f"# {name}\n\nA minimal Zephyr C application generated from the minimal-c template, version 1.\n\n"
-              "The application sources do not depend on Zephyr Utilities. The selected board and SDK\n"
-              "are arguments to the following commands, not hardcoded into the source.\n\n"
-              f"Requested target: `{profile['target']}`.\n\n"
-              "Run the commands from the workspace shown below. They configure and compile only;\n"
-              "they do not flash hardware. Local CMake and toolchain code will run.\n\n"
-              f"Working directory: `{recipe['cwd']}`\n\n"
-              f"```sh\n{recipe['display_configure']}\n{recipe['display_build']}\n```\n\n"
-              "The commands use build/manual. Choose a different build directory after changing\n"
-              "the target, SDK or configuration; no automatic pristine deletion is performed.\n"
-              "Zephyr Utilities uses a new build/<attempt-id> directory for every UI attempt.\n\n"
-              "A successful build validates compilation only, not operation on hardware.\n")
-    contents = {
-        "CMakeLists.txt": ("cmake_minimum_required(VERSION 3.20.0)\n\n"
-                           "find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})\n"
-                           f"project({name} LANGUAGES C)\n\n"
-                           "target_sources(app PRIVATE src/main.c)\n"),
-        "prj.conf": "# Application configuration, independent of board selection.\nCONFIG_PRINTK=y\n",
-        "src/main.c": ("#include <zephyr/kernel.h>\n\nint main(void)\n{\n"
-                       f'\tprintk("Hello from {name}!\\n");\n\treturn 0;\n}}\n'),
-        ".gitignore": "/build/\n",
-        "README.md": readme,
-    }
+    contents = render_template(template, name, profile, recipe)
     return {"schema_version": SCHEMA_VERSION, "id": uuid.uuid4().hex, "workspace": str(workspace),
-            "name": name, "destination": str(destination), "profile": profile, "template": dict(TEMPLATE),
+            "name": name, "destination": str(destination), "profile": profile, "template": template,
             "files": [{"path": path, "content": content, "sha256": _hash(content.encode())}
                       for path, content in contents.items()],
             "destination_identity": identity, "recipe": recipe, "created_at": _now()}
@@ -360,9 +339,11 @@ def _directory_names(descriptor):
 
 
 def _validate_staging(directory, source, source_identity, files):
+    expected_root = {Path(item["path"]).parts[0] for item in files}
+    expected_source = {Path(item["path"]).name for item in files if Path(item["path"]).parent == Path("src")}
     if (not _same_directory(directory, "src", source_identity) or
-            set(_directory_names(directory)) != {"CMakeLists.txt", "prj.conf", "README.md", ".gitignore", "src"} or
-            _directory_names(source) != ["main.c"]):
+            set(_directory_names(directory)) != expected_root or
+            set(_directory_names(source)) != expected_source):
         raise ValueError("The staged application changed during creation; foreign files were preserved.")
     for item in files:
         relative = Path(item["path"])
@@ -380,11 +361,12 @@ def apply_project(plan, *, cancel=None):
     """Publish exactly the retained preview. The caller rechecks environment freshness."""
     if plan.get("schema_version") != SCHEMA_VERSION:
         raise ValueError("Unsupported project change-plan schema.")
+    template = validate_template(plan.get("template"))
     destination = _path(plan["destination"], "Destination")
     if _destination_identity(destination) != plan["destination_identity"]:
         raise ValueError("The destination ancestors changed after preview. Preview again.")
     files = plan["files"]
-    expected_names = {"CMakeLists.txt", "prj.conf", "src/main.c", ".gitignore", "README.md"}
+    expected_names = template_paths(template)
     if len(files) != len(expected_names) or {item["path"] for item in files} != expected_names:
         raise ValueError("The change plan contains unsupported generated files.")
     if any(_hash(item["content"].encode()) != item["sha256"] for item in files):
@@ -444,7 +426,7 @@ def apply_project(plan, *, cancel=None):
         ancestry.append({"path": str(destination), **stage_identity})
         return {"schema_version": SCHEMA_VERSION, "id": uuid.uuid4().hex, "workspace": plan["workspace"],
                 "name": plan["name"], "path": str(destination), "profile": deepcopy(plan["profile"]),
-                "template": dict(TEMPLATE), "directory_identity": ancestry,
+                "template": template, "directory_identity": ancestry,
                 "files": [{"path": item["path"], "sha256": item["sha256"]} for item in files],
                 "diagnostics": diagnostics, "created_at": _now()}
     finally:

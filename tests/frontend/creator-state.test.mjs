@@ -1,9 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {createCreatorSession, creatorBody, creatorBoards, creatorSdks, currentCreatorJob} from "../../src/zephyr_utilities/features/projects/web/creator-state.js";
+import {createCreatorSession, creatorBody, creatorBoards, creatorSdks, creatorTemplates, creatorTemplateId, creatorTemplateLabel, selectedCreatorTemplate, currentCreatorJob} from "../../src/zephyr_utilities/features/projects/web/creator-state.js";
 
 const one = "/workspace/one";
 const two = "/workspace/two";
+const templates = [
+  {id: "minimal-c", version: 1, title: "Minimal C", description: "A small C application.", language: "C"},
+  {id: "minimal-cpp", version: 1, title: "Minimal C++", description: "A small C++ application.", language: "C++"},
+];
 const snapshot = (path = one, fingerprint = "baseline") => ({id: "observation", fingerprint, workspace: {path}, status: "complete", boards: [
   {id: "board-one", name: "alpha_kit", full_name: "Alpha Kit", status: "discovered", socs: ["alpha33"], targets: ["alpha_kit/alpha33", "alpha_kit@2/alpha33/ns"]},
   {id: "conflict", name: "duplicate", status: "conflict", targets: ["duplicate/beta"]},
@@ -13,9 +17,10 @@ const snapshot = (path = one, fingerprint = "baseline") => ({id: "observation", 
   {id: "llvm", status: "discovered", toolchains: [{family: "LLVM", name: "llvm", compiler: "/sdk/clang"}]},
 ]});
 const project = (path = one) => ({id: "project-one", name: "demo", workspace: path, path: `${path}/applications/demo`, attempts: []});
-const response = (path = one, jobs = []) => ({workspace: path, snapshot: snapshot(path), projects: [project(path)], jobs});
+const response = (path = one, jobs = []) => ({workspace: path, snapshot: snapshot(path), projects: [project(path)], jobs, templates});
 const form = {name: "demo", destination: "applications/demo", search: "", board_id: "board-one", target: "alpha_kit@2/alpha33/ns", sdk_id: "sdk-one"};
 function harness(api, state = {}, pendingBoard) {
+  if (!Object.hasOwn(state, "templates")) state.templates = templates;
   let path = one;
   const scheduled = new Map();
   let nextTimer = 0;
@@ -29,6 +34,99 @@ test("creator offers discovered targets and installed GNU SDKs without inventing
   assert.deepEqual(creatorBoards(snapshot(), "KIT @2").map((board) => board.id), ["board-one"]);
   assert.deepEqual(creatorSdks(snapshot()).map((sdk) => sdk.id), ["sdk-one"]);
   assert.deepEqual(creatorBody({...form, name: " demo ", search: "UI only"}), {name: "demo", destination: "applications/demo", board_id: "board-one", target: "alpha_kit@2/alpha33/ns", sdk_id: "sdk-one"});
+});
+
+test("legacy forms keep the C default while explicit C++ reaches the preview request", async () => {
+  const calls = [];
+  const app = harness(async (path, options) => { calls.push(options.body); return {plan: {id: "review", workspace: one}}; }, {workspace: one, snapshot: snapshot(), form: {...form}});
+  assert.equal(creatorTemplateId(app.state.form), "minimal-c");
+  assert.equal(selectedCreatorTemplate(app.state).language, "C");
+  assert.deepEqual(creatorBody({...form, template_id: "minimal-c"}), creatorBody(form));
+  app.session.changeField("template_id", "minimal-cpp");
+  await app.session.preview();
+  assert.equal(calls[0].template_id, "minimal-cpp");
+  assert.equal(selectedCreatorTemplate(app.state).language, "C++");
+  app.session.dispose();
+});
+
+test("switching template clears the review and discards a late previous-template preview", async () => {
+  const pending = deferred();
+  const app = harness(async () => pending.promise, {workspace: one, snapshot: snapshot(), form: {...form}});
+  app.state.plan = {id: "old", workspace: one};
+  const preview = app.session.preview();
+  app.session.changeField("template_id", "minimal-cpp");
+  assert.equal(app.state.plan, null);
+  pending.resolve({plan: {id: "late-c", workspace: one, template: {id: "minimal-c", version: 1}}});
+  await preview;
+  assert.equal(app.state.plan, null);
+  app.session.dispose();
+});
+
+test("template choice survives workspace round trips and remount without restoring a review", async () => {
+  let returnedPath = one;
+  const app = harness(async () => response(returnedPath), {workspace: one, form: {...form, template_id: "minimal-cpp"}});
+  app.changeWorkspace(two); returnedPath = two; await app.session.load();
+  assert.equal(creatorTemplateId(app.state.form), "minimal-c");
+  app.changeWorkspace(one); returnedPath = one; await app.session.load();
+  assert.equal(creatorTemplateId(app.state.form), "minimal-cpp");
+  app.state.plan = {id: "old", workspace: one};
+  app.session.dispose();
+  const reopened = harness(async () => response(), app.state);
+  await reopened.session.load();
+  assert.equal(selectedCreatorTemplate(reopened.state).id, "minimal-cpp");
+  assert.equal(reopened.state.plan, null);
+  reopened.session.dispose();
+});
+
+test("unavailable or malformed template catalogues never silently retarget a saved choice", async () => {
+  for (const catalogue of [[], undefined, null, [{}], [templates[0]], [templates[1], templates[1]], [{...templates[1], version: 2}], [{...templates[1], language: "C"}]]) {
+    let writes = 0;
+    const app = harness(async (path, options) => {
+      if (options.method) writes++;
+      return {...response(), templates: catalogue};
+    }, {workspace: one, snapshot: snapshot(), form: {...form, template_id: "minimal-cpp"}});
+    app.state.plan = {id: "old", workspace: one};
+    await app.session.load();
+    assert.equal(app.state.plan, null);
+    assert.equal(creatorTemplateId(app.state.form), "minimal-cpp");
+    assert.equal(selectedCreatorTemplate(app.state), null);
+    await app.session.preview();
+    assert.equal(writes, 0);
+    assert.match(app.state.error, /Choose an available application template/);
+    app.session.dispose();
+  }
+  assert.deepEqual(creatorTemplates([{...templates[0], id: "other"}]), []);
+});
+
+test("unknown and empty template selections cannot submit a preview", async () => {
+  for (const template_id of ["other", "", null]) {
+    let calls = 0;
+    const app = harness(async () => { calls++; }, {workspace: one, snapshot: snapshot(), form: {...form, template_id}});
+    await app.session.preview();
+    assert.equal(calls, 0);
+    assert.equal(app.state.form.template_id, template_id);
+    assert.equal(app.state.plan, null);
+    app.session.dispose();
+  }
+});
+
+test("catalogue changes invalidate an in-flight template review", async () => {
+  const pending = deferred();
+  const app = harness(async (path) => path.endsWith("preview") ? pending.promise : {...response(), templates: [templates[0]]},
+    {workspace: one, snapshot: snapshot(), form: {...form, template_id: "minimal-cpp"}});
+  const preview = app.session.preview();
+  await app.session.load();
+  pending.resolve({plan: {id: "late-cpp", workspace: one}}); await preview;
+  assert.equal(app.state.plan, null);
+  assert.equal(app.state.form.template_id, "minimal-cpp");
+  app.session.dispose();
+});
+
+test("template labels use recorded identity for C and C++ and retain unknown identities", () => {
+  assert.equal(creatorTemplateLabel({id: "minimal-cpp", version: 1}, templates), "Minimal C++ · version 1");
+  assert.equal(creatorTemplateLabel({id: "minimal-c", version: 1}, []), "Minimal C · version 1");
+  assert.equal(creatorTemplateLabel({id: "future-template", version: 2}, templates), "future-template · version 2");
+  assert.equal(creatorTemplateLabel(null, templates), "Template unknown");
 });
 
 test("opening creator reads saved projects and jobs without creating or building", async () => {

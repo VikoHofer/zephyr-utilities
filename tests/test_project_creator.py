@@ -56,8 +56,9 @@ class CreatorServiceTests(unittest.TestCase):
     def body(self, **values):
         return {"workspace": str(self.workspace), **values}
 
-    def preview(self):
-        return self.call("POST", "preview", self.body(name="demo_app", board_id="board-one", target="demo/chip", sdk_id="sdk-one")).data["plan"]
+    def preview(self, **changes):
+        values = {"name": "demo_app", "board_id": "board-one", "target": "demo/chip", "sdk_id": "sdk-one", **changes}
+        return self.call("POST", "preview", self.body(**values)).data["plan"]
 
     def create(self):
         plan = self.preview()
@@ -79,6 +80,54 @@ class CreatorServiceTests(unittest.TestCase):
         self.assertIn("display_configure", plan["recipe"])
         self.analyze.assert_not_called()
         self.assertFalse(self.creator.store.root.exists())
+
+    def test_template_catalog_has_independent_public_descriptors(self):
+        templates = self.call("GET", "creator").data["templates"]
+        self.assertEqual([item["id"] for item in templates], ["minimal-c", "minimal-cpp"])
+        self.assertEqual([item["title"] for item in templates], ["Minimal C", "Minimal C++"])
+        self.assertEqual([item["language"] for item in templates], ["C", "C++"])
+        for template in templates:
+            self.assertEqual(set(template), {"id", "version", "title", "description", "language"})
+            self.assertEqual(template["version"], 1)
+            self.assertTrue(template["description"])
+        templates[0]["id"] = "replaced"
+        self.assertEqual(self.call("GET", "creator").data["templates"][0]["id"], "minimal-c")
+        self.analyze.assert_not_called()
+        self.assertFalse(self.creator.store.root.exists())
+
+    def test_cpp_preview_identity_is_retained_and_persists_after_reopening(self):
+        plan = self.preview(template_id="minimal-cpp")
+        expected_template = {"id": "minimal-cpp", "version": 1}
+        self.assertEqual(plan["template"], expected_template)
+        # Only the retained plan is applied, regardless of changes to the
+        # response object in the caller or template overrides at creation.
+        plan["template"]["id"] = "minimal-c"
+        with self.assertRaisesRegex(ValueError, "Unknown project operation option"):
+            self.call("POST", "create", self.body(plan_id=plan["id"], template_id="minimal-c"))
+        with patch("zephyr_utilities.features.projects.creator.execute_build") as execute:
+            response = self.call("POST", "create", self.body(plan_id=plan["id"]))
+            job = wait_job(self.app.context.jobs, response.data["id"])
+            self.assertEqual(job["status"], "completed", job.get("error"))
+            execute.assert_not_called()
+        project = job["result"]["project"]
+        self.assertEqual(project["template"], expected_template)
+        self.assertTrue((Path(project["path"]) / "src/main.cpp").is_file())
+        reopened = Application(self.workspace, self.root / "data")
+        self.addCleanup(reopened.close)
+        saved = reopened.context.services["project_creator"].current()["projects"][0]
+        self.assertEqual(saved["template"], expected_template)
+        self.assertEqual(saved["attempts"], [])
+        self.assertIn("src/main.cpp", {item["path"] for item in saved["files"]})
+        self.assertIn("src/main.cpp", {item["path"] for item in source_inputs(saved["path"])["files"]})
+
+    def test_invalid_preview_template_ids_do_not_submit_jobs_or_write(self):
+        for template_id in ("", None, "unknown", {}, ["minimal-c"], True):
+            with self.subTest(template_id=template_id), self.assertRaisesRegex(ValueError, "application template"):
+                self.preview(template_id=template_id)
+        self.assertEqual(self.app.context.jobs.list(), [])
+        self.assertEqual(self.creator.plans, {})
+        self.assertFalse((self.workspace / "applications").exists())
+        self.analyze.assert_not_called()
 
     def test_create_rechecks_then_persists_and_remains_separate_from_build(self):
         with patch("zephyr_utilities.features.projects.creator.execute_build") as execute:
@@ -303,4 +352,17 @@ class CreatorHttpTests(unittest.TestCase):
                     self.request("/api/projects/" + endpoint, body={}, **values)
                 self.assertEqual(error.exception.code, expected)
         with self.request("/api/projects/creator") as response:
-            self.assertEqual(json.load(response)["projects"], [])
+            data = json.load(response)
+            self.assertEqual(data["projects"], [])
+            self.assertEqual([item["id"] for item in data["templates"]], ["minimal-c", "minimal-cpp"])
+
+    def test_preview_rejects_invalid_template_ids_over_http(self):
+        self.server.app.context.services["projects"].store.save(existing_api.observation(self.root, {}))
+        for template_id in ("", None, "unknown", {}, ["minimal-c"], True):
+            body = {"workspace": str(self.root), "name": "demo_app", "template_id": template_id}
+            with self.subTest(template_id=template_id), self.assertRaises(HTTPError) as error:
+                self.request("/api/projects/preview", method="POST", body=body)
+            self.assertEqual(error.exception.code, 400)
+            self.assertIn("application template", json.load(error.exception)["error"])
+        self.assertEqual(self.server.app.context.jobs.list(), [])
+        self.assertFalse((self.root / "applications").exists())

@@ -102,9 +102,6 @@
 .projects-feature a.projects-button {text-decoration:none}
 .projects-feature .projects-full-width {grid-column:1/-1}
 .projects-feature .projects-input-help {display:block;color:#7b887b;font-size:10px;font-weight:400;margin-top:5px}
-.projects-feature .projects-template {padding:14px 17px;margin:21px 0;border-left:3px solid #bdd1b8;background:#f5f8f0;border-radius:0 6px 6px 0}
-.projects-feature .projects-template strong {font-size:12px;color:#456a51}
-.projects-feature .projects-template p {font-size:11px;color:#71816d;margin-top:5px}
 .projects-feature .projects-preview-file {border-top:1px solid #e5ebde;padding:3px 0 10px}
 .projects-feature .projects-preview-file summary {font-size:11px}
 .projects-feature .projects-recipe {margin-top:13px}
