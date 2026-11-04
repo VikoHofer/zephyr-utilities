@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Zephyr Utilities</title>
+  <link rel="stylesheet" href="/shell.css">
+  <script type="module" src="/shell.js"></script>
+</head>
+<body>
+  <a class="app-skip" href="#app-main">Skip to content</a>
+  <aside class="app-sidebar">
+    <a class="app-brand" href="#/home"><span class="app-mark" aria-hidden="true">z<span>↗</span></span><span>Zephyr Utilities<small>YOUR DEVELOPMENT WORKSPACE</small></span></a>
+    <button id="workspace-open" class="workspace-switch" aria-haspopup="dialog"><span class="app-caption">WORKSPACE</span><strong id="workspace-name">Connecting…</strong><span class="workspace-change">Switch workspace <span aria-hidden="true">↗</span></span></button>
+    <div class="app-caption nav-caption">TOOLS</div>
+    <nav id="app-navigation" aria-label="Application navigation"><a class="app-nav active" href="#/home"><span aria-hidden="true">◫</span> Home</a></nav>
+    <div class="app-local"><span class="app-dot"></span> Running on your computer<small>One launch. All your Zephyr tools.</small><span id="app-version"></span></div>
+  </aside>
+  <div class="app-body">
+    <header class="app-topbar"><div><span class="app-caption">ZEPHYR UTILITIES</span><strong id="app-title">Home</strong></div><div class="app-topbar-actions"><button id="app-jobs" class="app-job-link" hidden></button><span class="app-local-badge"><span class="app-dot"></span> LOCAL</span></div></header>
+    <div id="app-notice" class="app-notice" role="status" hidden><span id="app-notice-text"></span><button id="app-notice-close" aria-label="Dismiss notification">×</button></div>
+    <main id="app-main" tabindex="-1"><div class="app-loading">Connecting to your local workspace…</div></main>
+  </div>
+  <dialog id="workspace-dialog" class="app-dialog" aria-labelledby="workspace-dialog-title">
+    <div class="app-dialog-heading"><div><span class="app-caption">SHARED BY ALL TOOLS</span><h2 id="workspace-dialog-title">Choose a workspace</h2></div><button id="workspace-close" class="app-icon-button" aria-label="Close workspace picker">×</button></div>
+    <p>Choose the folder your tools use as their starting point. Saved snapshots stay available when you switch.</p>
+    <form id="workspace-form"><label for="workspace-path">Workspace directory</label><div class="workspace-input"><input id="workspace-path" type="text" required spellcheck="false" autocomplete="off"><button class="app-button">Browse</button></div></form>
+    <div id="workspace-error" class="app-dialog-error" role="alert" hidden></div>
+    <button id="workspace-parent" class="app-text-button">↑ Parent folder</button>
+    <div id="workspace-folders" class="workspace-folders"></div>
+    <div class="app-dialog-actions"><button id="workspace-save" class="app-button primary">Use this workspace</button></div>
+  </dialog>
+  <noscript><p class="app-noscript">JavaScript is required to run Zephyr Utilities. All application assets are served locally.</p></noscript>
+</body>
+</html>

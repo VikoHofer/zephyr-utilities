@@ -1,0 +1,42 @@
+<section class="projects-feature" data-projects-root>
+  <header class="projects-heading">
+    <div><span class="projects-eyebrow">PROJECT CREATOR · ENVIRONMENT</span><h1>Know your workspace.</h1><p>Discover the boards, chips and SDKs available in your local Zephyr environment.</p></div>
+    <span class="projects-label">Analysis available</span>
+  </header>
+  <section class="projects-workspace" aria-label="Selected workspace">
+    <div class="projects-workspace-info"><span class="projects-eyebrow">SELECTED WORKSPACE</span><p data-workspace class="projects-path"></p><p class="projects-muted">Use the shared workspace switcher to choose another folder.</p></div>
+    <div class="projects-actions"><button type="button" class="projects-button primary" data-analyze>Analyze workspace</button><button type="button" class="projects-button" data-rescan>Full rescan</button></div>
+  </section>
+  <p class="projects-scope">Offline discovery only. Project creation and Device Tree editing are planned next. Analysis does not configure, build, install or update firmware tools.</p>
+  <details class="projects-options">
+    <summary>Additional discovery paths</summary>
+    <p class="projects-muted">Optional overrides for this scan. Enter one root or SDK installation per line. Board roots contain a boards/ folder; chip roots contain a soc/ folder.</p>
+    <div class="projects-option-grid">
+      <label>Zephyr checkout<input data-option="zephyr_base" type="text" spellcheck="false" placeholder="Automatic workspace discovery"></label>
+      <label>Installed SDK paths<textarea data-option="sdk_paths" rows="2" spellcheck="false" placeholder="/path/to/zephyr-sdk"></textarea></label>
+      <label>Additional board roots<textarea data-option="board_roots" rows="2" spellcheck="false" placeholder="/path/to/custom-hardware"></textarea></label>
+      <label>Additional chip roots<textarea data-option="soc_roots" rows="2" spellcheck="false" placeholder="/path/to/custom-hardware"></textarea></label>
+    </div>
+  </details>
+  <div class="projects-error" role="alert" data-error hidden></div>
+  <section class="projects-job" data-job hidden aria-label="Analysis progress">
+    <div class="projects-section-heading"><div><h2 data-job-title>Analyzing workspace</h2><p data-job-status role="status" aria-live="polite"></p></div><button type="button" class="projects-button" data-cancel>Cancel scan</button></div>
+    <details><summary>Scan log</summary><pre data-logs></pre></details>
+  </section>
+  <div data-empty class="projects-empty"><span class="projects-empty-symbol" aria-hidden="true">⌕</span><h2>Your environment, discovered locally.</h2><p>Analyze this workspace to browse boards and chips, inspect installed SDKs, and identify missing tools.</p></div>
+  <div data-results hidden>
+    <div class="projects-result-heading"><div><h2>Environment overview</h2><p data-snapshot-meta class="projects-muted"></p></div><span data-snapshot-status class="projects-label"></span></div>
+    <div class="projects-banner" data-freshness></div>
+    <div class="projects-metrics" data-metrics></div>
+    <section class="projects-panel" aria-label="Environment identity"><div class="projects-identity" data-identity></div><details><summary>Tools, workspace projects and discovery roots</summary><div data-tools></div><div data-modules></div><div data-roots></div></details></section>
+    <section class="projects-panel" aria-labelledby="projects-sdk-heading"><div class="projects-section-heading"><div><h2 id="projects-sdk-heading">Installed SDKs</h2><p class="projects-muted">Installation discovery does not establish compatibility with a particular build.</p></div></div><div data-sdks class="projects-sdks"></div></section>
+    <section class="projects-panel" aria-labelledby="projects-boards-heading">
+      <div class="projects-section-heading"><div><h2 id="projects-boards-heading">Boards and chips</h2><p class="projects-muted">Inspect exact targets, revisions and where their definitions come from.</p></div><span data-board-count class="projects-muted" role="status"></span></div>
+      <div class="projects-filters"><label>Search boards or targets<input type="search" data-query placeholder="Board name, target, vendor…"></label><label>Chip or family<input type="search" data-chip placeholder="SoC name or family…"></label><label>Vendor<select data-vendor><option value="">All vendors</option></select></label></div>
+      <details class="projects-chip-browser"><summary data-chip-summary>Browse discovered chips</summary><p class="projects-muted">Choose a chip to filter boards. A chip without a board target needs a board port.</p><div data-chips class="projects-chip-list"></div><button type="button" class="projects-button" data-more-chips hidden>Show more chips</button></details>
+      <div class="projects-catalogue"><div class="projects-board-list"><div data-boards></div><button type="button" class="projects-button projects-more" data-more hidden>Show more boards</button></div><aside class="projects-board-detail" data-detail aria-label="Board details"><p class="projects-muted">Choose a board to inspect its targets and source information.</p></aside></div>
+    </section>
+    <section class="projects-panel" aria-labelledby="projects-diagnostics-heading"><div class="projects-section-heading"><h2 id="projects-diagnostics-heading">Diagnostics</h2><span data-diagnostic-count class="projects-muted"></span></div><div data-diagnostics></div></section>
+    <details class="projects-panel projects-provenance"><summary>Analysis provenance and catalogue changes</summary><div data-provenance></div></details>
+  </div>
+</section>

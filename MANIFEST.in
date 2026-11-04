@@ -1,0 +1,4 @@
+include README.md
+recursive-include src/zephyr_utilities/web *.html *.css *.js *.svg *.png *.jpg *.jpeg *.woff2
+recursive-include src/zephyr_utilities/features *.html *.css *.js *.svg *.png *.jpg *.jpeg *.woff2
+global-exclude __pycache__ *.py[cod]
