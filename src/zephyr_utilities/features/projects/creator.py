@@ -14,6 +14,7 @@ from .analyzer import analyze_environment, digest
 from .builds import command_recipe, execute_build
 from .creation import apply_project, open_directory, path_identity, preview_project, select_profile, validate_identity
 from .execution_identity import execution_guard
+from .fragments import discover_fragment_files, profile_fragments, validate_fragment_files
 from .metadata import read_regular
 from .probing import check_cancel
 from .records import ProjectStore, configuration_name, identifier, now
@@ -144,13 +145,24 @@ class CreatorService:
         return self.context.jobs.submit("projects", run, resource_key=f"create:{plan['destination']}",
                                         metadata={"workspace": workspace, "operation": "create", "view": "create", "plan_id": plan["id"]})
 
+    def configuration_files(self, body):
+        workspace = self._workspace(body, {"project_id"})
+        project = self.store.project(body.get("project_id"), workspace)
+        validate_identity(project["path"], project["directory_identity"])
+        catalogue = discover_fragment_files(project["path"])
+        validate_identity(project["path"], project["directory_identity"])
+        return {"workspace": workspace, "project_id": project["id"], **catalogue}
+
     def save_configuration(self, body):
-        workspace = self._workspace(body, {"project_id", "name", "board_id", "target", "sdk_id"})
+        workspace = self._workspace(body, {"project_id", "name", "board_id", "target", "sdk_id", "fragments"})
         name = configuration_name(body.get("name"))
         project = self.store.project(body.get("project_id"), workspace)
         validate_identity(project["path"], project["directory_identity"])
         snapshot = self.environments.latest(workspace)
         profile = select_profile(workspace, body, snapshot)
+        if "fragments" in body:
+            profile["fragments"] = validate_fragment_files(project["path"], body["fragments"])
+            profile["schema_version"] = 2
         profile["execution_fingerprint"] = execution_guard(snapshot, profile)
         command_recipe(profile, project["path"], Path(project["path"]) / "build" / "manual")
         configuration = {"schema_version": 1, "id": uuid.uuid4().hex, "project_id": project["id"],
@@ -175,6 +187,7 @@ class CreatorService:
             configuration = {"id": saved["id"], "name": saved["name"]}
         source = Path(project["path"])
         validate_identity(source, project["directory_identity"])
+        validate_fragment_files(source, profile_fragments(profile))
         sources = source_inputs(source)
         parent = source / "build"
         parent_identity = path_identity(parent) if parent.exists() or parent.is_symlink() else None

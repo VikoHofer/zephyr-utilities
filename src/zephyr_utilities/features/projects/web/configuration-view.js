@@ -1,14 +1,17 @@
 import {creatorBoards, creatorSdks, selectedConfiguration} from "./creator-state.js";
+import {copyFragments, fragmentSelectionError} from "./fragment-state.js";
+import {appendFragmentFacts, createFragmentView} from "./fragment-view.js";
 
 const array = (value) => Array.isArray(value) ? value : [];
 
 /** Keep configuration controls mounted while drafts and filtered choices change. */
 export function createConfigurationView({node, fact, choices}) {
+  const fragmentView = createFragmentView({node, choices});
   function captureFocus(root) {
     const control = root.ownerDocument.activeElement;
     const section = control?.closest("[data-configuration-project]");
     if (!section || !root.contains(section)) return null;
-    const attribute = ["data-configuration-select", "data-configuration-field", "data-configuration-add", "data-configuration-save", "data-configuration-close"].find((name) => control.hasAttribute(name));
+    const attribute = ["data-configuration-select", "data-configuration-field", "data-configuration-add", "data-configuration-save", "data-configuration-close", "data-fragment-control"].find((name) => control.hasAttribute(name));
     if (!attribute) return null;
     return {project: section.dataset.configurationProject, attribute, value: control.getAttribute(attribute),
       start: control.selectionStart, end: control.selectionEnd, direction: control.selectionDirection};
@@ -39,7 +42,7 @@ export function createConfigurationView({node, fact, choices}) {
     form.id = `configuration-form-${project.id}`;
     form.dataset.configurationForm = project.id;
     form.setAttribute("aria-label", `New build configuration for ${project.name}`);
-    form.append(node("h4", "", "Add a build configuration"), node("p", "projects-muted", "Save a target and SDK selection for this application's future Configure and Build actions."));
+    form.append(node("h4", "", "Add a build configuration"), node("p", "projects-muted", "Save a target, SDK and application fragment selection for future Configure and Build actions."));
     const requirement = node("p", "projects-banner"); requirement.dataset.configurationRequirement = "";
     form.append(requirement);
     const grid = node("div", "projects-option-grid");
@@ -62,7 +65,7 @@ export function createConfigurationView({node, fact, choices}) {
     const actions = node("div", "projects-actions");
     const save = node("button", "projects-button primary", "Save configuration"); save.type = "submit"; save.dataset.configurationSave = "";
     const close = node("button", "projects-button", "Close"); close.type = "button"; close.dataset.configurationClose = project.id;
-    actions.append(save, close); form.append(grid, targetNote, actions);
+    actions.append(save, close); form.append(grid, targetNote, fragmentView.create(), actions);
     section.append(row, facts, notice, form);
     return section;
   }
@@ -83,6 +86,7 @@ export function createConfigurationView({node, fact, choices}) {
       facts.replaceChildren();
       fact(facts, "Requested target", selected?.profile?.target, true);
       fact(facts, "SDK installation", selected?.profile?.sdk?.path, true);
+      appendFragmentFacts(facts, selected?.profile, fact);
     }
     const notice = section.querySelector("[data-configuration-notice]");
     notice.hidden = state.configurationNotice?.project_id !== project.id;
@@ -119,7 +123,8 @@ export function createConfigurationView({node, fact, choices}) {
       const link = node("a", "", "Open Environment"); link.href = "#/projects/environment"; requirement.append(link);
     }
     const save = form.querySelector("[data-configuration-save]");
-    save.disabled = busy || !snapshot || snapshot.status === "stale" || !draft.name.trim() || !draft.board_id || !draft.target || !draft.sdk_id;
+    fragmentView.update(form.querySelector("[data-fragments]"), draft, state.configurationFiles[project.id], busy);
+    save.disabled = busy || !snapshot || snapshot.status === "stale" || !draft.name.trim() || !draft.board_id || !draft.target || !draft.sdk_id || Boolean(fragmentSelectionError(copyFragments(draft.fragments), state.configurationFiles[project.id]));
     save.textContent = state.busy === "configuration-save" ? "Saving…" : "Save configuration";
     form.querySelector("[data-configuration-close]").disabled = busy;
   }

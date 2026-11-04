@@ -106,8 +106,10 @@ report handoff. Current source/binding navigation is available for inspected bui
 applications before configuration; deeper source attribution remains future work.
 The first P4 slice adds named board-target/SDK configurations to saved applications,
 with explicit selection for reviewed builds and captured selection in attempt history.
-Saving changes metadata only. Ordered fragment selection is the next configuration slice;
-visual overlay/hardware editing remains deferred until the creator workflow is ready.
+Saving changes metadata only. Ordered Kconfig/overlay selection is also available with
+independent automatic, append and replacement modes, bounded app-local discovery and
+reviewed source checks. Visual overlay/hardware editing remains deferred until the
+creator workflow is ready.
 Later stages cover editing, advanced
 composition and environment migration. Build evidence does not establish hardware operation.
 

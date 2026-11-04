@@ -289,17 +289,18 @@ class CreatorHttpTests(unittest.TestCase):
     request = existing_api.ProjectsHttpTests.request
 
     def test_creator_routes_use_shared_guards_and_need_explicit_inputs(self):
-        for endpoint in ("preview", "create", "configurations", "build-preview", "build"):
+        for endpoint in ("preview", "create", "configurations", "configuration-files", "build-preview", "build"):
             with self.subTest(endpoint=endpoint), self.assertRaises(HTTPError) as error:
                 self.request("/api/projects/" + endpoint, method="POST", body={}, authorized=False)
             self.assertEqual(error.exception.code, 403)
             with self.assertRaises(HTTPError) as error:
                 self.request("/api/projects/" + endpoint, method="POST", body={})
             self.assertEqual(error.exception.code, 400)
-        for values, expected in [({"method": "POST", "origin": "https://outside.invalid"}, 403),
-                                 ({"method": "DELETE"}, 405)]:
-            with self.subTest(values=values), self.assertRaises(HTTPError) as error:
-                self.request("/api/projects/configurations", body={}, **values)
-            self.assertEqual(error.exception.code, expected)
+        for endpoint in ("configurations", "configuration-files"):
+            for values, expected in [({"method": "POST", "origin": "https://outside.invalid"}, 403),
+                                     ({"method": "DELETE"}, 405)]:
+                with self.subTest(endpoint=endpoint, values=values), self.assertRaises(HTTPError) as error:
+                    self.request("/api/projects/" + endpoint, body={}, **values)
+                self.assertEqual(error.exception.code, expected)
         with self.request("/api/projects/creator") as response:
             self.assertEqual(json.load(response)["projects"], [])

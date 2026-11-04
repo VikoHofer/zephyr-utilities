@@ -1,10 +1,11 @@
 # Project Creator
 
-Project Creator implements P2 and the first P4 configuration slice of the [master plan](project-creator-masterplan.md): a
+Project Creator implements P2 and the named-configuration/fragment slices of the [master plan](project-creator-masterplan.md): a
 minimal C application in the existing workspace, with an exact board target and an
 explicit installed GNU Zephyr SDK. Creation, configuration and compilation are separate
-reviewed actions. Saved applications can have several named target/SDK configurations.
-Device Tree editing, existing-project import and configuration fragment selection remain planned.
+reviewed actions. Saved applications can have several named target/SDK configurations
+with ordered Kconfig and overlay file selections. Device Tree editing and existing-project
+import remain planned.
 
 ## Sidebar workflow
 
@@ -82,8 +83,47 @@ and SDK compatibility; an explicit configure/build provides that evidence.
 
 Names contain 1–64 characters without control characters and must be unique within
 the application, ignoring case. **Original** is reserved. Up to 32 additional
-configurations can be saved per application. Renaming/removing configurations, selecting
-ordered Kconfig/overlay fragments and importing existing applications remain later work.
+configurations can be saved per application. Renaming/removing configurations and
+importing existing applications remain later work.
+
+## Select Kconfig and overlay fragments
+
+In **Add configuration**, choose a mode independently for **Kconfig fragments** and
+**Devicetree overlays**. The picker lists existing `.conf` and `.overlay` files inside
+this application. Use **Refresh files** after adding or removing files externally.
+Add the desired files, then move them up or down to set their order before saving.
+
+| Mode | Meaning | CMake variable |
+| --- | --- | --- |
+| Automatic | Leave the selected Zephyr checkout's application-file discovery in control | No fragment override |
+| Append files | Keep automatic application files and append the selected list in order | `EXTRA_CONF_FILE` / `EXTRA_DTC_OVERLAY_FILE` |
+| Replace application files | Supply an explicit ordered list in place of automatic application-file discovery | `CONF_FILE` / `DTC_OVERLAY_FILE` |
+
+Append and Replace require at least one file, with at most 32 unique files per category.
+An empty replacement that disables all application files is not offered in this slice.
+Replacement does not remove the board's base configuration or Device Tree, shields, or
+other inputs supplied by application CMake. Later selected files can override earlier
+values, subject to Kconfig dependencies and normal Zephyr processing. See Zephyr's
+[application variables](https://docs.zephyrproject.org/latest/develop/application/index.html#important-build-system-variables),
+[Kconfig merge rules](https://docs.zephyrproject.org/latest/build/kconfig/setting.html#the-initial-configuration), and
+[overlay ordering](https://docs.zephyrproject.org/latest/build/dts/howtos.html#set-devicetree-overlays).
+
+The selected mode and ordered paths appear on the application, in its command review,
+and in the recorded attempt. Saving writes only configuration metadata. Paths refer to
+current source files: edit a fragment externally, then review a new build to use its new
+contents. Changes after review invalidate that build plan through the existing source
+checks. Missing files remain visible in the selection and must be resolved or explicitly
+removed; they are never silently dropped. Adding another configuration can copy the
+currently selected configuration's choices.
+
+The picker excludes hidden, build, cache and tool directories and does not follow
+symlinks. Selection requires bounded regular UTF-8 files inside the application.
+Each fragment is limited to 256 KiB, with an 8 MiB read budget. Discovery is bounded to
+2,000 files, 1,000 directories and 16 levels; an incomplete bounded scan fails explicitly.
+Absolute/traversal paths and characters interpreted as CMake list separators or
+expansions are rejected. This slice does not create/edit fragments, select external
+module files, resolve arbitrary includes, or claim that requested Kconfig settings and
+overlays are valid. Explicit configuration supplies those diagnostics.
 
 ## Inspect existing build outputs
 
@@ -133,7 +173,7 @@ Profile migration and portable recipe export are later work.
 | Target | Exact discovered hardware-model-v2 board target, including declared revisions and qualifiers |
 | Toolchain | Explicit discovered Zephyr SDK with installed GNU compiler components |
 | Local tools | Selected Python environment, CMake and Ninja; discovered dtc when available |
-| Configuration | Named exact-target/SDK selections per saved application; Zephyr's automatic configuration/overlay discovery |
+| Configuration | Named target/SDK selections with automatic, appended or replacement Kconfig/overlay file lists |
 | Output | Fresh directory per attempt; no automatic pristine, flashing, installation or workspace update |
 
 Application names start with a letter and contain at most 64 letters, digits,
@@ -153,11 +193,12 @@ and `ZephyrAppConfiguration` package discovery. It does not run `west` build def
 Application CMake and the selected Zephyr/toolchain code do run during an explicit
 Configure or Build; separate output directories are not a sandbox for that code.
 
-The creator does not supply explicit `CONF_FILE` or `DTC_OVERLAY_FILE` lists. Zephyr
-retains its automatic discovery rules, including application inputs added outside the
-UI. Configured input paths are captured where the selected build system reports them.
-Graphical configuration editing, selectable fragments/shields/snippets, generic sample
-copying, sysbuild, LLVM selection and freestanding workspaces remain outside P2.
+Original and Automatic configurations retain Zephyr's discovery rules, including
+application inputs added outside the UI. Named configurations can supply explicit or
+additional file lists as described above. Configured input paths are captured where the
+selected build system reports them. Graphical configuration editing, selectable
+shields/snippets, generic sample copying, sysbuild, LLVM selection and freestanding
+workspaces remain planned.
 
 ## Preview and change protection
 
@@ -199,7 +240,8 @@ not accepted back from an edited browser payload.
 | `GET /api/projects/creator` | None | `{workspace, snapshot, projects, jobs, diagnostics}`; saved projects include their configurations and attempts; no execution |
 | `POST /api/projects/preview` | `{workspace, name, destination?, board_id, target, sdk_id}` | `{plan}` with exact files, profile, recipe and destination identity |
 | `POST /api/projects/create` | `{workspace, plan_id}` | HTTP 202 shared create job; completed result contains `project` |
-| `POST /api/projects/configurations` | `{workspace, project_id, name, board_id, target, sdk_id}` | `{configuration}`; saves metadata only |
+| `POST /api/projects/configuration-files` | `{workspace, project_id}` | `{workspace, project_id, files: {kconfig, overlays}, diagnostics}`; bounded read-only relative-path catalogue |
+| `POST /api/projects/configurations` | `{workspace, project_id, name, board_id, target, sdk_id, fragments?}` | `{configuration}`; saves metadata only |
 | `POST /api/projects/build-preview` | `{workspace, project_id, operation, configuration_id?}` | `{plan}` with selected configuration/profile, operation, exact fresh `build_dir`, recipe and source identities |
 | `POST /api/projects/build` | `{workspace, build_plan_id}` | HTTP 202 shared job; successful result contains `attempt` |
 | `GET /api/jobs/:id` | None | Shared progress, logs and outcome |
@@ -215,12 +257,18 @@ preserving earlier clients. A supplied configuration must belong to this applica
 and workspace. The server captures its complete profile in the build plan and attempt;
 execution uses that captured profile. Saved configurations are immutable.
 
+`fragments`, when supplied, has `schema_version: 1`, plus `kconfig` and `overlays`
+objects containing `mode` (`auto`, `append`, or `replace`) and ordered `files` arrays.
+Automatic mode requires an empty array. Omitting `fragments` preserves the earlier
+automatic profile contract. The catalogue is discovery, not an effective input list;
+selection is independently validated on Save and again before build preview.
+
 A recipe contains `cwd`, `environment`, `configure` and `build` argument arrays, plus
 `display_configure` and `display_build` shell renderings. The execution uses argument
 arrays and explicit working directory/environment, without a shell. Display commands
 include the same environment selection and can be inspected or used independently.
 
-## Version 1 records and evidence
+## Versioned records and evidence
 
 Project, configuration and attempt records are feature-owned JSON under
 `context.feature_data("projects") / "creator"`:
@@ -235,7 +283,7 @@ Project, configuration and attempt records are feature-owned JSON under
 | Record | Main fields |
 | --- | --- |
 | Project | `schema_version`, `id`, `workspace`, `name`, `path`, `profile`, template identity/version, generated file hashes, directory identity, creation time |
-| Profile | Exact requested target/board, selected SDK and tools, Zephyr identity, modules/roots, environment observation identity and execution guard, analysis choices |
+| Profile | Exact requested target/board, selected SDK and tools, Zephyr identity, modules/roots, environment observation identity and execution guard, analysis choices; version 2 adds the versioned `fragments` selection |
 | Configuration | `schema_version`, `id`, `project_id`, `workspace`, `name`, `created_at`, complete `profile` |
 | Attempt | `schema_version`, `id`, `project_id`, `workspace`, selected `configuration` and `profile`, operation/status, recipe, source hashes, output path, times, context, artifacts, diagnostics, error and bounded log |
 | Captured context | Requested/effective target, revision/qualifiers, compiler/SDK, source/build paths, automatic configuration and DTS input paths when reported, freshness/coverage |
@@ -243,14 +291,20 @@ Project, configuration and attempt records are feature-owned JSON under
 
 The store preserves immutable project definitions and atomically updates an attempt
 from running to its terminal outcome. Unknown schema versions are rejected without
-replacing existing records. These first-version formats have no predecessor to migrate;
-future versions require migration tests. A previously running attempt with no active
+replacing existing records. A previously running attempt with no active
 server job appears as `interrupted` after restart; it is not automatically resumed.
 
 The optional configuration directory is additive. Existing project records retain their
 original profile without migration. Earlier attempts without configuration/profile
 fields stay readable; their saved commands and context remain the evidence for that run.
 See [ADR 0010](decisions/0010-named-build-configurations.md).
+
+Profiles containing explicit fragment selections use `schema_version: 2`, with a
+version-1 `fragments` envelope. Outer configuration and attempt records remain version 1.
+Legacy profiles stay version 1 with automatic discovery, without being rewritten.
+Earlier Utilities releases reject version-2 profiles instead of silently ignoring their
+selected files. Unknown profile or fragment versions are rejected and preserved. See
+[ADR 0011](decisions/0011-ordered-application-fragments.md).
 
 Saved attempt logs retain the final 500 entries, with each entry bounded to 2,000
 characters. Processes have a 30-minute total attempt limit and a 16 MiB output limit.
@@ -267,6 +321,18 @@ P2 does not import another feature's private implementation or introduce a share
 `BuildContext` API. See [ADR 0004](decisions/0004-reviewed-project-creation.md).
 
 ## Validation scope
+
+The fragment-selection slice passed 333 Python tests, 136 frontend tests, quick checks
+and installed-wheel verification. Browser checks covered both file categories, ordering,
+copying choices, missing-file recovery, save/reload, command review, feature navigation,
+workspace isolation, keyboard focus and a 600-pixel layout.
+
+Five real Zephyr configurations on `qemu_cortex_m3/ti_lm3s6965` with SDK 1.0.1 checked
+legacy Automatic, explicit Automatic, Append, reversed Append and Replace. Generated
+`.config` and `zephyr.dts` demonstrated default preservation/replacement and file order;
+the appended selection also compiled to an ELF. All ten fixture source files and the
+original project record stayed unchanged. These are configuration/compilation checks,
+not hardware validation.
 
 The named-configuration slice was checked with 322 Python tests and 124 frontend tests,
 plus quick checks and installed-wheel asset verification. Browser checks covered saving,

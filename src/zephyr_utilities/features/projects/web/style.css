@@ -123,9 +123,21 @@
 .projects-feature .projects-configuration-form>.projects-banner {margin:14px 0 0}
 .projects-feature .projects-configuration-form>.projects-actions {margin-top:17px}
 .projects-feature .projects-configuration-form>.projects-option-grid {margin-bottom:13px}
+.projects-feature .projects-fragments {margin-top:22px}
+.projects-feature .projects-fragment-heading,.projects-feature .projects-fragment-picker {display:flex;align-items:flex-end;gap:12px;justify-content:space-between}
+.projects-feature .projects-fragment-heading {align-items:center}
+.projects-feature .projects-fragment-group {border:1px solid #d9e4d4;border-radius:6px;padding:14px;margin:18px 0 0;min-width:0}
+.projects-feature .projects-fragment-group legend {font-weight:650;padding:0 5px}
+.projects-feature .projects-fragment-group>label,.projects-feature .projects-fragment-picker>label {flex:1;min-width:0}
+.projects-feature .projects-fragment-group .projects-muted {margin:10px 0}
+.projects-feature .projects-fragment-list {padding-left:24px;margin:10px 0 0}
+.projects-feature .projects-fragment-list>li {padding:10px 0;border-top:1px solid #dce7d7}
+.projects-feature .projects-fragment-list>li>.projects-path {display:block;overflow-wrap:anywhere}
+.projects-feature .projects-fragment-actions {display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}
+.projects-feature .projects-fragment-actions>.projects-button {padding:5px 9px;font-size:11px}
 .projects-feature .projects-attempt {margin:17px 0 0;padding:5px 15px;border:1px solid #dce7d7;background:#f8faf5;border-radius:6px}
 .projects-feature .projects-attempt .projects-error {margin-bottom:12px}
 .projects-feature [data-build-preview-recipe]>.projects-path {margin-bottom:18px}
 .projects-feature [data-detail]>.projects-button {margin-top:15px}
 
-@media(max-width:650px) {.projects-feature .projects-full-width {grid-column:auto}.projects-feature .projects-heading>.projects-button {margin-top:13px}.projects-feature .projects-configuration-row {align-items:stretch;flex-direction:column}.projects-feature .projects-configuration-row>label {max-width:none}}
+@media(max-width:650px) {.projects-feature .projects-full-width {grid-column:auto}.projects-feature .projects-heading>.projects-button {margin-top:13px}.projects-feature .projects-configuration-row,.projects-feature .projects-fragment-picker {align-items:stretch;flex-direction:column}.projects-feature .projects-configuration-row>label {max-width:none}}

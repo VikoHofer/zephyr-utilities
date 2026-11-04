@@ -131,6 +131,10 @@ attempt records retain reviewed commands, bounded logs, outcomes and live output
 Named configurations are additive immutable records; the original project profile
 remains available. Attempts capture the selected profile before execution. See
 [ADR 0010](decisions/0010-named-build-configurations.md).
+Profiles with ordered Kconfig/overlay selections use profile version 2 and a version-1
+fragment envelope. Legacy profiles stay version 1 with automatic discovery; no source
+or record migration runs on opening. Earlier readers reject version-2 profiles rather
+than ignoring their file selections. See [ADR 0011](decisions/0011-ordered-application-fragments.md).
 Unknown formats are preserved. Interrupted work is shown as interrupted after restart,
 not resumed. See [ADR 0004](decisions/0004-reviewed-project-creation.md) and the
 [creator contract](project-creator.md).

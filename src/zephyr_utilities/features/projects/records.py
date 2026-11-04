@@ -10,6 +10,7 @@ import uuid
 import unicodedata
 
 from .metadata import read_regular
+from .fragments import profile_fragments
 
 
 SCHEMA_VERSION = 1
@@ -98,8 +99,9 @@ class ProjectStore:
             raise ValueError("Saved configuration names must be trimmed.")
         profile = data.get("profile")
         if (not isinstance(data.get("workspace"), str) or not isinstance(profile, dict) or
-                profile.get("schema_version") != SCHEMA_VERSION or profile.get("workspace") != data["workspace"]):
+                profile.get("schema_version") not in (1, 2) or profile.get("workspace") != data["workspace"]):
             raise ValueError("The saved configuration has an unsupported or mismatched profile.")
+        profile_fragments(profile)
         return data
 
     def configuration(self, configuration_id, project_id, workspace):

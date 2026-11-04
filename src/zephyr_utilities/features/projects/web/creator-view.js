@@ -1,6 +1,7 @@
 import {activeJob} from "./environment-state.js";
 import {createCreatorSession, creatorBoards, creatorSdks, currentCreatorJob} from "./creator-state.js";
 import {createConfigurationView} from "./configuration-view.js";
+import {appendFragmentFacts} from "./fragment-view.js";
 
 export function mountCreator(root, context) {
   const $ = (name) => root.querySelector(`[data-${name}]`);
@@ -100,6 +101,7 @@ export function mountCreator(root, context) {
     if (attempt.profile) {
       fact(facts, "Requested target", attempt.profile.target, true);
       fact(facts, "SDK installation", attempt.profile.sdk?.path, true);
+      appendFragmentFacts(facts, attempt.profile, fact);
     }
     fact(facts, "Output directory", attempt.build_dir || attempt.context?.build_dir || attempt.context?.build_directory, true);
     fact(facts, "Effective target", attempt.context?.effective_target || attempt.context?.target || attempt.context?.board, true);
@@ -181,6 +183,7 @@ export function mountCreator(root, context) {
     fact(facts, "Build configuration", plan.configuration?.name || "Original");
     fact(facts, "Requested target", plan.profile?.target, true);
     fact(facts, "SDK installation", plan.profile?.sdk?.path, true);
+    appendFragmentFacts(facts, plan.profile, fact);
     $("build-preview-recipe").prepend(facts, node("p", "projects-path", `New output directory: ${plan.build_dir}`));
     $("build-start").textContent = plan.operation === "configure" ? "Run configure" : "Run build";
   }
@@ -249,11 +252,25 @@ export function mountCreator(root, context) {
       session.closeConfiguration();
       close.closest("[data-configuration-project]").querySelector("[data-configuration-add]").focus();
     }
+    const refresh = event.target.closest("[data-fragment-refresh]");
+    if (refresh) session.loadConfigurationFiles(refresh.closest("[data-configuration-form]").dataset.configurationForm);
+    const fragmentAdd = event.target.closest("[data-fragment-add]");
+    if (fragmentAdd) {
+      const group = fragmentAdd.closest("[data-fragment-kind]");
+      const available = group.querySelector("[data-fragment-available]");
+      session.changeFragment(fragmentAdd.closest("[data-configuration-form]").dataset.configurationForm, group.dataset.fragmentKind, "add", available.value);
+      if (!available.disabled) available.focus();
+    }
+    const fragmentAction = event.target.closest("[data-fragment-action]");
+    if (fragmentAction) session.changeFragment(fragmentAction.closest("[data-configuration-form]").dataset.configurationForm,
+      fragmentAction.closest("[data-fragment-kind]").dataset.fragmentKind, fragmentAction.dataset.fragmentAction, fragmentAction.dataset.fragmentPath);
   });
   listen($("created-projects"), "change", (event) => {
     const input = event.target;
     if (input.matches("[data-configuration-select]")) session.selectConfiguration(input.dataset.configurationSelect, input.value);
     else if (input.matches("select[data-configuration-field]")) session.changeConfigurationField(input.closest("[data-configuration-form]").dataset.configurationForm, input.dataset.configurationField, input.value);
+    else if (input.matches("[data-fragment-mode]")) session.changeFragment(input.closest("[data-configuration-form]").dataset.configurationForm, input.dataset.fragmentMode, "mode", input.value);
+    else if (input.matches("[data-fragment-available]")) render();
   });
   listen($("created-projects"), "input", (event) => {
     const input = event.target;

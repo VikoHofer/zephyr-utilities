@@ -1,5 +1,6 @@
 /** Creation and build requests stay bound to the workspace and reviewed inputs. */
 import {activeJob, filterBoards} from "./environment-state.js";
+import {copyFragments, fragmentFormatError, fragmentKinds, fragmentModes, fragmentSelectionError, needsFragmentFiles, profileFragments} from "./fragment-state.js";
 
 const defaults = () => ({name: "my_app", destination: "", search: "", board_id: "", target: "", sdk_id: ""});
 const configurationDefaults = () => ({name: "", search: "", board_id: "", target: "", sdk_id: ""});
@@ -10,7 +11,8 @@ export function creatorBody(form) {
   return Object.fromEntries(["name", "destination", "board_id", "target", "sdk_id"].map((key) => [key, String(form[key] || "").trim()]));
 }
 export function configurationBody(form) {
-  return Object.fromEntries(["name", "board_id", "target", "sdk_id"].map((key) => [key, String(form[key] || "").trim()]));
+  return {...Object.fromEntries(["name", "board_id", "target", "sdk_id"].map((key) => [key, String(form[key] || "").trim()])),
+    ...(form.fragments === undefined ? {} : {fragments: copyFragments(form.fragments)})};
 }
 export function selectedConfiguration(state, project) {
   const id = state.configurationSelections?.[project.id];
@@ -29,6 +31,7 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
   let timer;
   let reading = false;
   let readSequence = 0;
+  let fileSequence = 0;
   Object.assign(state, {loading: false, busy: "", error: "", cancelling: false});
   // Review plans are server-session capabilities; fetch new ones after remount.
   state.plan = null;
@@ -38,6 +41,7 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
   state.configurationDrafts ||= {};
   state.configurationEditor ||= "";
   state.configurationNotice = null;
+  state.configurationFiles = {};
   const publish = () => { if (!disposed) onChange(); };
   const current = (path, captured) => !disposed && workspace() === path && state.workspace === path && epoch === captured;
   const request = (path, options = {}) => api(path, {...options, signal: lifetime.signal});
@@ -48,8 +52,8 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
       state.formsByWorkspace ||= {};
       state.formsByWorkspace[state.workspace] = {...state.form};
     }
-    epoch++; formRevision++; buildRevision++; configurationRevision++;
-    Object.assign(state, {workspace: path, snapshot: null, projects: [], jobs: [], diagnostics: [], jobId: null, plan: null, buildPlan: null, error: "", loading: false, busy: "", cancelling: false, form: {...defaults(), ...state.formsByWorkspace?.[path]}, configurationSelections: {}, configurationDrafts: {}, configurationEditor: "", configurationNotice: null});
+    epoch++; formRevision++; buildRevision++; configurationRevision++; fileSequence++;
+    Object.assign(state, {workspace: path, snapshot: null, projects: [], jobs: [], diagnostics: [], jobId: null, plan: null, buildPlan: null, error: "", loading: false, busy: "", cancelling: false, form: {...defaults(), ...state.formsByWorkspace?.[path]}, configurationSelections: {}, configurationDrafts: {}, configurationEditor: "", configurationNotice: null, configurationFiles: {}});
     return true;
   }
   function choosePending() {
@@ -80,7 +84,7 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
     for (const projectId of new Set([...Object.keys(state.configurationSelections), ...Object.keys(state.configurationDrafts)])) {
       const project = state.projects.find((item) => item.id === projectId);
       if (!project) {
-        delete state.configurationSelections[projectId]; delete state.configurationDrafts[projectId];
+        delete state.configurationSelections[projectId]; delete state.configurationDrafts[projectId]; delete state.configurationFiles[projectId];
         if (state.configurationEditor === projectId) state.configurationEditor = "";
       } else if (!selectedConfiguration(state, project)) {
         state.configurationSelections[projectId] = "";
@@ -97,6 +101,8 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
       else if (!array(board.targets).includes(form.target)) form.target = "";
       if (!creatorSdks(snapshot).some((sdk) => sdk.id === form.sdk_id)) form.sdk_id = "";
     }
+    const editor = state.configurationEditor;
+    if (editor && needsFragmentFiles(copyFragments(state.configurationDrafts[editor]?.fragments)) && !state.configurationFiles[editor]) loadConfigurationFiles(editor);
   }
   async function load({background = false} = {}) {
     if (disposed) return;
@@ -142,22 +148,79 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
     const project = array(state.projects).find((item) => item.id === projectId);
     if (!project) return;
     const profile = selectedConfiguration(state, project)?.profile;
+    if (state.configurationEditor !== projectId && state.configurationFiles[state.configurationEditor]?.loading) delete state.configurationFiles[state.configurationEditor];
     if (!state.configurationDrafts[projectId]) {
       const board = creatorBoards(state.snapshot).find((item) => item.id === profile?.board_id);
       state.configurationDrafts[projectId] = {...configurationDefaults(), board_id: board?.id || "",
         target: array(board?.targets).includes(profile?.target) ? profile.target : "",
-        sdk_id: creatorSdks(state.snapshot).some((item) => item.id === profile?.sdk?.id) ? profile.sdk.id : ""};
+        sdk_id: creatorSdks(state.snapshot).some((item) => item.id === profile?.sdk?.id) ? profile.sdk.id : "",
+        ...(profileFragments(profile) === undefined ? {} : {fragments: copyFragments(profileFragments(profile))})};
     }
     state.configurationEditor = projectId;
     configurationRevision++;
     state.configurationNotice = null;
     publish();
+    if (needsFragmentFiles(copyFragments(state.configurationDrafts[projectId].fragments))) loadConfigurationFiles(projectId);
   }
   function closeConfiguration() {
     if (disposed) return;
+    if (state.configurationFiles[state.configurationEditor]?.loading) delete state.configurationFiles[state.configurationEditor];
+    fileSequence++;
     state.configurationEditor = "";
     configurationRevision++;
     publish();
+  }
+  async function loadConfigurationFiles(projectId) {
+    if (disposed) return;
+    followWorkspace();
+    if (state.configurationEditor !== projectId || !array(state.projects).some((item) => item.id === projectId)) return;
+    const path = state.workspace;
+    const captured = epoch;
+    const sequence = ++fileSequence;
+    const catalogue = {loading: true, ready: false, error: "", files: {kconfig: [], overlays: []}, diagnostics: []};
+    state.configurationFiles[projectId] = catalogue;
+    publish();
+    try {
+      const data = await request("/api/projects/configuration-files", {method: "POST", body: {workspace: path, project_id: projectId}});
+      if (!current(path, captured) || sequence !== fileSequence || state.configurationEditor !== projectId || state.configurationFiles[projectId] !== catalogue) return;
+      if (data.workspace !== path || data.project_id !== projectId || !fragmentKinds.every((kind) => Array.isArray(data.files?.[kind]) && data.files[kind].every((item) => typeof item === "string"))) throw new Error("The application file list could not be verified. Refresh files again.");
+      catalogue.files = data.files;
+      catalogue.diagnostics = array(data.diagnostics);
+      catalogue.ready = true;
+    } catch (error) {
+      if (current(path, captured) && sequence === fileSequence && state.configurationEditor === projectId && error.name !== "AbortError") catalogue.error = error.message || String(error);
+    } finally {
+      if (current(path, captured) && sequence === fileSequence && state.configurationEditor === projectId && state.configurationFiles[projectId] === catalogue) { catalogue.loading = false; publish(); }
+    }
+  }
+  function changeFragment(projectId, kind, action, value) {
+    if (disposed) return;
+    followWorkspace();
+    const form = state.configurationDrafts[projectId];
+    if (!form || !fragmentKinds.includes(kind)) return;
+    const fragments = copyFragments(form.fragments);
+    if (fragmentFormatError(fragments)) return;
+    const part = fragments[kind];
+    if (action === "mode") {
+      if (!fragmentModes.includes(value) || part.mode === value) return;
+      part.mode = value;
+      if (value === "auto") part.files = [];
+    } else if (action === "add") {
+      const catalogue = state.configurationFiles[projectId];
+      if (part.mode === "auto" || !catalogue?.ready || catalogue.loading || !catalogue.files[kind].includes(value) || part.files.includes(value) || part.files.length >= 32) return;
+      part.files.push(value);
+    } else {
+      const index = part.files.indexOf(value);
+      if (index < 0) return;
+      if (action === "remove") part.files.splice(index, 1);
+      else if (action === "up" && index > 0) [part.files[index - 1], part.files[index]] = [part.files[index], part.files[index - 1]];
+      else if (action === "down" && index < part.files.length - 1) [part.files[index + 1], part.files[index]] = [part.files[index], part.files[index + 1]];
+      else return;
+    }
+    form.fragments = fragments;
+    configurationRevision++; state.error = ""; state.configurationNotice = null;
+    publish();
+    if (needsFragmentFiles(fragments) && !state.configurationFiles[projectId]) loadConfigurationFiles(projectId);
   }
   function changeConfigurationField(projectId, key, value) {
     if (disposed) return;
@@ -204,6 +267,9 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
   };
   const previewBuild = (projectId, operation) => {
     if (!["configure", "build"].includes(operation) || !array(state.projects).some((project) => project.id === projectId)) return Promise.resolve();
+    const project = state.projects.find((item) => item.id === projectId);
+    const formatError = fragmentFormatError(copyFragments(profileFragments(selectedConfiguration(state, project)?.profile)));
+    if (formatError) { state.error = formatError; state.buildPlan = null; publish(); return Promise.resolve(); }
     const configurationId = state.configurationSelections[projectId];
     return action("build-preview", "/api/projects/build-preview", {project_id: projectId, operation, ...(configurationId ? {configuration_id: configurationId} : {})}, (data) => {
       if (data.plan?.workspace === state.workspace) state.buildPlan = data.plan;
@@ -212,6 +278,8 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
   const saveConfiguration = (projectId) => {
     const form = state.configurationDrafts[projectId];
     if (!form || !array(state.projects).some((project) => project.id === projectId)) return Promise.resolve();
+    const fragmentError = fragmentSelectionError(copyFragments(form.fragments), state.configurationFiles[projectId]);
+    if (fragmentError) { state.error = fragmentError; publish(); return Promise.resolve(); }
     const revision = configurationRevision;
     return action("configuration-save", "/api/projects/configurations", {project_id: projectId, ...configurationBody(form)}, (data) => {
       const configuration = data.configuration;
@@ -259,6 +327,6 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
   function queue() { timer = schedule(async () => { await tick(); if (!disposed) queue(); }, 1200); }
   followWorkspace(); queue();
   return {load, refresh: () => tick({force: true}), preview, create, previewBuild, build, cancel, changeField,
-    selectConfiguration, editConfiguration, closeConfiguration, changeConfigurationField, saveConfiguration,
+    selectConfiguration, editConfiguration, closeConfiguration, changeConfigurationField, saveConfiguration, loadConfigurationFiles, changeFragment,
     tick, dispose() { disposed = true; epoch++; lifetime.abort(); if (timer !== undefined) unschedule(timer); }};
 }

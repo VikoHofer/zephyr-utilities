@@ -16,6 +16,7 @@ import time
 import yaml
 
 from .probing import check_cancel
+from .fragments import fragment_arguments
 
 
 MAX_LOG_BYTES = 16 * 1024 * 1024
@@ -83,6 +84,7 @@ def command_recipe(profile, source_dir, build_dir, *, environ=None):
             configure.append(f"-D{name}=" + ";".join(dict.fromkeys(roots)))
     if tools.get("dtc", {}).get("status") == "discovered":
         configure.append(f"-DDTC={_path(tools['dtc'].get('path'), 'dtc')}")
+    configure.extend(fragment_arguments(profile, source))
     build = [cmake, "--build", output, "--parallel", "2"]
     prefix = ["env", "-i", *[f"{key}={value}" for key, value in sorted(selected.items())]]
 

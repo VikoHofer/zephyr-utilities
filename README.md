@@ -163,7 +163,9 @@ Use **Add configuration** on a saved application to name another exact board tar
 installed SDK. Select it from **Build configuration** before reviewing a build. Saving
 only records that choice; application sources and the original configuration are retained.
 After an environment upgrade, analyze again and save a new configuration. Fragment
-selection and visual overlay editing remain planned.
+selection supports automatic discovery, ordered appended files, or replacement
+application-file lists for Kconfig and Device Tree overlays. Select existing files in
+the application; saving keeps their contents unchanged. Visual overlay editing remains planned.
 
 The first creator supports Linux, one minimal C application/image, an existing resolved
 west workspace and installed GNU Zephyr SDKs. It rejects existing destinations, symlinked

@@ -16,5 +16,6 @@ def register(router, context):
     router.add("POST", "/api/projects/preview", lambda request: creator.preview(request.body))
     router.add("POST", "/api/projects/create", lambda request: Response(creator.create(request.body), status=202))
     router.add("POST", "/api/projects/configurations", lambda request: creator.save_configuration(request.body))
+    router.add("POST", "/api/projects/configuration-files", lambda request: creator.configuration_files(request.body))
     router.add("POST", "/api/projects/build-preview", lambda request: creator.build_preview(request.body))
     router.add("POST", "/api/projects/build", lambda request: Response(creator.build(request.body), status=202))
