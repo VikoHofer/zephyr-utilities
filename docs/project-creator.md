@@ -1,10 +1,10 @@
 # Project Creator
 
-Project Creator implements P2 of the [master plan](project-creator-masterplan.md): a
+Project Creator implements P2 and the first P4 configuration slice of the [master plan](project-creator-masterplan.md): a
 minimal C application in the existing workspace, with an exact board target and an
 explicit installed GNU Zephyr SDK. Creation, configuration and compilation are separate
-reviewed actions. Device Tree editing, existing-project import and profile editing remain
-planned.
+reviewed actions. Saved applications can have several named target/SDK configurations.
+Device Tree editing, existing-project import and configuration fragment selection remain planned.
 
 ## Sidebar workflow
 
@@ -60,6 +60,31 @@ Project Creator profile. This is read-only source navigation, not project import
 effective configuration discovery. Deleted or replaced application folders invalidate
 an open source catalogue. See the [source browsing limits](build-inspection.md#browse-an-application-before-configuration).
 
+## Save and choose build configurations
+
+In **Applications**, each app has a **Build configuration** selector. **Original** uses
+the target and SDK chosen when the app was created. Choose **Add configuration** to
+give another board target and installed SDK a name, then **Save configuration**.
+Board and chip search uses the selected workspace's latest environment catalogue.
+Saving records this selection in Utilities; it does not change application files,
+rewrite the generated README, configure or compile.
+
+Choose a saved configuration, then **Configure** or **Build** and review the operation.
+The review and attempt history show which configuration, exact target and SDK were used.
+Changing the selection clears a pending review. Each configuration uses fresh output
+directories through the same build workflow; attempts retain their captured selection.
+
+Configurations are saved choices, not moving references to the newest SDK. After a
+Zephyr/toolchain change, run **Analyze workspace** and save a new configuration from
+the refreshed catalogue. The build rechecks the captured environment and rejects stale
+choices rather than silently retargeting them. Discovery alone does not establish target
+and SDK compatibility; an explicit configure/build provides that evidence.
+
+Names contain 1–64 characters without control characters and must be unique within
+the application, ignoring case. **Original** is reserved. Up to 32 additional
+configurations can be saved per application. Renaming/removing configurations, selecting
+ordered Kconfig/overlay fragments and importing existing applications remain later work.
+
 ## Inspect existing build outputs
 
 Choose **Inspect build** on an attempt, or open **Advanced → Build Inspector → Build outputs** and enter an existing
@@ -108,7 +133,7 @@ Profile migration and portable recipe export are later work.
 | Target | Exact discovered hardware-model-v2 board target, including declared revisions and qualifiers |
 | Toolchain | Explicit discovered Zephyr SDK with installed GNU compiler components |
 | Local tools | Selected Python environment, CMake and Ninja; discovered dtc when available |
-| Configuration | Zephyr's automatic application configuration/overlay discovery; no profile editor |
+| Configuration | Named exact-target/SDK selections per saved application; Zephyr's automatic configuration/overlay discovery |
 | Output | Fresh directory per attempt; no automatic pristine, flashing, installation or workspace update |
 
 Application names start with a letter and contain at most 64 letters, digits,
@@ -171,10 +196,11 @@ not accepted back from an edited browser payload.
 
 | Method and path | Request | Result |
 | --- | --- | --- |
-| `GET /api/projects/creator` | None | `{workspace, snapshot, projects, jobs, diagnostics}`; saved projects include their attempts; no execution |
+| `GET /api/projects/creator` | None | `{workspace, snapshot, projects, jobs, diagnostics}`; saved projects include their configurations and attempts; no execution |
 | `POST /api/projects/preview` | `{workspace, name, destination?, board_id, target, sdk_id}` | `{plan}` with exact files, profile, recipe and destination identity |
 | `POST /api/projects/create` | `{workspace, plan_id}` | HTTP 202 shared create job; completed result contains `project` |
-| `POST /api/projects/build-preview` | `{workspace, project_id, operation}` | `{plan}` with operation, exact fresh `build_dir`, recipe and source identities |
+| `POST /api/projects/configurations` | `{workspace, project_id, name, board_id, target, sdk_id}` | `{configuration}`; saves metadata only |
+| `POST /api/projects/build-preview` | `{workspace, project_id, operation, configuration_id?}` | `{plan}` with selected configuration/profile, operation, exact fresh `build_dir`, recipe and source identities |
 | `POST /api/projects/build` | `{workspace, build_plan_id}` | HTTP 202 shared job; successful result contains `attempt` |
 | `GET /api/jobs/:id` | None | Shared progress, logs and outcome |
 | `POST /api/jobs/:id/cancel` | `{}` | Shared cancellation request; partial output is retained |
@@ -184,6 +210,11 @@ catalogue; a target must belong to its selected board. Unknown fields and invali
 selections are rejected. Failure/cancellation attempts remain readable through the
 creator GET even when the shared job has been evicted from in-memory history.
 
+An omitted, null or empty `configuration_id` selects the original project profile,
+preserving earlier clients. A supplied configuration must belong to this application
+and workspace. The server captures its complete profile in the build plan and attempt;
+execution uses that captured profile. Saved configurations are immutable.
+
 A recipe contains `cwd`, `environment`, `configure` and `build` argument arrays, plus
 `display_configure` and `display_build` shell renderings. The execution uses argument
 arrays and explicit working directory/environment, without a shell. Display commands
@@ -191,12 +222,13 @@ include the same environment selection and can be inspected or used independentl
 
 ## Version 1 records and evidence
 
-Project and attempt records are feature-owned JSON under
+Project, configuration and attempt records are feature-owned JSON under
 `context.feature_data("projects") / "creator"`:
 
 ```text
 <memory-data-dir>/.features/projects/creator/
   projects/<project-id>.json
+  configurations/<configuration-id>.json
   attempts/<attempt-id>.json
 ```
 
@@ -204,7 +236,8 @@ Project and attempt records are feature-owned JSON under
 | --- | --- |
 | Project | `schema_version`, `id`, `workspace`, `name`, `path`, `profile`, template identity/version, generated file hashes, directory identity, creation time |
 | Profile | Exact requested target/board, selected SDK and tools, Zephyr identity, modules/roots, environment observation identity and execution guard, analysis choices |
-| Attempt | `schema_version`, `id`, `project_id`, `workspace`, operation/status, recipe, source hashes, output path, times, context, artifacts, diagnostics, error and bounded log |
+| Configuration | `schema_version`, `id`, `project_id`, `workspace`, `name`, `created_at`, complete `profile` |
+| Attempt | `schema_version`, `id`, `project_id`, `workspace`, selected `configuration` and `profile`, operation/status, recipe, source hashes, output path, times, context, artifacts, diagnostics, error and bounded log |
 | Captured context | Requested/effective target, revision/qualifiers, compiler/SDK, source/build paths, automatic configuration and DTS input paths when reported, freshness/coverage |
 | Artifact reference | Kind, live path, SHA-256, size, availability and generated evidence |
 
@@ -213,6 +246,11 @@ from running to its terminal outcome. Unknown schema versions are rejected witho
 replacing existing records. These first-version formats have no predecessor to migrate;
 future versions require migration tests. A previously running attempt with no active
 server job appears as `interrupted` after restart; it is not automatically resumed.
+
+The optional configuration directory is additive. Existing project records retain their
+original profile without migration. Earlier attempts without configuration/profile
+fields stay readable; their saved commands and context remain the evidence for that run.
+See [ADR 0010](decisions/0010-named-build-configurations.md).
 
 Saved attempt logs retain the final 500 entries, with each entry bounded to 2,000
 characters. Processes have a 30-minute total attempt limit and a 16 MiB output limit.
@@ -229,6 +267,17 @@ P2 does not import another feature's private implementation or introduce a share
 `BuildContext` API. See [ADR 0004](decisions/0004-reviewed-project-creation.md).
 
 ## Validation scope
+
+The named-configuration slice was checked with 322 Python tests and 124 frontend tests,
+plus quick checks and installed-wheel asset verification. Browser checks covered saving,
+selection/review invalidation, draft restoration, workspace isolation, invalid names,
+keyboard focus and the narrow layout. A named configuration compiled the minimal app
+for `qemu_cortex_m3/ti_lm3s6965` with SDK 1.0.1 in an isolated temporary fixture. Its
+original project record and all five source files stayed unchanged, and the attempt
+retained the chosen profile. Other targets and a second SDK selection are covered by
+synthetic tests; only one installed SDK was available for the real build.
+
+For the original P2 workflow:
 
 Local integration on 2026-11-04 configured and compiled the generated minimal application
 for `qemu_cortex_m3/ti_lm3s6965` using Zephyr SDK 1.0.1 and its ARM GNU compiler.

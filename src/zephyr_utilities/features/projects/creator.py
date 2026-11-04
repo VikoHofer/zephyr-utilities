@@ -12,11 +12,11 @@ import uuid
 
 from .analyzer import analyze_environment, digest
 from .builds import command_recipe, execute_build
-from .creation import apply_project, open_directory, path_identity, preview_project, validate_identity
+from .creation import apply_project, open_directory, path_identity, preview_project, select_profile, validate_identity
 from .execution_identity import execution_guard
 from .metadata import read_regular
 from .probing import check_cancel
-from .records import ProjectStore, identifier, now
+from .records import ProjectStore, configuration_name, identifier, now
 
 
 def source_inputs(source, *, cancel=None):
@@ -122,7 +122,7 @@ class CreatorService:
         result = analyze_environment(profile["workspace"], profile["analysis_options"], environ=environment,
                                      emit=emit, cancel=cancel, previous=previous)
         if result["status"] == "stale" or execution_guard(result, profile, cancel=cancel) != profile.get("execution_fingerprint"):
-            raise ValueError("The environment changed since selection. Analyze again and review a new project profile.")
+            raise ValueError("The environment changed since selection. Analyze again and save a new build configuration, or preview a new application.")
         check_cancel(cancel)
 
     def create(self, body):
@@ -144,12 +144,35 @@ class CreatorService:
         return self.context.jobs.submit("projects", run, resource_key=f"create:{plan['destination']}",
                                         metadata={"workspace": workspace, "operation": "create", "view": "create", "plan_id": plan["id"]})
 
+    def save_configuration(self, body):
+        workspace = self._workspace(body, {"project_id", "name", "board_id", "target", "sdk_id"})
+        name = configuration_name(body.get("name"))
+        project = self.store.project(body.get("project_id"), workspace)
+        validate_identity(project["path"], project["directory_identity"])
+        snapshot = self.environments.latest(workspace)
+        profile = select_profile(workspace, body, snapshot)
+        profile["execution_fingerprint"] = execution_guard(snapshot, profile)
+        command_recipe(profile, project["path"], Path(project["path"]) / "build" / "manual")
+        configuration = {"schema_version": 1, "id": uuid.uuid4().hex, "project_id": project["id"],
+                         "workspace": workspace, "name": name, "created_at": now(), "profile": profile}
+        validate_identity(project["path"], project["directory_identity"])
+        self.store.save_configuration(configuration)
+        return {"configuration": deepcopy(configuration)}
+
     def build_preview(self, body):
-        workspace = self._workspace(body, {"project_id", "operation"})
+        workspace = self._workspace(body, {"project_id", "operation", "configuration_id"})
         operation = body.get("operation")
         if operation not in {"configure", "build"}:
             raise ValueError("Choose configure or build.")
         project = self.store.project(body.get("project_id"), workspace)
+        configuration_id = body.get("configuration_id")
+        if configuration_id is None or configuration_id == "":
+            profile = deepcopy(project["profile"])
+            configuration = {"id": None, "name": "Original"}
+        else:
+            saved = self.store.configuration(configuration_id, project["id"], workspace)
+            profile = deepcopy(saved["profile"])
+            configuration = {"id": saved["id"], "name": saved["name"]}
         source = Path(project["path"])
         validate_identity(source, project["directory_identity"])
         sources = source_inputs(source)
@@ -158,10 +181,11 @@ class CreatorService:
         plan_id = uuid.uuid4().hex
         output = parent / plan_id
         environment = dict(os.environ)
-        recipe = command_recipe(project["profile"], source, output, environ=environment)
+        recipe = command_recipe(profile, source, output, environ=environment)
         plan = {"schema_version": 1, "id": plan_id, "workspace": workspace, "project_id": project["id"],
                 "operation": operation, "build_dir": str(output), "recipe": recipe, "sources": sources,
-                "parent_identity": parent_identity, "created_at": now()}
+                "parent_identity": parent_identity, "created_at": now(), "profile": profile,
+                "configuration": configuration}
         return self._remember("build", plan, environment)
 
     def _prepare_output(self, project, plan, *, cancel=None):
@@ -201,13 +225,14 @@ class CreatorService:
             attempt = {"schema_version": 1, "id": plan["id"], "project_id": project["id"], "workspace": workspace,
                        "operation": plan["operation"], "status": "running", "started_at": now(),
                        "build_dir": plan["build_dir"], "recipe": plan["recipe"], "sources": plan["sources"],
+                       "profile": deepcopy(plan["profile"]), "configuration": deepcopy(plan["configuration"]),
                        "context": {}, "artifacts": [], "diagnostics": []}
             self.store.save_attempt(attempt)
             try:
-                self._recheck(project["profile"], environment, report, cancel)
+                self._recheck(plan["profile"], environment, report, cancel)
                 self._prepare_output(project, plan, cancel=cancel)
                 check_cancel(cancel)
-                result = execute_build(project["profile"], project["path"], plan["build_dir"], plan["operation"],
+                result = execute_build(plan["profile"], project["path"], plan["build_dir"], plan["operation"],
                                        environ=environment, emit=report, cancel=cancel)
                 attempt.update(result)
                 try:

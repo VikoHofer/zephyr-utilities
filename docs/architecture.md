@@ -125,9 +125,12 @@ analysis checks fingerprints and can reuse an unchanged catalogue. Future format
 rejected without overwriting their data. See [ADR 0003](decisions/0003-environment-observations.md)
 and the [environment analyser contract](environment-analyser.md).
 
-Projects also owns schema-version-1 project/profile and build-attempt JSON under
+Projects also owns schema-version-1 project/profile, named configuration and build-attempt JSON under
 `feature_data("projects") / "creator"`. Project definitions retain template/input identity;
 attempt records retain reviewed commands, bounded logs, outcomes and live output hashes.
+Named configurations are additive immutable records; the original project profile
+remains available. Attempts capture the selected profile before execution. See
+[ADR 0010](decisions/0010-named-build-configurations.md).
 Unknown formats are preserved. Interrupted work is shown as interrupted after restart,
 not resumed. See [ADR 0004](decisions/0004-reviewed-project-creation.md) and the
 [creator contract](project-creator.md).

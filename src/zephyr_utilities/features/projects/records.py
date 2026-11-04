@@ -7,22 +7,35 @@ from pathlib import Path
 import re
 from threading import RLock
 import uuid
+import unicodedata
 
 from .metadata import read_regular
 
 
 SCHEMA_VERSION = 1
 MAX_RECORD = 4 * 1024 * 1024
+MAX_CONFIGURATIONS = 32
+MAX_CONFIGURATION_RECORDS = 16000
 
 
 def identifier(value):
     if not isinstance(value, str) or not re.fullmatch(r"[a-f0-9]{32}", value):
-        raise ValueError("Invalid project or attempt identity.")
+        raise ValueError("Invalid project, configuration or attempt identity.")
     return value
 
 
 def now():
     return datetime.now(timezone.utc).isoformat()
+
+
+def configuration_name(value):
+    if (not isinstance(value, str) or any(unicodedata.category(character).startswith("C") for character in value)
+            or not 1 <= len(value.strip()) <= 64):
+        raise ValueError("Configuration names need 1 to 64 readable characters without control characters.")
+    name = value.strip()
+    if name.casefold() == "original":
+        raise ValueError("Original is reserved for the application's initial configuration.")
+    return name
 
 
 class ProjectStore:
@@ -78,6 +91,59 @@ class ProjectStore:
         with self.lock:
             self._write(self.root / "attempts" / f"{identifier(attempt['id'])}.json", attempt)
 
+    def _validate_configuration(self, data):
+        identifier(data.get("id"))
+        identifier(data.get("project_id"))
+        if configuration_name(data.get("name")) != data["name"]:
+            raise ValueError("Saved configuration names must be trimmed.")
+        profile = data.get("profile")
+        if (not isinstance(data.get("workspace"), str) or not isinstance(profile, dict) or
+                profile.get("schema_version") != SCHEMA_VERSION or profile.get("workspace") != data["workspace"]):
+            raise ValueError("The saved configuration has an unsupported or mismatched profile.")
+        return data
+
+    def configuration(self, configuration_id, project_id, workspace):
+        with self.lock:
+            path = self.root / "configurations" / f"{identifier(configuration_id)}.json"
+            try:
+                data = self._validate_configuration(self._read(path))
+            except FileNotFoundError as exc:
+                raise ValueError("The selected build configuration is no longer available. Refresh applications.") from exc
+            if (data.get("workspace") != str(workspace) or data.get("project_id") != project_id or
+                    data.get("id") != configuration_id):
+                raise ValueError("The build configuration does not belong to this application and workspace.")
+            return data
+
+    def save_configuration(self, configuration):
+        with self.lock:
+            self._validate_configuration(configuration)
+            self.project(configuration["project_id"], configuration["workspace"])
+            path = self.root / "configurations" / f"{configuration['id']}.json"
+            if path.exists():
+                if self._read(path) != configuration:
+                    raise ValueError("A different configuration already uses this identity.")
+                return
+            records, errors = self._configurations()
+            if errors:
+                raise ValueError("Saved configuration records could not be read completely. Existing data was preserved.")
+            matching = [record for record in records if record["project_id"] == configuration["project_id"] and
+                        record["workspace"] == configuration["workspace"]]
+            if any(record["name"].casefold() == configuration["name"].casefold() for record in matching):
+                raise ValueError("This application already has a configuration with that name.")
+            if len(matching) >= MAX_CONFIGURATIONS or len(records) >= MAX_CONFIGURATION_RECORDS:
+                raise ValueError("The saved build configuration limit was reached (32 per application).")
+            self._write(path, configuration)
+
+    def _configurations(self):
+        records, errors = self._items("configurations", MAX_CONFIGURATION_RECORDS)
+        result = []
+        for record in records:
+            try:
+                result.append(self._validate_configuration(record))
+            except ValueError as exc:
+                errors.append(f"Cannot open configuration {record['id']}: {exc}")
+        return result, errors
+
     def _items(self, kind, limit):
         directory = self.root / kind
         if directory.is_symlink() or self.root.is_symlink():
@@ -105,11 +171,16 @@ class ProjectStore:
         with self.lock:
             projects, errors = self._items("projects", 500)
             attempts, more_errors = self._items("attempts", 2000)
+            configurations, configuration_errors = self._configurations()
             result = []
             for stored in projects:
                 if stored.get("workspace") != str(workspace):
                     continue
                 project = deepcopy(stored)
+                project["configurations"] = [deepcopy(record) for record in configurations
+                                             if record["workspace"] == str(workspace) and
+                                             record["project_id"] == project["id"]]
+                project["configurations"].sort(key=lambda item: (item["name"].casefold(), item["id"]))
                 project["attempts"] = []
                 for record in attempts:
                     if record.get("workspace") != str(workspace) or record.get("project_id") != project["id"]:
@@ -121,4 +192,4 @@ class ProjectStore:
                 project["attempts"].sort(key=lambda item: item.get("started_at", ""), reverse=True)
                 result.append(project)
             result.sort(key=lambda item: item.get("created_at", ""), reverse=True)
-            return result, errors + more_errors
+            return result, errors + more_errors + configuration_errors

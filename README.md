@@ -159,6 +159,12 @@ Open **Applications** in the Project Creator sidebar. Choose **Configure** or **
 new output path, then start that operation. Each attempt retains its outcome and bounded
 log; leaving the view does not cancel it.
 
+Use **Add configuration** on a saved application to name another exact board target and
+installed SDK. Select it from **Build configuration** before reviewing a build. Saving
+only records that choice; application sources and the original configuration are retained.
+After an environment upgrade, analyze again and save a new configuration. Fragment
+selection and visual overlay editing remain planned.
+
 The first creator supports Linux, one minimal C application/image, an existing resolved
 west workspace and installed GNU Zephyr SDKs. It rejects existing destinations, symlinked
 application paths and source paths containing whitespace. No flashing, SDK installation,

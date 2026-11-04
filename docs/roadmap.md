@@ -93,7 +93,7 @@ P2 adds the first creator workflow:
 
 The source and README commands work without Utilities metadata. This release is Linux
 only, requires a resolved existing west workspace/module list, and keeps SDK installation,
-advanced profile editing and project import deferred. The P3 inspection slice adds the
+configuration fragment editing and project import deferred. The P3 inspection slice adds the
 read-only Device Tree handoff and verified-image Memory report handoff. See the
 [Project Creator guide](project-creator.md) and
 [ADR 0004](decisions/0004-reviewed-project-creation.md).
@@ -103,7 +103,12 @@ prioritizes new applications in the existing workspace. P0 through P2 are delive
 within their documented limits. P3 provides existing-build inspection,
 sysbuild domain selection, a read-only Device Tree connection and an explicit Memory
 report handoff. Current source/binding navigation is available for inspected builds and
-applications before configuration; deeper source attribution remains future work. Later stages cover editing, advanced
+applications before configuration; deeper source attribution remains future work.
+The first P4 slice adds named board-target/SDK configurations to saved applications,
+with explicit selection for reviewed builds and captured selection in attempt history.
+Saving changes metadata only. Ordered fragment selection is the next configuration slice;
+visual overlay/hardware editing remains deferred until the creator workflow is ready.
+Later stages cover editing, advanced
 composition and environment migration. Build evidence does not establish hardware operation.
 
 ## TinyML model and experiment analysis

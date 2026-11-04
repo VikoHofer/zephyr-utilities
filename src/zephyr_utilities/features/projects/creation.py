@@ -183,9 +183,14 @@ def _validate_destination(workspace, destination, snapshot):
     return destination
 
 
-def _profile(workspace, body, snapshot):
-    if snapshot.get("schema_version") != SCHEMA_VERSION or snapshot.get("status") not in {"complete", "partial"}:
-        raise ValueError("Analyze the environment before creating an application; stale observations cannot be used.")
+def select_profile(workspace, body, snapshot):
+    """Capture an exact discovered target and installed SDK for an application."""
+    if (not isinstance(snapshot, dict) or snapshot.get("schema_version") != SCHEMA_VERSION or
+            snapshot.get("status") not in {"complete", "partial"}):
+        raise ValueError("Analyze the environment before selecting a build configuration; stale observations cannot be used.")
+    for key in ("board_id", "target", "sdk_id"):
+        if not isinstance(body.get(key), str) or not body[key] or len(body[key]) > 1000:
+            raise ValueError("Select a board target and installed SDK from the environment catalogue.")
     board = next((item for item in snapshot.get("boards", []) if item.get("id") == body.get("board_id")), None)
     if board is None or board.get("status") != "discovered" or body.get("target") not in board.get("targets", []):
         raise ValueError("Select an exact discovered board target, including its revision and qualifiers.")
@@ -224,10 +229,7 @@ def preview_project(workspace, body, snapshot, *, recipe_factory=None):
         raise ValueError("Application names need a leading letter and up to 64 letters, digits, underscores or hyphens.")
     if not isinstance(snapshot, dict):
         raise ValueError("Analyze the selected workspace before previewing an application.")
-    for key in ("board_id", "target", "sdk_id"):
-        if not isinstance(body.get(key), str) or not body[key] or len(body[key]) > 1000:
-            raise ValueError("Select a board target and installed SDK from the environment catalogue.")
-    profile = _profile(workspace, body, snapshot)
+    profile = select_profile(workspace, body, snapshot)
     selected_destination = body.get("destination", "")
     if not isinstance(selected_destination, str):
         raise ValueError("The application destination must be a local path.")

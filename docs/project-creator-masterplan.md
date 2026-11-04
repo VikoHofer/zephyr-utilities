@@ -532,7 +532,13 @@ Memory's current snapshots and compatibility endpoints still pass regression che
 
 ### P4 Add controlled configuration editing
 
-Deliver in smaller slices: named build profiles and fragment selection; source overlay
+First slice implemented: saved applications have named exact-target/installed-SDK
+configurations. Saving writes metadata only; Configure/Build reviews and executes the
+selected captured profile in fresh outputs. Original project profiles and earlier
+attempts remain readable without migration. See
+[ADR 0010](decisions/0010-named-build-configurations.md).
+
+Remaining slices: ordered fragment selection; source overlay
 editing with diff; diagnostics from candidate configuration; then a limited binding-based
 property form. Preserve independent source edits, unknown expressions and comments.
 Expose software dependency failures beside hardware changes.
@@ -645,7 +651,8 @@ browsing is available; deeper source attribution is deferred while Project Creat
 everyday workflow takes priority. Current-source
 and binding navigation preserve existing creator and memory behavior. Do not treat output
 identity or a current binding candidate as source/build consistency.
-Before P4, select the creator configuration/profile operations; defer visual hardware
-editing until the creator workflow is ready. Before P5/P7, prioritize actual needs such
+P4 starts with named board-target/SDK configurations. Ordered fragment selection remains
+the next creator configuration slice; defer visual hardware editing until the creator
+workflow is ready. Before P5/P7, prioritize actual needs such
 as sensors, networking, custom boards or multicore builds. These later stages are context,
 not authorization to implement them automatically.

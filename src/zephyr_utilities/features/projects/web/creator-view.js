@@ -1,5 +1,6 @@
 import {activeJob} from "./environment-state.js";
 import {createCreatorSession, creatorBoards, creatorSdks, currentCreatorJob} from "./creator-state.js";
+import {createConfigurationView} from "./configuration-view.js";
 
 export function mountCreator(root, context) {
   const $ = (name) => root.querySelector(`[data-${name}]`);
@@ -39,6 +40,7 @@ export function mountCreator(root, context) {
     detail.append(node("summary", "", label), ...content);
     return detail;
   }
+  const configurations = createConfigurationView({node, fact, choices});
   function recipe(parent, value, operation, key = "recipe") {
     parent.replaceChildren();
     if (!value) { parent.append(node("p", "projects-muted", "Commands are unavailable. Generate a new preview.")); return; }
@@ -91,10 +93,14 @@ export function mountCreator(root, context) {
     const detail = node("details", "projects-attempt");
     const key = `attempt:${attempt.id}`;
     detail.dataset.disclosure = key;
-    detail.append(node("summary", "", `${text(attempt.status)} · ${attempt.operation === "configure" ? "Configure" : "Build"} · ${time(attempt.finished_at || attempt.created_at || attempt.started_at)}`));
+    detail.append(node("summary", "", `${text(attempt.status)} · ${attempt.operation === "configure" ? "Configure" : "Build"} · ${attempt.configuration?.name || "Original"} · ${time(attempt.finished_at || attempt.created_at || attempt.started_at)}`));
     if (attempt.error) detail.append(node("p", "projects-error", attempt.error));
     if (attempt.status === "interrupted") detail.append(node("p", "projects-banner", "The application stopped before this operation recorded a final result. Its output may be incomplete."));
     const facts = node("dl", "projects-identity");
+    if (attempt.profile) {
+      fact(facts, "Requested target", attempt.profile.target, true);
+      fact(facts, "SDK installation", attempt.profile.sdk?.path, true);
+    }
     fact(facts, "Output directory", attempt.build_dir || attempt.context?.build_dir || attempt.context?.build_directory, true);
     fact(facts, "Effective target", attempt.context?.effective_target || attempt.context?.target || attempt.context?.board, true);
     detail.append(facts);
@@ -127,8 +133,10 @@ export function mountCreator(root, context) {
     const projects = array(state.projects);
     const signature = JSON.stringify(projects);
     const target = $("created-projects");
+    let focus;
     if (signature !== renderedProjects) {
       renderedProjects = signature;
+      focus = configurations.captureFocus(target);
       const expanded = new Set([...target.querySelectorAll("details[open][data-disclosure]")].map((detail) => detail.dataset.disclosure));
       target.replaceChildren();
       if (!projects.length) {
@@ -138,7 +146,7 @@ export function mountCreator(root, context) {
       for (const project of projects) {
         const card = node("article", "projects-created-app");
         card.append(node("h3", "", project.name), node("p", "projects-path", project.path));
-        const facts = node("dl", "projects-identity"); fact(facts, "Requested target", project.profile?.target, true); fact(facts, "SDK installation", project.profile?.sdk?.path, true); card.append(facts);
+        card.append(configurations.create(project));
         const actions = node("div", "projects-actions");
         for (const [operation, label] of [["configure", "Configure"], ["build", "Build"]]) {
           const button = node("button", `projects-button${operation === "build" ? " primary" : ""}`, label); button.type = "button"; button.dataset.projectId = project.id; button.dataset.buildOperation = operation; actions.append(button);
@@ -153,7 +161,12 @@ export function mountCreator(root, context) {
       }
       for (const detail of target.querySelectorAll("details[data-disclosure]")) detail.open = expanded.has(detail.dataset.disclosure);
     }
+    for (const section of target.querySelectorAll("[data-configuration-project]")) {
+      const project = projects.find((item) => item.id === section.dataset.configurationProject);
+      configurations.update(section, project, state, busy);
+    }
     for (const button of target.querySelectorAll("[data-build-operation]")) button.disabled = busy;
+    configurations.restoreFocus(target, focus);
   }
   function renderBuildPlan() {
     const plan = state.buildPlan;
@@ -163,7 +176,12 @@ export function mountCreator(root, context) {
     if (!plan) return;
     $("build-preview-title").textContent = plan.operation === "configure" ? "Configure application" : "Configure and build application";
     recipe($("build-preview-recipe"), plan.recipe, plan.operation);
-    $("build-preview-recipe").prepend(node("p", "projects-path", `New output directory: ${plan.build_dir}`));
+    const facts = node("dl", "projects-identity");
+    fact(facts, "Application", array(state.projects).find((project) => project.id === plan.project_id)?.name);
+    fact(facts, "Build configuration", plan.configuration?.name || "Original");
+    fact(facts, "Requested target", plan.profile?.target, true);
+    fact(facts, "SDK installation", plan.profile?.sdk?.path, true);
+    $("build-preview-recipe").prepend(facts, node("p", "projects-path", `New output directory: ${plan.build_dir}`));
     $("build-start").textContent = plan.operation === "configure" ? "Run configure" : "Run build";
   }
   function renderJob() {
@@ -186,7 +204,7 @@ export function mountCreator(root, context) {
     const busy = Boolean(state.busy || state.loading || array(state.jobs).some(activeJob));
     $("creator-eyebrow").textContent = creating ? "PROJECT CREATOR · NEW APPLICATION" : "PROJECT CREATOR · APPLICATIONS";
     $("creator-title").textContent = creating ? "Create an application." : "Your workspace applications.";
-    $("creator-intro").textContent = creating ? "Choose a destination, board and SDK, then review the files before creation." : "Open a saved application, configure it or start a build.";
+    $("creator-intro").textContent = creating ? "Choose a destination, board and SDK, then review the files before creation." : "Choose an application's build configuration, configure it or start a build.";
     $("creator-page-link").textContent = creating ? "View applications" : "Create application";
     $("creator-page-link").href = creating ? "#/projects/applications" : "#/projects/create";
     $("creator-scope").textContent = creating ? "Creation writes the files you review. Configure or build the new app from Applications when you are ready." : "Configure and Build each use a new output directory and a separate command review. Neither action flashes hardware.";
@@ -221,6 +239,35 @@ export function mountCreator(root, context) {
   listen($("created-projects"), "click", (event) => {
     const button = event.target.closest("[data-build-operation]");
     if (button && root.contains(button)) session.previewBuild(button.dataset.projectId, button.dataset.buildOperation);
+    const add = event.target.closest("[data-configuration-add]");
+    if (add && root.contains(add)) {
+      session.editConfiguration(add.dataset.configurationAdd);
+      add.closest("[data-configuration-project]").querySelector('[data-configuration-field="name"]').focus();
+    }
+    const close = event.target.closest("[data-configuration-close]");
+    if (close && root.contains(close)) {
+      session.closeConfiguration();
+      close.closest("[data-configuration-project]").querySelector("[data-configuration-add]").focus();
+    }
+  });
+  listen($("created-projects"), "change", (event) => {
+    const input = event.target;
+    if (input.matches("[data-configuration-select]")) session.selectConfiguration(input.dataset.configurationSelect, input.value);
+    else if (input.matches("select[data-configuration-field]")) session.changeConfigurationField(input.closest("[data-configuration-form]").dataset.configurationForm, input.dataset.configurationField, input.value);
+  });
+  listen($("created-projects"), "input", (event) => {
+    const input = event.target;
+    if (input.matches("input[data-configuration-field]")) session.changeConfigurationField(input.closest("[data-configuration-form]").dataset.configurationForm, input.dataset.configurationField, input.value);
+  });
+  listen($("created-projects"), "submit", async (event) => {
+    const form = event.target.closest("[data-configuration-form]");
+    if (!form) return;
+    event.preventDefault();
+    const projectId = form.dataset.configurationForm;
+    await session.saveConfiguration(projectId);
+    if (!disposed && state.configurationNotice?.project_id === projectId && !state.configurationEditor) {
+      [...root.querySelectorAll("[data-configuration-select]")].find((input) => input.dataset.configurationSelect === projectId)?.focus();
+    }
   });
   session = createCreatorSession({api: context.api, state, workspace: () => context.workspace.path, onChange: render, pendingBoard: () => {
     const pending = context.state.creatorPendingBoard;
