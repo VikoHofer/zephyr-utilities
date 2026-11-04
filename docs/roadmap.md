@@ -17,7 +17,7 @@ research master plan, not a general coding-assistant integration.
 - Reviewed minimal-C workspace application creation, explicit configure/build jobs and
   versioned profiles/attempt evidence in fresh output directories.
 - Read-only existing-build inspection, sysbuild image selection and a shared observation
-  handoff to the resolved Device Tree reader.
+  handoff to the resolved Device Tree reader and Memory Explorer's explicit report review.
 
 ## Feature ownership and next useful slices
 
@@ -25,7 +25,7 @@ research master plan, not a general coding-assistant integration.
 | --- | --- | --- |
 | Memory Explorer (`memory`) | Available | Existing-build reports, visualization, snapshots and comparisons |
 | Device Tree Editor (`devicetree`) | Read-only resolved tree inspection available; editing planned | Next: source/binding navigation, then reviewable edits |
-| Project Creator (`projects`) | Analysis, creation/build and existing-build inspection available | Next: richer P3 source inspection and Memory handoff |
+| Project Creator (`projects`) | Analysis, creation/build and existing-build inspection available | Next: richer P3 source and binding inspection |
 | TinyML Experiments (`tinyml`) | Planned | Connect model/build/run identities and compare imported experiment measurements |
 
 Planned catalog entries are development boundaries. They do not yet edit Device Trees,
@@ -84,15 +84,15 @@ P2 adds the first creator workflow:
 The source and README commands work without Utilities metadata. This release is Linux
 only, requires a resolved existing west workspace/module list, and keeps SDK installation,
 advanced profile editing and project import deferred. The P3 inspection slice adds the
-read-only Device Tree handoff. See the
+read-only Device Tree handoff and verified-image Memory report handoff. See the
 [Project Creator guide](project-creator.md) and
 [ADR 0004](decisions/0004-reviewed-project-creation.md).
 
 The detailed [Project Creator and environment analyser master plan](project-creator-masterplan.md)
 prioritizes new applications in the existing workspace. P0 through P2 are delivered
-within their documented limits. P3's first slice provides existing-build inspection,
-sysbuild domain selection and a read-only Device Tree connection. Source/binding
-navigation and Memory handoff remain P3 follow-ups; later stages cover editing, advanced
+within their documented limits. P3 provides existing-build inspection,
+sysbuild domain selection, a read-only Device Tree connection and an explicit Memory
+report handoff. Source/binding navigation remains P3 work; later stages cover editing, advanced
 composition and environment migration. Build evidence does not establish hardware operation.
 
 ## TinyML model and experiment analysis

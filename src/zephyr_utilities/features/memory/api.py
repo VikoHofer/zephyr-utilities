@@ -8,7 +8,7 @@ from pathlib import Path
 from ...core.http import Response
 from .compare import compare_snapshots
 from .discovery import discover_builds
-from .snapshots import SnapshotStore
+from .snapshots import SnapshotStore, inspect_selected_build
 
 
 def validate_labels(body):
@@ -45,16 +45,47 @@ class MemoryService:
         self.context = context
         self.store = SnapshotStore(context.feature_data("memory"))
 
+    def _selection(self, body):
+        if not isinstance(body, dict) or set(body) != {"workspace", "inspection_id", "domain"}:
+            raise ValueError("Choose a workspace, build inspection and image/domain.")
+        workspace = self.context.workspace.get()["path"]
+        if body["workspace"] != workspace:
+            raise ValueError("The selected workspace changed. Open a build in the current workspace.")
+        if not isinstance(body["domain"], str) or not body["domain"] or len(body["domain"]) > 256:
+            raise ValueError("Choose an image/domain from this build inspection.")
+        return self.context.builds.select_artifact(workspace, body["inspection_id"], body["domain"], "elf",
+                                                  related_kinds=("kconfig", "map", "resolved-dts"))
+
+    def inspection(self, request):
+        selection = self._selection(request.body)
+        build = inspect_selected_build(selection)
+        return {"workspace": selection.workspace, "inspection_id": selection.inspection_id,
+                "domain": selection.domain, "build": build,
+                "elf": {key: selection.artifact[key] for key in ("path", "sha256")},
+                "context": selection.context}
+
     def start_job(self, request):
         body = request.body
+        selection = None
+        if "selection" in body:
+            if set(body) - {"build_path", "name", "notes", "selection"}:
+                raise ValueError("Unknown inspected-build report options.")
+            selection = self._selection(body["selection"])
         build_path = body.get("build_path")
         if not isinstance(build_path, str) or not build_path.strip():
             raise ValueError("Select a build directory first.")
         path = str(Path(build_path).expanduser().resolve())
         name, notes = validate_labels(body)
+        if selection is not None:
+            if path != selection.build_dir:
+                raise ValueError("The build directory does not match the selected inspection.")
+            build = inspect_selected_build(selection)
+            if not build["ready"]:
+                raise ValueError(build["error"])
 
         def capture(emit, cancel):
-            snapshot = self.store.capture(path, name, notes, emit=emit, cancel=cancel)
+            options = {"selection": selection} if selection is not None else {}
+            snapshot = self.store.capture(path, name, notes, emit=emit, cancel=cancel, **options)
             return {"snapshot_id": snapshot["id"]}
 
         job = self.context.jobs.submit("memory", capture, resource_key=f"build:{path}",
@@ -87,6 +118,7 @@ class MemoryService:
 def register(router, context):
     service = MemoryService(context)
     context.services["memory"] = service
+    router.add("POST", "/api/memory/inspection", service.inspection)
     routes = (
         ("GET", "/builds", lambda request: discover_builds(
             request.query_value("path", context.workspace.get()["path"]))),

@@ -8,6 +8,7 @@ export function canReadBuildArtifact(state, kind) {
     array(domain.artifacts).some((artifact) => artifact.kind === kind && artifact.availability === "live"));
 }
 export const canOpenDeviceTree = (state) => canReadBuildArtifact(state, "resolved-dts");
+export const canOpenMemory = (state) => canReadBuildArtifact(state, "elf");
 
 export function createBuildSession({api, state, workspace, onChange, navigate}) {
   const lifetime = new AbortController();
@@ -113,6 +114,11 @@ export function createBuildSession({api, state, workspace, onChange, navigate}) 
     if (followWorkspace()) { publish(); return; }
     if (canOpenDeviceTree(state)) navigate(`devicetree/inspect/${encodeURIComponent(state.observation.id)}/${encodeURIComponent(state.domain)}`);
   }
+  function openMemory() {
+    if (disposed) return;
+    if (followWorkspace()) { publish(); return; }
+    if (canOpenMemory(state)) navigate(`memory/inspect/${encodeURIComponent(state.observation.id)}/${encodeURIComponent(state.domain)}`);
+  }
   async function show(view = "builds") {
     if (disposed) return;
     const previousWorkspace = state.workspace;
@@ -129,6 +135,6 @@ export function createBuildSession({api, state, workspace, onChange, navigate}) 
     }
     await check();
   }
-  return {open, check, changePath, selectDomain, readText, openDeviceTree, navigate: show,
+  return {open, check, changePath, selectDomain, readText, openDeviceTree, openMemory, navigate: show,
     dispose() { disposed = true; revision++; fileRevision++; lifetime.abort(); }};
 }

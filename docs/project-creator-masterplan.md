@@ -2,8 +2,9 @@
 
 Status: P0 foundation, P1 environment analysis and P2 minimal application creation with
 explicit configure/build actions are implemented on 2026-11-04. Device Tree Editor
-(`devicetree`) now provides read-only resolved-tree inspection through the first P3
-existing-build inspection slice. The rest of P3 and P4 onward remain planned. The agreed first creation priority is
+(`devicetree`) now provides read-only resolved-tree inspection through P3's
+existing-build inspection. A verified image handoff to Memory Explorer is also available.
+The rest of P3 and P4 onward remain planned. The agreed first creation priority is
 **new applications inside the existing `zephyrproject` workspace**.
 
 Delivered records are `EnvironmentSnapshot` version 1 and feature-owned version-1
@@ -407,7 +408,7 @@ See [sysbuild](https://docs.zephyrproject.org/latest/build/sysbuild/index.html).
 ## Staged delivery and exit gates
 
 Stages are capability boundaries, not calendar estimates. P0/P1 provide environment
-analysis and P2 delivers the first creator workflow. The first P3 inspection slice is
+analysis and P2 delivers the first creator workflow. P3 inspection and Memory handoff are
 available; remaining P3 work and P4 expand editor integration. P5 through P7 are optional
 expansion based on actual projects.
 
@@ -416,7 +417,7 @@ expansion based on actual projects.
 | P0 | Observation contract, capability policy and synthetic fixtures | Available | Existing platform | Small |
 | P1 | Offline environment analyser and target catalogue | Available | P0 | Medium |
 | P2 | New workspace application and explicit single-image build | Available within documented limits | P1 | Medium |
-| P3 | Existing-build inspection and Device Tree handoff | First read-only slice available; source/binding navigation and Memory handoff pending | P2; editor reader | Medium |
+| P3 | Existing-build inspection and tool handoffs | Read-only Device Tree and Memory handoffs available; source/binding navigation pending | P2; editor reader | Medium |
 | P4 | Reviewable configuration and overlay editing | Planned | P3 | Large |
 | P5 | Reusable components and advanced project layouts | Planned | P2; P4 for integrated editing | Large, split into slices |
 | P6 | Environment comparison and upgrade trials | Planned | P1/P2; later stages for their profiles | Medium to large |
@@ -473,8 +474,8 @@ The supported slice is Linux, a resolved existing west workspace with a nonempty
 module list, one minimal C application/image and GNU SDK selection. Source paths with
 whitespace are rejected to match Zephyr's build-system limitation. Automatic configuration
 packages are disabled; ordinary application configuration/overlay discovery stays with
-Zephyr. Profile editing/migration, sample import, sysbuild and cross-feature handoff remain
-later work. See the [creator contract](project-creator.md) and
+Zephyr. Profile editing/migration, sample import and sysbuild creation remain later work;
+P3 adds handoff from an existing build to Device Tree and Memory. See the [creator contract](project-creator.md) and
 [ADR 0004](decisions/0004-reviewed-project-creation.md).
 
 Exit gate: generate/configure/build with a real local target and SDK, independently run
@@ -490,19 +491,21 @@ not require a graphical Kconfig editor, network installation or a custom-board w
 
 ### P3 Connect existing builds and Device Tree inspection
 
-Delivered first slice: explicit existing-build opening, metadata/artifact inspection,
+Delivered slices: explicit existing-build opening, metadata/artifact inspection,
 sysbuild domain selection and a shared observation handoff to a read-only resolved DTS
 node/property reader. Changed or missing outputs retain their original identity and
 require re-inspection; source freshness remains unknown. No tools execute during
-inspection. See [scope and limits](build-inspection.md).
+inspection. Memory handoff carries the same selected image/ELF into an explicit report
+review, with revalidation before tool execution and snapshot publication. Saved Memory
+formats and manual workflows are preserved. See [scope and limits](build-inspection.md).
 
 The remaining target for this stage is:
 
 Open an existing application/build without changing its files. Share the minimal build
 context and artifact interface with the Device Tree reader. Offer source browsing before
 configuration and a clearly labeled resolved view afterward. Recognize existing sysbuild
-domains even before creating multi-image projects. Hand completed ELF artifacts to
-Memory Explorer without causing report inspection to rebuild firmware.
+domains even before creating multi-image projects. The delivered Memory handoff analyzes
+completed ELF artifacts without rebuilding firmware.
 
 Exit gate: Projects and Device Tree show the same target, overlay inputs and domain;
 two builds of one application remain distinct; stale or missing artifacts are explicit;
@@ -618,9 +621,9 @@ uses the minimal C template, `<workspace>/applications/<name>`, explicit install
 selection and one image per project profile. Analysis and previews do not download tools
 or change firmware inputs. Profile/attempt persistence is versioned and feature-owned.
 
-P0 through P2 and the first P3 inspection slice are available. The shared observation
+P0 through P2, P3 inspection and the Memory handoff are available. The shared observation
 service now defines output freshness checks and read-root boundaries. Next P3 slices
-should add source/binding navigation and the Memory Explorer handoff, preserving existing
+should add source/binding navigation, preserving existing
 creator and memory behavior. Do not treat output identity as source/build consistency.
 Before P4, select the first edit operations. Before P5/P7, prioritize actual needs such
 as sensors, networking, custom boards or multicore builds. These later stages are context,

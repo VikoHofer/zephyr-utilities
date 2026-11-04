@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {canOpenDeviceTree, createBuildSession, selectedBuildDomain} from "../../src/zephyr_utilities/features/projects/web/build-state.js";
+import {canOpenDeviceTree, canOpenMemory, createBuildSession, selectedBuildDomain} from "../../src/zephyr_utilities/features/projects/web/build-state.js";
 
 const one = "/workspace/one";
 const two = "/workspace/two";
@@ -16,6 +16,33 @@ function harness(api, state = {}) {
   const session = createBuildSession({api, state, workspace: () => workspace, onChange: () => publications++, navigate: (route) => routes.push(route)});
   return {session, state, routes, publications: () => publications, switchWorkspace(path) { workspace = path; }};
 }
+
+test("Memory handoff carries the selected ELF image without starting a report job", async () => {
+  const value = observation();
+  value.domains[0].name = "app / network";
+  value.domains[0].artifacts.push({kind: "elf", path: `${one}/build/app/zephyr/zephyr.elf`, sha256: "elf-hash", availability: "live"});
+  const calls = [];
+  const app = harness(async (path) => { calls.push(path); return value; });
+  await app.session.open(`${one}/build`);
+  assert.equal(canOpenMemory(app.state), false, "default boot image has no ELF");
+  app.session.openMemory();
+  assert.deepEqual(app.routes, []);
+  app.session.selectDomain("app / network");
+  assert.equal(canOpenMemory(app.state), true);
+  app.session.openMemory();
+  assert.deepEqual(app.routes, ["memory/inspect/observation-one/app%20%2F%20network"]);
+  assert.deepEqual(calls, ["/api/projects/inspect"]);
+  selectedBuildDomain(app.state).artifacts[1].availability = "missing";
+  assert.equal(canOpenMemory(app.state), false);
+  selectedBuildDomain(app.state).artifacts[1].availability = "live";
+  selectedBuildDomain(app.state).freshness = "changed";
+  assert.equal(canOpenMemory(app.state), false);
+  selectedBuildDomain(app.state).freshness = "unchanged";
+  app.switchWorkspace(two); app.session.openMemory();
+  assert.equal(app.routes.length, 1);
+  assert.equal(canOpenMemory(app.state), false);
+  app.session.dispose();
+});
 
 test("opening the inspector is idle until a build is selected", async () => {
   const calls = [];

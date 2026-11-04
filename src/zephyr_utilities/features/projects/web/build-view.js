@@ -1,4 +1,4 @@
-import {buildTextKinds, canOpenDeviceTree, canReadBuildArtifact, createBuildSession, selectedBuildDomain} from "./build-state.js";
+import {buildTextKinds, canOpenDeviceTree, canOpenMemory, canReadBuildArtifact, createBuildSession, selectedBuildDomain} from "./build-state.js";
 
 const array = (value) => Array.isArray(value) ? value : [];
 const labels = {"resolved-dts": "Resolved Device Tree", "preprocessed-dts": "Preprocessed Device Tree", kconfig: "Kconfig output", "cmake-cache": "CMake cache", "build-info": "Build information", elf: "ELF", map: "Linker map"};
@@ -62,6 +62,7 @@ export function mountBuilds(root, context) {
     $("check").disabled = busy;
     $("reinspect").disabled = busy;
     $("tree").disabled = !canOpenDeviceTree(state);
+    $("memory").disabled = !canOpenMemory(state);
     const freshness = domain?.freshness;
     $("freshness").textContent = !state.verified ? "This observation needs a fresh check before opening its files." : freshness === "unchanged" ? "The observed build files are unchanged since this inspection." : freshness === "changed" ? "Build files changed since this inspection. Re-inspect to read the current outputs." : "Some observed build files are unavailable. Restore them or re-inspect the directory.";
     $("identity").replaceChildren();
@@ -123,6 +124,7 @@ export function mountBuilds(root, context) {
   listen($("check"), "click", () => session.check());
   listen($("reinspect"), "click", () => session.open());
   listen($("tree"), "click", () => session.openDeviceTree());
+  listen($("memory"), "click", () => session.openMemory());
   listen($("artifacts"), "click", (event) => {
     const button = event.target.closest("[data-build-file]");
     if (button && root.contains(button)) session.readText(button.dataset.buildFile);

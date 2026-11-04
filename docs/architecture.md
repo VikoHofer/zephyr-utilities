@@ -87,7 +87,7 @@ removing them requires a documented migration and regression coverage.
 | `jobs.get(id)`, `jobs.list(feature=None)`, `jobs.cancel(id)` | Observe or cancel shared jobs |
 | `services` | Feature-owned service instances assembled during registration |
 | `feature_data(feature_id)` | Stable persistent storage namespace |
-| `builds.inspect/get/read_text` | Shared read-only build observations and verified text outputs |
+| `builds.inspect/get/read_text/select_artifact` | Shared read-only observations, verified text and detached artifact selections |
 
 A task receives `(emit, cancel)` and returns a result mapping. Progress goes through
 `emit`; long-running work checks the cancellation event and releases subprocesses and
@@ -169,10 +169,13 @@ and a fresh output directory. Application/Zephyr/toolchain code runs only for an
 configure/build action. It is not sandboxed by output-directory separation.
 
 Project/profile and attempt context remain feature-owned. The shared build-inspection
-service captures separate transient observations of existing outputs for Projects and
-Device Tree. It preserves original context/hashes and rechecks live artifacts, with
+service captures separate transient observations of existing outputs for Projects,
+Device Tree and Memory handoff. It preserves original context/hashes and rechecks live artifacts, with
 source freshness explicitly unknown. This is a focused read interface, not the full
 future editor/change-plan contract. See [ADR 0005](decisions/0005-read-only-build-inspection.md).
+Memory report jobs detach a verified selection at submission and revalidate it before
+generation and snapshot publication; cache expiry and workspace changes cannot retarget
+accepted work. See [ADR 0006](decisions/0006-inspected-image-memory-handoff.md).
 
 ## Measurement boundary
 
@@ -193,6 +196,7 @@ or worst-case resource demand. The [research roadmap](roadmap.md) and
 - [ADR 0003: Versioned environment observations](decisions/0003-environment-observations.md)
 - [ADR 0004: Reviewed creation and build attempts](decisions/0004-reviewed-project-creation.md)
 - [ADR 0005: Shared read-only build observations](decisions/0005-read-only-build-inspection.md)
+- [ADR 0006: Inspected image handoff to Memory Explorer](decisions/0006-inspected-image-memory-handoff.md)
 - [Adding a feature](adding-a-feature.md)
 - [HTTP/browser integration contract](platform-contract.md)
 

@@ -5,7 +5,8 @@ One local application for Zephyr development, build analysis and experiments.
 **Zephyr Utilities 0.2** provides an English, offline interface with shared navigation,
 workspace selection and background jobs. Memory Explorer and Project Creator's environment
 analysis, minimal C application creation and explicit configure/build workflow are available.
-Existing-build inspection connects to a read-only resolved Device Tree reader.
+Existing-build inspection connects to a read-only resolved Device Tree reader and carries
+the selected image into Memory Explorer for explicit report generation.
 Device Tree editing and TinyML model/experiment analysis remain planned.
 
 ## Start
@@ -161,8 +162,9 @@ utilities' metadata.
 Use **Project Creator → Inspect builds** to open an existing build, select its image/domain and
 inspect saved outputs. **Open Device Tree** shows that image's resolved nodes and
 properties without running tools or changing source files. Changed outputs require
-re-inspection; source freshness remains unknown. See the
-[build inspection guide](docs/build-inspection.md) for this first P3 slice and its limits.
+re-inspection; source freshness remains unknown. **Open Memory Explorer** reviews the
+same image before explicit report generation from its archived ELF. See the
+[build inspection guide](docs/build-inspection.md) for the available P3 workflows and limits.
 
 ## Requirements and interpretation
 

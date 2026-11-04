@@ -42,6 +42,47 @@ def _annotation(value, fallback="", maximum=160):
     return value or fallback
 
 
+def inspect_selected_build(selection):
+    """Keep Memory's report environment while requiring the inspected output identity."""
+    selection.verify()
+    build = inspect_build(selection.build_dir)
+    selection.verify()
+    if build["path"] != selection.build_dir or build["elf_path"] != selection.artifact["path"]:
+        raise ValueError("This build selects a different ELF from the inspected output. Use Memory Explorer's manual build selection for this output.")
+    context = selection.context
+    for source, destination in (("application_source_dir", "application"), ("zephyr_base", "zephyr_base")):
+        if context.get(source):
+            path = Path(context[source]).expanduser()
+            expected = str((path if path.is_absolute() else Path(selection.build_dir) / path).resolve())
+            if build[destination] != expected:
+                raise ValueError("The build metadata disagrees about the application or Zephyr checkout. Resolve its context before generating reports from this inspection.")
+    build["board"] = context["effective_target"]
+    if selection.root_build_dir != selection.build_dir:
+        build["domain"] = selection.domain
+        build["sysbuild_path"] = selection.root_build_dir
+    return build
+
+
+def _verify_selected_capture(selection, artifacts, root):
+    expected = selection.metadata_hashes | selection.artifact_hashes
+    for key, relative in (("elf", "zephyr/zephyr.elf"), ("config", "zephyr/.config"),
+                          ("map", "zephyr/zephyr.map"), ("devicetree", "zephyr/zephyr.dts"),
+                          ("cmake_cache", "CMakeCache.txt"), ("build_info", "build_info.yml")):
+        path = str(Path(selection.build_dir) / relative)
+        captured = artifacts.get(key, {})
+        if path in expected and captured.get("sha256") != expected[path]:
+            raise ValueError("Captured build evidence differs from the inspection. Inspect the build again.")
+        if path in expected and captured:
+            retained = root / captured["object"]
+            try:
+                valid = not retained.is_symlink() and retained.is_file() and file_hash(retained) == expected[path]
+            except OSError:
+                valid = False
+            if not valid:
+                raise ValueError("Retained build evidence is missing or corrupted. No snapshot was saved.")
+    selection.verify()
+
+
 class SnapshotStore:
     def __init__(self, root):
         self.root = Path(root).expanduser().resolve()
@@ -90,8 +131,10 @@ class SnapshotStore:
         captured.unlink()
         return {"path": str(path), "sha256": digest, "size": size, "object": f"objects/{digest}"}
 
-    def capture(self, build_path, name="", notes="", emit=None, cancel=None):
-        build = inspect_build(build_path)
+    def capture(self, build_path, name="", notes="", emit=None, cancel=None, *, selection=None):
+        if selection is not None and str(Path(build_path).expanduser().resolve()) != selection.build_dir:
+            raise ValueError("The build directory does not match the selected inspection.")
+        build = inspect_selected_build(selection) if selection is not None else inspect_build(build_path)
         if not build["ready"]:
             raise ValueError(build["error"])
         snapshot = self._new(name, notes)
@@ -122,7 +165,13 @@ class SnapshotStore:
             artifacts = {key: self._archive(path, staging) for key, path in sources.items()}
             if any(artifacts[key]["sha256"] != before[key] for key in sources):
                 raise ValueError("Build artifacts changed while being captured. Retry once the build is idle.")
-            result = generate_reports(build, staging / "raw", emit=emit, cancel=cancel)
+            report_build = build
+            if selection is not None:
+                _verify_selected_capture(selection, artifacts, self.root)
+                # Analyze the retained selected bytes even if the live ELF changes temporarily.
+                # Original paths remain in snapshot provenance and are checked again before publish.
+                report_build = {**build, "elf_path": str(self.root / artifacts["elf"]["object"])}
+            result = generate_reports(report_build, staging / "raw", emit=emit, cancel=cancel)
             if any(not path.is_file() or file_hash(path) != before[key] for key, path in sources.items()):
                 raise ValueError("Build artifacts changed during report generation. No snapshot was saved; retry once the build is idle.")
             prefixes = {build[key]: label for key, label in (("path", "OUTPUT_DIR"), ("zephyr_base", "ZEPHYR_BASE"), ("workspace", "WORKSPACE"), ("application", "APPLICATION")) if build.get(key)}
@@ -141,6 +190,8 @@ class SnapshotStore:
             shutil.copyfile(result["log_path"], staging / "generation.log")
             if cancel is not None and cancel.is_set():
                 raise CancelledError("Report generation was cancelled.")
+            if selection is not None:
+                _verify_selected_capture(selection, artifacts, self.root)
             return self._publish(snapshot, staging)
         finally:
             if staging is not None and staging.exists():

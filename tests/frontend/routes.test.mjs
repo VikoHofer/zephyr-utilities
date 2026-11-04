@@ -22,6 +22,13 @@ test("routing supports new feature IDs and nested views without a shell edit", (
   assert.equal(routeHash("/#/tinyml"), "#/tinyml");
 });
 
+test("Memory inspection links preserve the observation and encoded image name", () => {
+  const view = `inspect/${"a".repeat(32)}/${encodeURIComponent("network / secondary")}`;
+  assert.deepEqual(parseRoute(`#/memory/${view}`), {feature: "memory", view, path: `memory/${view}`});
+  assert.equal(routeHash(`memory/${view}`), `#/memory/${view}`);
+  assert.equal(parseRoute("#/memory/inspect/invalid").view, "inspect/invalid");
+});
+
 const memory = {id: "memory", status: "available", frontend: {module: "/assets/memory/index.js", template: "/assets/memory/view.html", stylesheet: "/assets/memory/style.css"}};
 
 test("only declared feature-local assets are loadable", () => {

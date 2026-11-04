@@ -1002,6 +1002,27 @@
   margin-right:auto;
   font-size:11px
 }
+#memory-feature .inspection-summary {
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:12px;
+  margin-bottom:16px;
+  overflow-wrap:anywhere
+}
+#memory-feature .inspection-summary .badge {
+  white-space:normal;
+  overflow-wrap:anywhere
+}
+#memory-feature .inspection-details {
+  margin:18px 0
+}
+#memory-feature .inspection-choose {
+  margin-top:20px
+}
+#memory-feature #inspection-job-hint {
+  margin:14px 0 0
+}
 #memory-feature .build-results {
   margin-top:20px;
   max-height:340px;

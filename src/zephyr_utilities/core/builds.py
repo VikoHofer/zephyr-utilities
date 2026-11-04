@@ -217,8 +217,84 @@ def _verify_metadata(entry, budget, paths=None):
             raise ValueError("Build metadata changed during inspection. Open the build again.")
 
 
+class BuildArtifactSelection:
+    """Detached output identity for a submitted task, independent of session retention."""
+
+    def __init__(self, entry, domain, artifact, related_kinds=()):
+        observation = entry["observation"]
+        self.workspace = observation["workspace"]
+        self.inspection_id = observation["id"]
+        self.root_build_dir = observation["root_build_dir"]
+        self.domain = domain["name"]
+        self.build_dir = domain["build_dir"]
+        self._context = deepcopy(domain["context"])
+        self._artifact = deepcopy(artifact)
+        observed = {item["kind"]: item for item in domain["artifacts"]}
+        self._artifact_hashes = {artifact["path"]: artifact["sha256"]}
+        for relative, kind in ARTIFACTS:
+            if kind in related_kinds:
+                self._artifact_hashes[str(Path(self.build_dir) / relative)] = observed.get(kind, {}).get("sha256")
+        paths = {str(Path(self.build_dir) / name) for name in ("CMakeCache.txt", "build_info.yml")}
+        paths.add(str(Path(self.root_build_dir) / "domains.yaml"))
+        self._metadata_hashes = {path: digest for path, digest in entry["watches"].items() if path in paths}
+        self._identities = {path: identity for path, identity in entry["identities"].items()
+                            if Path(self.build_dir).is_relative_to(path)}
+
+    @property
+    def context(self):
+        return deepcopy(self._context)
+
+    @property
+    def artifact(self):
+        return deepcopy(self._artifact)
+
+    @property
+    def metadata_hashes(self):
+        return dict(self._metadata_hashes)
+
+    @property
+    def artifact_hashes(self):
+        return dict(self._artifact_hashes)
+
+    def _verify_directories(self):
+        for path, expected in self._identities.items():
+            if _directory_identity(Path(path)) != expected:
+                raise ValueError("The selected build directory changed. Inspect the build again.")
+
+    def _verify_context(self, budget):
+        for path, expected in self._metadata_hashes.items():
+            try:
+                actual, _ = _read_file(Path(self.workspace), Path(path), budget, limit=MAX_TEXT_BYTES)
+            except FileNotFoundError:
+                if expected is None:
+                    continue
+                raise ValueError("The selected build context changed. Inspect the build again.") from None
+            if actual["sha256"] != expected:
+                raise ValueError("The selected build context changed. Inspect the build again.")
+
+    def verify(self):
+        """Require the original context and selected bytes; unrelated outputs may change."""
+        try:
+            self._verify_directories()
+            budget = _Budget()
+            self._verify_context(budget)
+            for path, expected in self._artifact_hashes.items():
+                try:
+                    actual, _ = _read_file(Path(self.workspace), Path(path), budget)
+                except FileNotFoundError:
+                    if expected is None:
+                        continue
+                    raise ValueError("The selected build output is unavailable. Inspect the build again.") from None
+                if actual["sha256"] != expected:
+                    raise ValueError("The selected build output changed. Inspect the build again.")
+            self._verify_context(budget)
+            self._verify_directories()
+        except OSError as exc:
+            raise ValueError("The selected build output or context is unavailable. Inspect the build again.") from exc
+
+
 class BuildInspectionService:
-    """Share bounded build observations between Projects and Device Tree inspection."""
+    """Share bounded build observations across Projects, Device Tree and Memory."""
 
     def __init__(self, *, max_observations=16, ttl=1800):
         self.max_observations = max_observations
@@ -403,6 +479,21 @@ class BuildInspectionService:
     def get(self, workspace, observation_id):
         """Return original metadata and hashes with current output availability."""
         return self._revalidate(self._entry(workspace, observation_id))[0]
+
+    def select_artifact(self, workspace, observation_id, domain, kind, *, related_kinds=()):
+        """Pin one existing output and its context for an explicitly submitted task."""
+        if not set(related_kinds).issubset({item_kind for _, item_kind in ARTIFACTS}):
+            raise ValueError("Choose supported related build outputs.")
+        entry = self._entry(workspace, observation_id)
+        selected = next((item for item in entry["observation"]["domains"] if item["name"] == domain), None)
+        if selected is None:
+            raise ValueError("Choose an image from this build inspection.")
+        artifact = next((item for item in selected["artifacts"] if item["kind"] == kind), None)
+        if artifact is None:
+            raise ValueError("The selected output was not available when the build was inspected. Inspect a completed build again.")
+        selection = BuildArtifactSelection(entry, selected, artifact, related_kinds)
+        selection.verify()
+        return selection
 
     def read_text(self, workspace, observation_id, domain, kind):
         if not isinstance(kind, str) or kind not in TEXT_KINDS:

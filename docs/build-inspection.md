@@ -1,6 +1,6 @@
-# Existing builds and Device Tree inspection
+# Existing builds, Device Tree inspection and Memory handoff
 
-The first P3 slice reads existing build outputs in the selected workspace. It does not
+P3 reads existing build outputs in the selected workspace. Inspection does not
 configure, compile, flash, install tools, import an application into the creator, or
 edit source files. Environment analysis is not required to inspect an existing build.
 
@@ -13,7 +13,10 @@ edit source files. Environment analysis is not required to inspect an existing b
    input lists and text output previews are optional disclosures.
 4. Choose **Open Device Tree** to inspect that image's resolved tree. Search node names,
    paths or compatible values, then select a node to read its properties.
-5. Use **Check for changes** to compare the live outputs with this observation. If they
+5. Choose **Open Memory Explorer** to review that image for RAM/ROM analysis. Opening
+   the review only checks existing files. Choose **Generate reports** explicitly to
+   run the selected build's footprint tool and save a Memory snapshot.
+6. Use **Check for changes** to compare the live outputs with this observation. If they
    changed, **Re-inspect directory** creates a new observation of the current files.
 
 The Device Tree view presents the generated `zephyr/zephyr.dts`, which Zephyr describes
@@ -24,7 +27,7 @@ necessarily represent a separate CPU. See [sysbuild definitions](https://docs.ze
 
 ## What the observation means
 
-Projects and Device Tree share one workspace-bound observation ID. It records the
+Projects, Device Tree and the Memory handoff share one workspace-bound observation ID. It records the
 selected root, each readable image, metadata-derived context, output paths and hashes.
 Opening a different build creates a distinct observation, even for the same application.
 Reopening a view rechecks the retained observation rather than silently assigning new
@@ -46,6 +49,27 @@ to view the current outputs. Inspection IDs are held in server memory for 30 min
 with at most 16 retained; restarting the app or expiration requires opening the build
 again. No project, attempt, environment or memory snapshot format is migrated.
 
+## Memory Explorer handoff
+
+The handoff selects the exact inspected image and `zephyr/zephyr.elf`; it does not search
+for a replacement, choose the default sysbuild image, or start a report job. The review
+shows the effective target and image, with paths and SHA-256 under a closed disclosure.
+Missing report tooling, changed outputs and expired inspections leave an actionable
+message. **Choose another build** returns to Memory's independent discovery workflow.
+
+An explicit report job captures its selection at submission. It rechecks the inspected
+ELF and build context before running tools and before publishing the snapshot. It also
+pins the configuration, map and resolved DTS evidence recorded in its snapshot. A queued
+job keeps this captured identity if the workspace changes or the inspection cache expires.
+Changed evidence prevents snapshot publication. Reports run against the existing ELF;
+the handoff uses its retained archive as the generator input, so a concurrent rewrite of
+the live ELF cannot change the analyzed bytes. It does not configure, build or flash firmware.
+
+The existing version-1 Memory snapshot remains the durable result. Its archived ELF and
+metadata hashes identify the captured evidence; a transient inspection ID is not a new
+provenance guarantee. Source freshness remains unknown. Builds with a custom ELF path
+that differs from the inspector's supported filename require Memory's manual workflow.
+
 ## Supported scope and limits
 
 - Existing single-image Zephyr builds and up to 16 readable sysbuild domains inside the
@@ -62,8 +86,8 @@ again. No project, attempt, environment or memory snapshot format is migrated.
   8 MiB; YAML metadata to 2 MiB. Oversized or malformed data cannot become a validated
   build context.
 
-Source-file browsing, binding navigation, source-to-node attribution, the direct Memory
-Explorer handoff and durable inspection history remain subsequent P3 work. Reviewable
+Source-file browsing, binding navigation, source-to-node attribution and durable
+inspection history remain subsequent P3 work. Reviewable
 overlay and configuration editing remain P4. Existing Memory Explorer workflows continue
 to operate independently.
 
@@ -78,12 +102,17 @@ so a changed selection cannot redirect an earlier view's request.
 | `GET /api/projects/inspections/:id` | `workspace` query parameter | Original context/hashes with rechecked availability |
 | `POST /api/projects/inspection-text` | `{workspace, inspection_id, domain, kind}` | Verified allowlisted text output: `{path, text, sha256}` |
 | `POST /api/devicetree/inspect` | `{workspace, inspection_id, domain}` | Shared observation/domain, verified document and structural tree |
+| `POST /api/memory/inspection` | `{workspace, inspection_id, domain}` | Read-only report readiness for the exact selected image and ELF |
+| `POST /api/memory/jobs` | `{build_path, name?, notes?, selection?: {workspace, inspection_id, domain}}` | Explicit report job, bound to the inspection when `selection` is supplied |
 
 An observation has `schema_version: 1`, `id`, `workspace`, `root_build_dir`, `created_at`,
 `default_domain`, `domains`, root `artifacts` and `diagnostics`. Each domain has `name`,
 `build_dir`, `context`, `artifacts`, `freshness` and `diagnostics`. These are transient
 read contracts, not a persistent source/toolchain provenance format. See
 [ADR 0005](decisions/0005-read-only-build-inspection.md).
+The detached selection used by Memory jobs is described in
+[ADR 0006](decisions/0006-inspected-image-memory-handoff.md). Existing Memory job callers
+and legacy routes continue to work without `selection`.
 
 ## Verification
 
@@ -100,3 +129,14 @@ unchanged. Checks covered attempt handoff, search/selection restoration, domain 
 explicit re-inspection after a changed DTS, workspace changes and unsupported-syntax
 fallback. No configure, compile or hardware operation was run for this work. Real
 multi-image hardware operation and binding-aware interpretation were not validated.
+
+The Memory handoff was also exercised with copies of that real ELF in a synthetic
+two-image sysbuild, selecting the non-default `app` image. Explicit RAM/ROM generation
+saved a version-1 snapshot with the selected target/domain, archived ELF input and
+footprints of 4,106 and 9,356 bytes. All 25 fixture files, including the domain manifest,
+remained unchanged. Browser checks covered collapsed details with keyboard access,
+stale configuration rejection, manual selection, leaving/reopening the tools, workspace
+changes and the same image in Device Tree. Automated cases also cover queue expiry,
+directory replacement, changed/added evidence and a transient live-ELF rewrite during
+analysis. Corrupted retained evidence is rejected before generation and publication.
+These are analysis checks, not hardware or runtime memory measurements.

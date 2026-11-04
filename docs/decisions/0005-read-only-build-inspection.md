@@ -50,5 +50,6 @@ error, not permission to silently reopen a changed build.
 - Current output availability is distinct from source freshness and build success.
 - No new persistent schema or background filesystem watcher is needed.
 - Reopening after server restart/expiry requires a new inspection.
-- Full P3 source/binding navigation and Memory handoff remain separate slices. P4
+- Memory handoff extends this interface in [ADR 0006](0006-inspected-image-memory-handoff.md).
+  Full P3 source/binding navigation remains a separate slice. P4
   source edits need their own review, validation and conflict handling.

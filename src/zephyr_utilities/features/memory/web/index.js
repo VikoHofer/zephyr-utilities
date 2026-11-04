@@ -1,5 +1,6 @@
 /** Memory feature. The application shell owns routing and shared services. */
 import {reconcileSnapshots} from "./snapshot-state.js";
+import {createMemoryHandoff} from "./handoff-state.js";
 
 export function mount(root, context) {
   root = root.querySelector("#memory-feature");
@@ -14,6 +15,8 @@ export function mount(root, context) {
   let snapshotOptionsReady = false;
   let pendingDelete = null;
   let deleting = false;
+  let generating = false;
+  let discoveryRequest = 0;
   // Detached generated rows need no external lifetime reference; removing a row
   // releases its listeners. Static controls are explicitly aborted on disposal.
   const listen = (node, type, action) => node.addEventListener(type, action, root.contains(node) ? {signal: lifetime.signal} : undefined);
@@ -29,6 +32,9 @@ export function mount(root, context) {
   const defaults = {token: "", snapshots: [], current: null, snapshotRequest: 0, build: null, memory: "ram", compareMemory: "ram", comparison: null, compareRequest: 0, node: null, ancestors: [], units: "kib", symbolLimit: 50, changeLimit: 60, job: null, folder: null, noticeTimer: null, view: "overview"};
   const state = Object.assign(context.state, {...defaults, ...context.state});
   state.token = context.session.token;
+  state.inspection ||= {};
+  const inspection = createMemoryHandoff({api: (path, options) => context.api(path, options), state: state.inspection,
+    workspace: () => context.workspace.path, onChange: renderInspection});
   const palette = ["#337f6c", "#72927a", "#ae7957", "#48717c", "#8b9560", "#648f9a", "#b29472", "#6c827d"];
   const views = {overview: "Overview", explorer: "Memory Explorer", compare: "Compare", snapshots: "Snapshots"};
   const integer = new Intl.NumberFormat("en-US");
@@ -143,7 +149,7 @@ export function mount(root, context) {
     $("explorer-content").hidden = !snap;
     if (!snap) return;
     $("current-name").textContent = snap.name;
-    const metadata = [snap.build?.board || "Imported report", snap.build?.domain, date(snap.created_at)].filter(Boolean);
+    const metadata = [snap.build ? snap.build.board || "Target unknown" : "Imported report", snap.build?.domain, date(snap.created_at)].filter(Boolean);
     $("current-meta").textContent = metadata.join("  ·  ");
     clear($("overview-metrics"));
     for (const kind of ["ram", "rom"]) $("overview-metrics").append(metricCard(kind, snap.reports?.[kind]?.total_size ?? null, snap.reports?.[kind] ? "Statically allocated / reserved" : "Report unavailable"));
@@ -302,7 +308,7 @@ export function mount(root, context) {
     for (const snap of state.snapshots) {
       const row = el("tr"), title = el("td"), name = button(snap.name, "text-button", () => loadSnapshot(snap.id));
       title.append(name, el("span", "cell-sub", date(snap.created_at)));
-      const board = el("td", "", snap.build?.board || "Imported report"); if (snap.build?.domain) board.append(el("span", "cell-sub", snap.build.domain));
+      const board = el("td", "", snap.build ? snap.build.board || "Target unknown" : "Imported report"); if (snap.build?.domain) board.append(el("span", "cell-sub", snap.build.domain));
       const actions = el("td"), buttons = el("div", "snapshot-actions");
       buttons.append(button("Open", "button small", () => loadSnapshot(snap.id)), button("Baseline", "button small", () => chooseComparison("baseline", snap.id)), button("Candidate", "button small", () => chooseComparison("candidate", snap.id)));
       const remove = button("Delete", "button small danger", () => openDelete(snap));
@@ -417,12 +423,73 @@ export function mount(root, context) {
     if (!changes.length) emptyRow(target, "No matching changes for this memory type.", 5);
     $("more-changes").hidden = changes.length <= state.changeLimit;
   }
-  function openBuild() {
+  function reconcileBuildWorkspace() {
     if (state.workspacePath !== context.workspace.path) {
       $("project-path").value = context.workspace.path || "";
       state.workspacePath = context.workspace.path;
+      state.ui ||= {};
+      state.ui["project-path"] = $("project-path").value;
+      discoveryRequest++;
+      state.build = null;
+      clear($("build-results"));
+      $("build-results").append(el("p", "muted", "Search a folder to find available builds."));
+      $("build-selection").hidden = true;
+      showWarnings($("discovery-warnings"), []);
+      $("discover-button").disabled = false;
+      $("discover-button").textContent = "Find builds";
     }
-    $("build-dialog").showModal(); $("project-path").focus(); }
+  }
+  function openBuild() {
+    inspection.clear();
+    $("inspection-dialog").close();
+    reconcileBuildWorkspace();
+    showView(state.view);
+    if (!$("build-dialog").open) $("build-dialog").showModal();
+    $("project-path").focus();
+  }
+  function renderInspection() {
+    if (disposed) return;
+    const {preview, loading, error, selection} = state.inspection;
+    $("inspection-status").textContent = loading ? "Checking the inspected image…" : preview?.build.ready ? "Ready to generate RAM and ROM reports from this image." : "This image is unavailable for report generation.";
+    $("inspection-image").textContent = selection?.domain || "Unknown image";
+    $("inspection-target").textContent = preview?.context?.effective_target || "Target unknown";
+    $("inspection-summary").hidden = !preview;
+    showWarnings($("inspection-errors"), [error, preview?.build.error]);
+    const identity = $("inspection-identity"); clear(identity);
+    if (preview) {
+      for (const [label, value] of [["Build directory", preview.build.path], ["ELF", preview.elf.path], ["ELF SHA-256", preview.elf.sha256]]) {
+        identity.append(el("dt", "", label), el("dd", "code", value));
+      }
+      if (preview.context?.cached_board) identity.append(el("dt", "", "Cached board"), el("dd", "code", preview.context.cached_board));
+    }
+    $("inspection-details").hidden = !preview;
+    $("inspection-refresh").disabled = loading || !selection || generating;
+    $("inspection-generate").disabled = generating || Boolean(state.job) || !inspection.canGenerate();
+    $("inspection-job-hint").hidden = !state.job;
+  }
+  function navigate(view) {
+    if (disposed) return;
+    reconcileBuildWorkspace();
+    if (view === "inspect" || view?.startsWith("inspect/")) {
+      discoveryRequest++;
+      state.build = null;
+      clear($("build-results"));
+      $("build-results").append(el("p", "muted", "Search a folder to find available builds."));
+      $("discover-button").disabled = false;
+      $("discover-button").textContent = "Find builds";
+      $("build-selection").hidden = true;
+      $("folder-dialog").close();
+      $("build-dialog").close();
+      $("inspection-details").open = false;
+      showView("overview", false);
+      run(() => inspection.open(view));
+      if (!$("inspection-dialog").open) $("inspection-dialog").showModal();
+    } else {
+      inspection.clear();
+      $("inspection-dialog").close();
+      showView(view || "overview", false);
+    }
+  }
   function rememberPath(path) {
     try { const recent = JSON.parse(localStorage.getItem("zme-recent-paths") || "[]"); localStorage.setItem("zme-recent-paths", JSON.stringify([path, ...recent.filter((item) => item !== path)].slice(0, 8))); renderRecentPaths(); } catch (_) { /* optional convenience */ }
   }
@@ -431,21 +498,26 @@ export function mount(root, context) {
   }
   async function discover() {
     const path = $("project-path").value.trim(); if (!path) throw new Error("Enter a project or build directory.");
+    inspection.clear();
+    const captured = ++discoveryRequest, workspace = context.workspace.path;
+    const current = () => !disposed && captured === discoveryRequest && context.workspace.path === workspace;
     $("discover-button").disabled = true; $("discover-button").textContent = "Searching…"; clear($("build-results")); $("build-results").append(el("p", "loader", "Looking for Zephyr builds…")); state.build = null; $("build-selection").hidden = true;
     try {
-      const response = await api(`/api/memory/builds?path=${encodeURIComponent(path)}`); rememberPath(path); clear($("build-results")); showWarnings($("discovery-warnings"), response.warnings);
+      const response = await api(`/api/memory/builds?path=${encodeURIComponent(path)}`);
+      if (!current()) return;
+      rememberPath(path); clear($("build-results")); showWarnings($("discovery-warnings"), response.warnings);
       for (const build of response.builds || []) {
         const label = el("label", `build-card${build.ready ? "" : " unready"}`), radio = el("input"); radio.type = "radio"; radio.name = "selected-build"; radio.value = build.path; radio.disabled = !build.ready;
         const content = el("div", "build-card-content"); content.append(el("strong", "", `${tail(build.application || build.path)}${build.domain ? ` / ${build.domain}` : ""}`), el("span", "cell-sub code", build.path));
         const labels = el("div", "build-labels"); labels.append(el("span", "badge quiet", build.board || "Board unknown"), el("span", "badge quiet", build.ready ? "READY TO ANALYZE" : "UNAVAILABLE")); if (build.zephyr_version) labels.append(el("span", "badge quiet", `Zephyr ${build.zephyr_version}`)); content.append(labels);
         if (build.error) content.append(el("span", "cell-sub", build.error));
-        listen(radio, "change", () => { state.build = build; root.querySelectorAll(".build-card").forEach((node) => node.classList.remove("selected")); label.classList.add("selected"); $("build-selection").hidden = false; $("selected-build-hint").textContent = `Analyze ${build.domain || tail(build.path)} · no rebuild`; });
+        listen(radio, "change", () => { if (!current()) return; inspection.clear(); state.build = build; root.querySelectorAll(".build-card").forEach((node) => node.classList.remove("selected")); label.classList.add("selected"); $("build-selection").hidden = false; $("selected-build-hint").textContent = `Analyze ${build.domain || tail(build.path)} · no rebuild`; });
         label.append(radio, content); $("build-results").append(label);
       }
       if (!response.builds?.length) $("build-results").append(el("p", "loader", "No Zephyr builds found. Select a directory containing a completed build with CMakeCache.txt and a final ELF."));
       if (response.builds?.filter((build) => build.ready).length === 1) { const radio = $("build-results").querySelector("input:not(:disabled)"); radio.checked = true; radio.dispatchEvent(new Event("change")); }
-    } catch (error) { clear($("build-results")); $("build-results").append(el("p", "warning-item", error.message)); }
-    finally { $("discover-button").disabled = false; $("discover-button").textContent = "Find builds"; }
+    } catch (error) { if (current()) { clear($("build-results")); $("build-results").append(el("p", "warning-item", error.message)); } }
+    finally { if (current()) { $("discover-button").disabled = false; $("discover-button").textContent = "Find builds"; } }
   }
   async function browse(path) {
     const response = await api(`/api/folders?path=${encodeURIComponent(path)}`); state.folder = response; $("folder-path").value = response.path; $("folder-up").disabled = !response.parent; clear($("folder-list"));
@@ -453,14 +525,25 @@ export function mount(root, context) {
     if (!response.folders?.length) $("folder-list").append(el("p", "loader", "No subfolders in this directory."));
   }
   async function generate() {
+    reconcileBuildWorkspace();
     if (!state.build?.ready) throw new Error("Select a completed build first.");
+    await startReport({build_path: state.build.path, name: $("capture-name").value.trim()});
+  }
+  async function generateInspection() {
+    try { await startReport(inspection.jobBody($("inspection-name").value.trim())); }
+    catch (error) { inspection.invalidate(error.message || String(error)); throw error; }
+  }
+  async function startReport(body) {
     if (state.job) throw new Error("Wait for the current report job or cancel it before starting another.");
+    if (generating) return;
+    generating = true;
     $("generate-button").disabled = true;
+    renderInspection();
     try {
-      const job = await api("/api/memory/jobs", {method: "POST", body: {build_path: state.build.path, name: $("capture-name").value.trim()}});
-      state.job = job.id; state.lastJob = job; state.jobDismissed = false; $("build-dialog").close(); $("job-panel").hidden = false; $("job-title").textContent = "Analyzing your build…"; $("job-message").textContent = "Reading the existing ELF and creating a durable snapshot."; $("job-activity").hidden = false; $("cancel-job").hidden = false; $("cancel-job").disabled = false; $("dismiss-job").hidden = true; $("job-log-open").hidden = true; $("job-log").textContent = "";
+      const job = await api("/api/memory/jobs", {method: "POST", body});
+      state.job = job.id; state.lastJob = job; state.jobDismissed = false; $("build-dialog").close(); $("inspection-dialog").close(); $("job-panel").hidden = false; $("job-title").textContent = "Analyzing your build…"; $("job-message").textContent = "Reading the existing ELF and creating a durable snapshot."; $("job-activity").hidden = false; $("cancel-job").hidden = false; $("cancel-job").disabled = false; $("dismiss-job").hidden = true; $("job-log-open").hidden = true; $("job-log").textContent = "";
       showView("overview"); pollJob(job.id);
-    } finally { $("generate-button").disabled = false; }
+    } finally { generating = false; if (!disposed) { $("generate-button").disabled = false; renderInspection(); } }
   }
   async function pollJob(id) {
     try {
@@ -469,6 +552,7 @@ export function mount(root, context) {
       renderJob(job);
       if (job.status === "completed") {
         state.job = null;
+        renderInspection();
         $("job-activity").hidden = true; $("cancel-job").hidden = true; $("dismiss-job").hidden = false; $("job-title").textContent = "Reports generated & snapshot saved"; $("job-message").textContent = "Your captured reports are ready to explore and compare.";
         await refreshSnapshots();
         if (state.snapshots.some((snapshot) => snapshot.id === job.snapshot_id)) {
@@ -480,6 +564,7 @@ export function mount(root, context) {
         }
       } else if (job.status === "failed" || job.status === "cancelled") {
         state.job = null; $("job-activity").hidden = true; $("cancel-job").hidden = true; $("dismiss-job").hidden = false; $("job-title").textContent = job.status === "cancelled" ? "Report generation cancelled" : "Report generation failed"; $("job-message").textContent = job.error || "The job was cancelled.";
+        renderInspection();
         if (job.status === "failed") notice(job.error || "Report generation failed. Check the generation log.", true);
       } else if (state.job === id) later(() => pollJob(id), 700);
     } catch (error) { if (disposed || error.name === "AbortError") return; $("job-activity").hidden = true; $("cancel-job").hidden = true; $("dismiss-job").hidden = false; $("job-title").textContent = "Could not retrieve job status"; $("job-message").textContent = "The analysis may still be running. Refresh snapshots to check for a completed capture."; notice(error.message, true); if (state.job === id) later(() => pollJob(id), 3000); }
@@ -526,6 +611,9 @@ export function mount(root, context) {
     listen($("folder-up"), "click", () => run(() => browse(state.folder.parent)));
     listen($("use-folder"), "click", () => { $("project-path").value = state.folder.path; $("folder-dialog").close(); });
     listen($("generate-button"), "click", () => run(generate));
+    listen($("inspection-generate"), "click", () => run(generateInspection));
+    listen($("inspection-refresh"), "click", () => run(() => inspection.refresh()));
+    listen($("inspection-choose"), "click", openBuild);
     listen($("cancel-job"), "click", () => run(async () => { if (state.job) { $("cancel-job").disabled = true; try { await api(`/api/jobs/${encodeURIComponent(state.job)}/cancel`, {method: "POST", body: {}}); } catch (error) { $("cancel-job").disabled = false; throw error; } } }));
     listen($("dismiss-job"), "click", () => { state.jobDismissed = true; $("job-panel").hidden = true; $("job-log-open").hidden = false; });
     listen($("job-log-open"), "click", () => { state.jobDismissed = false; $("job-panel").hidden = false; $("job-log-open").hidden = true; $("job-panel").querySelector("details").open = true; $("job-panel").scrollIntoView({block: "start"}); });
@@ -561,11 +649,12 @@ export function mount(root, context) {
     $("dismiss-job").hidden = active;
     $("job-title").textContent = active ? "Analyzing your build…" : job.status === "completed" ? "Reports generated & snapshot saved" : job.status === "cancelled" ? "Report generation cancelled" : "Report generation failed";
     $("job-message").textContent = active ? "Report generation continues while you use another tool." : job.error || (job.status === "completed" ? "Your captured reports are ready to explore and compare." : "The job was cancelled.");
+    renderInspection();
   }
   const persistedInputs = ["baseline-select", "candidate-select", "symbol-search", "symbol-sort", "change-search", "show-unchanged", "project-path"];
   async function init() {
     $("project-path").value = state.ui?.["project-path"] || context.workspace.path || context.session.initial_path || "";
-    state.workspacePath = context.workspace.path;
+    reconcileBuildWorkspace();
     $("storage-path").textContent = context.session.storage_path ? `Snapshot storage: ${context.session.storage_path}` : "";
     $("unit-select").value = state.units;
     for (const id of persistedInputs) {
@@ -592,11 +681,12 @@ export function mount(root, context) {
   showView(state.view, false);
   run(init);
   return {
-    navigate(view) { if (!disposed) showView(view || "overview", false); },
+    navigate,
     dispose() {
       if (disposed) return;
       state.ui = Object.fromEntries(persistedInputs.map((id) => [id, $(id).type === "checkbox" ? $(id).checked : $(id).value]));
       disposed = true;
+      inspection.dispose();
       lifetime.abort();
       observer?.disconnect();
       timers.forEach(clearTimeout);

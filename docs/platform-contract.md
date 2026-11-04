@@ -44,6 +44,10 @@ servers, ports or environments. `zephyr-utils memory` opens the same app directl
   `snapshots`, `snapshots/:id`, `snapshots/:id/export`, `import`, and `compare`.
   Preserve legacy unnamespaced memory endpoints as compatibility aliases.
 - Legacy memory job fields (`snapshot_id`, logs, status) remain available.
+- `POST /api/memory/inspection` previews an inspected image without starting work.
+  `POST /api/memory/jobs` optionally accepts `selection: {workspace, inspection_id, domain}`
+  alongside `build_path` to preserve that image's verified ELF and context through capture.
+  The new preview is namespaced only; existing aliases retain their behavior.
 - Job `metadata.view` can optionally name a relative subview in that job's feature,
   such as `create`. The shell validates this value before using it for the running-job
   badge; absent/invalid values fall back to the registered feature entry path. It does
@@ -94,6 +98,7 @@ The Home view is a working feature catalog. Planned features are clearly labeled
 not pretend to implement editors or model training. Project Creator exposes environment
 analysis and a minimal workspace-app creation/configure/build workflow. Advanced project
 composition remains planned. Existing-build inspection hands a workspace-bound shared
-observation ID and domain to the read-only Device Tree reader. See the
+observation ID and domain to the read-only Device Tree reader and Memory's explicit
+report review (`memory/inspect/<id>/<encoded-domain>`). See the
 [build inspection contract](build-inspection.md).
 UI remains English and offline. No runtime CDN or hosted service dependency.

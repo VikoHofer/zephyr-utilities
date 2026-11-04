@@ -7,7 +7,7 @@ export function parseRoute(hash = "") {
   if (memoryViews.has(path)) return {feature: "memory", view: path, path: `memory/${path}`};
   const [feature, ...parts] = path.split("/");
   if (feature === "home") return {feature, view: "", path: "home"};
-  const view = feature === "memory" ? (memoryViews.has(parts[0]) ? parts[0] : "overview") : parts.join("/");
+  const view = feature === "memory" && parts[0] !== "inspect" ? (memoryViews.has(parts[0]) ? parts[0] : "overview") : parts.join("/");
   return {feature, view, path: [feature, view].filter(Boolean).join("/")};
 }
 
