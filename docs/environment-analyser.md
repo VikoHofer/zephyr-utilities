@@ -2,8 +2,9 @@
 
 Project Creator's Environment view implements P0/P1 of the
 [Project Creator master plan](project-creator-masterplan.md). It discovers the selected
-local workspace, Zephyr checkout, board and chip metadata, and installed SDKs. Project
-generation, configuration, compilation and Device Tree editing remain planned.
+local workspace, Zephyr checkout, board and chip metadata, and installed SDKs. The separate
+[Create application workflow](project-creator.md) implements P2 reviewed generation and
+explicit configure/build actions. Device Tree editing remains planned.
 
 ## Using the view
 
@@ -15,7 +16,8 @@ generation, configuration, compilation and Device Tree editing remain planned.
 4. Search boards by name or target, narrow the results by chip/family and vendor, and
    select a board to inspect its declared targets, revisions and source locations.
 5. Inspect installed SDKs and diagnostics. Expand the environment details for tool
-   versions, west projects, module declarations and discovery roots.
+   versions, west projects, module declarations and discovery roots. **Use this board**
+   carries a discovered board into Create application; select its exact target and SDK there.
 
 Opening the view reads the last saved observation; it does not start a scan. A saved
 observation is labeled as not rechecked. **Analyze again** checks input fingerprints and
@@ -107,10 +109,10 @@ shows advertised GNU components that were not found. Incomplete setup, absent co
 components and unrecognized metadata are reported separately.
 
 The checkout's `SDK_VERSION` is a reference value, not proof of an installed or selected
-SDK. `selection` retains requested environment overrides and leaves
+SDK. The analysis-only `selection` retains requested environment overrides and leaves
 `effective_compiler: null`, `status: "not-configured"`. Each SDK has
-`compatibility: "unknown"`. SDK installation and selection for an actual build belong to
-later stages.
+`compatibility: "unknown"`. SDK installation remains outside this release. P2 selects an installed GNU SDK explicitly
+in a separate project profile; it does not rewrite this analysis observation.
 
 ## Freshness and limits
 
@@ -216,7 +218,11 @@ rescan. Future format changes need an explicit migration with regression coverag
 The analyser stores normalized observations and provenance; it does not archive entire
 checkouts, SDK binaries or enough source inputs to reproduce a firmware build.
 
-`BuildContext`, `BuildProfile`, `ArtifactRef`, project generation and Device Tree handoff
-remain proposals in the master plan. Add a narrow public contract only when the second
-implemented consumer needs it; the current analyser does not import Memory Explorer's
-private discovery code. See [ADR 0003](decisions/0003-environment-observations.md).
+P2 now uses a feature-owned project profile and attempt context for reviewed creation
+and explicit builds. Those records do not upgrade an environment observation into build
+evidence. Shared `BuildContext`/artifact interfaces and Device Tree handoff remain
+proposals in the master plan. Add a narrow public contract when the second implemented
+consumer needs it; the analyser does not import Memory Explorer's private discovery code.
+See [ADR 0003](decisions/0003-environment-observations.md),
+[ADR 0004](decisions/0004-reviewed-project-creation.md) and the
+[creator contract](project-creator.md).

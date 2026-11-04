@@ -8,7 +8,7 @@ const icons = {memory: "▥", devicetree: "⑂", projects: "＋", tinyml: "◈"}
 const toolDetails = {
   memory: ["RAM & ROM reports", "Symbol-level exploration", "Snapshot comparisons"],
   devicetree: ["Device tree & overlay editing", "Bindings and diagnostics", "Build-aware hardware view"],
-  projects: ["Offline environment analysis", "Board and chip catalogue", "Installed SDK discovery · Creation planned"],
+  projects: ["Environment, board and SDK discovery", "Preview and create a C application", "Explicit configure and build jobs"],
   tinyml: ["Model and experiment metadata", "Memory, latency and accuracy", "Reproducible framework comparisons"],
 };
 let api;

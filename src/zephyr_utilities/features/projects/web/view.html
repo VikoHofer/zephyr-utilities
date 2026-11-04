@@ -1,4 +1,6 @@
 <section class="projects-feature" data-projects-root>
+  <nav class="projects-tabs" aria-label="Project Creator views"><a href="#/projects/environment" data-projects-tab="environment">Environment</a><a href="#/projects/create" data-projects-tab="create">Create application</a></nav>
+  <div data-environment-view>
   <header class="projects-heading">
     <div><span class="projects-eyebrow">PROJECT CREATOR · ENVIRONMENT</span><h1>Know your workspace.</h1><p>Discover the boards, chips and SDKs available in your local Zephyr environment.</p></div>
     <span class="projects-label">Analysis available</span>
@@ -7,7 +9,7 @@
     <div class="projects-workspace-info"><span class="projects-eyebrow">SELECTED WORKSPACE</span><p data-workspace class="projects-path"></p><p class="projects-muted">Use the shared workspace switcher to choose another folder.</p></div>
     <div class="projects-actions"><button type="button" class="projects-button primary" data-analyze>Analyze workspace</button><button type="button" class="projects-button" data-rescan>Full rescan</button></div>
   </section>
-  <p class="projects-scope">Offline discovery only. Project creation and Device Tree editing are planned next. Analysis does not configure, build, install or update firmware tools.</p>
+  <p class="projects-scope">Analysis reads local metadata. Use Create application to preview a new project and explicitly configure or build it. Device Tree editing remains planned.</p>
   <details class="projects-options">
     <summary>Additional discovery paths</summary>
     <p class="projects-muted">Optional overrides for this scan. Enter one root or SDK installation per line. Board roots contain a boards/ folder; chip roots contain a soc/ folder.</p>
@@ -38,5 +40,39 @@
     </section>
     <section class="projects-panel" aria-labelledby="projects-diagnostics-heading"><div class="projects-section-heading"><h2 id="projects-diagnostics-heading">Diagnostics</h2><span data-diagnostic-count class="projects-muted"></span></div><div data-diagnostics></div></section>
     <details class="projects-panel projects-provenance"><summary>Analysis provenance and catalogue changes</summary><div data-provenance></div></details>
+  </div>
+  </div>
+  <div data-creator-view hidden>
+    <header class="projects-heading"><div><span class="projects-eyebrow">PROJECT CREATOR · NEW APPLICATION</span><h1>Start with a clear foundation.</h1><p>Create a minimal C application in this workspace, then configure or build it with your selected tools.</p></div><span class="projects-label">Single image · Linux tested</span></header>
+    <section class="projects-workspace" aria-label="Creator workspace"><div class="projects-workspace-info"><span class="projects-eyebrow">SELECTED WORKSPACE</span><p class="projects-path" data-creator-workspace></p><p class="projects-muted" data-creator-environment></p></div><a class="projects-button" href="#/projects/environment">Review environment</a></section>
+    <p class="projects-scope">Preview every generated file before creating it. Configure and Build execute the selected local Zephyr tools; neither action flashes hardware.</p>
+    <div class="projects-error" role="alert" data-creator-error hidden></div>
+    <div class="projects-banner" data-creator-requirement hidden>Analyze this workspace in Environment before choosing a board and SDK.</div>
+    <form data-creator-form class="projects-panel" aria-label="New application">
+      <div class="projects-section-heading"><div><span class="projects-eyebrow">1 · APPLICATION</span><h2>Choose a destination and target.</h2></div><span class="projects-muted">Minimal C template</span></div>
+      <div class="projects-option-grid">
+        <label>Application name<input data-create-field="name" required autocomplete="off" spellcheck="false" placeholder="my_app"></label>
+        <label>Destination in workspace<input data-create-field="destination" autocomplete="off" spellcheck="false" placeholder="applications/my_app"><span class="projects-input-help">Leave blank for applications/&lt;name&gt;. The destination must be new.</span></label>
+        <label class="projects-full-width">Find a board<input type="search" data-create-field="search" placeholder="Board name, chip, vendor or target…" autocomplete="off"></label>
+        <label>Board<select data-create-field="board_id" required><option value="">Choose a board</option></select></label>
+        <label>Exact target<select data-create-field="target" required><option value="">Choose a target</option></select></label>
+        <label class="projects-full-width">Installed GNU SDK<select data-create-field="sdk_id" required><option value="">Choose an SDK installation</option></select></label>
+      </div>
+      <p class="projects-muted" data-creator-target-note>Choose the full target, including any SoC, CPU, variant and revision. Metadata discovery does not establish build compatibility.</p>
+      <div class="projects-template"><strong>Minimal C application</strong><p>A small main function, CMake build file and configuration fragment. No LED, sensor, overlay or other board-specific peripheral is required.</p></div>
+      <div class="projects-actions"><button class="projects-button primary" data-preview-submit type="submit">Preview application</button></div>
+    </form>
+    <section class="projects-panel" data-creator-preview hidden aria-label="Application preview">
+      <div class="projects-section-heading"><div><span class="projects-eyebrow">2 · REVIEW</span><h2>Files to create</h2><p class="projects-path" data-preview-destination></p></div><span class="projects-label" data-preview-count></span></div>
+      <div data-preview-profile class="projects-identity"></div>
+      <div data-preview-files></div>
+      <details class="projects-recipe"><summary>Configure and build commands</summary><div data-preview-recipe></div></details>
+      <p class="projects-muted projects-apply-note">Create applies only these files in a new directory. It does not configure or compile the application.</p>
+      <button type="button" class="projects-button primary" data-create-submit>Create application</button>
+    </section>
+    <section class="projects-job" data-creator-job hidden aria-label="Project operation progress"><div class="projects-section-heading"><div><h2 data-creator-job-title></h2><p role="status" aria-live="polite" data-creator-job-status></p></div><button type="button" class="projects-button" data-creator-cancel>Cancel operation</button></div><details open><summary>Operation log</summary><pre data-creator-logs></pre></details></section>
+    <section class="projects-panel" aria-label="Created applications"><div class="projects-section-heading"><div><span class="projects-eyebrow">3 · CONFIGURE OR BUILD</span><h2>Workspace applications</h2><p class="projects-muted">Each attempt uses a new output directory. A successful build does not establish hardware operation.</p></div></div><div data-created-projects></div></section>
+    <section class="projects-panel" data-build-preview hidden aria-label="Build preview"><div class="projects-section-heading"><div><span class="projects-eyebrow">REVIEW COMMAND</span><h2 data-build-preview-title></h2></div></div><div data-build-preview-recipe></div><p class="projects-muted projects-apply-note">This runs the selected local application and Zephyr CMake code. Existing build directories are preserved.</p><button type="button" class="projects-button primary" data-build-start>Start operation</button></section>
+    <div data-creator-diagnostics></div>
   </div>
 </section>

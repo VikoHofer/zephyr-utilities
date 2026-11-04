@@ -121,7 +121,8 @@ class ProjectsService:
 
     def current(self):
         workspace = self.context.workspace.get()["path"]
-        jobs = [job for job in self.context.jobs.list("projects") if job["metadata"].get("workspace") == workspace]
+        jobs = [job for job in self.context.jobs.list("projects") if job["metadata"].get("workspace") == workspace
+                and job["metadata"].get("operation") == "analyze"]
         snapshot = self.store.latest(workspace)
         if snapshot:
             snapshot = deepcopy(snapshot)

@@ -4,8 +4,8 @@ One local application for Zephyr development, build analysis and experiments.
 
 **Zephyr Utilities 0.2** provides an English, offline interface with shared navigation,
 workspace selection and background jobs. Memory Explorer and Project Creator's environment
-analyser are available today. Project generation, Device Tree editing and TinyML
-model/experiment analysis remain planned workflows in the same application.
+analysis, minimal C application creation and explicit configure/build workflow are available.
+Device Tree editing and TinyML model/experiment analysis remain planned.
 
 ## Start
 
@@ -25,6 +25,7 @@ zephyr-utils
 This opens the Home tool catalog at `http://127.0.0.1:8765/#/home`. Open **Memory Explorer**,
 select a project or build folder, choose a completed build, and click **Generate reports**.
 For environment discovery, open **Project Creator** and click **Analyze workspace**.
+Then use **Create application** to select a target/SDK, preview files and create a new app.
 The initial workspace is detected from `.west` in the current
 directory's ancestors, then from the workspace containing the launcher's `.venv`.
 If neither is available, the current directory is used. `--root` overrides detection.
@@ -79,7 +80,7 @@ src/zephyr_utilities/
   features/
     memory/              # Working Memory Explorer and its web/ assets
     devicetree/          # Planned Device Tree Editor
-    projects/            # Environment analyser; project creation is planned
+    projects/            # Environment analysis, reviewed creation and explicit builds
     tinyml/              # Planned model and experiment analysis
   web/                   # Shared browser shell and helpers
   memory/                # Compatibility imports for the original release
@@ -93,6 +94,9 @@ branches. See [architecture](docs/architecture.md) and [adding a feature](docs/a
 
 - Analyse the selected local Zephyr environment, browse declared board/chip targets and
   revisions, inspect installed SDKs, and retain environment observations with diagnostics.
+- Create a minimal C application inside the existing workspace from a reviewed file plan.
+  Select an exact board target and installed GNU SDK, then explicitly configure or build
+  in a fresh output directory with saved commands, logs and attempt evidence.
 - Browse local folders and discover ordinary Zephyr builds and sysbuild images.
 - Generate RAM/ROM JSON directly from an existing final ELF with that build's Zephyr
   `size_report` script and recorded Python environment. This does not invoke CMake,
@@ -132,9 +136,26 @@ Linux is the tested host.
 Observations are retained across restarts. Reopening shows saved evidence without
 rechecking its freshness; use **Analyze again** after environment changes or **Full
 rescan** to bypass catalogue reuse. Leaving the feature does not cancel an active scan.
-Creation and Device Tree editing remain planned. See the
-[environment analyser guide and contract](docs/environment-analyser.md) for discovery
-scope, SDK interpretation, API details and limits.
+Discovery remains read-only. The separate **Create application** view adds reviewed source
+creation and explicit configure/build jobs. See the
+[environment analyser guide](docs/environment-analyser.md) for discovery limits and the
+[Project Creator guide](docs/project-creator.md) for its supported workflow and contract.
+
+## Application creation and builds
+
+Use **Create application** or `/#/projects/create` after analysis. Choose the name, new
+destination, exact target and installed GNU SDK; inspect **Preview application**, then
+click **Create application**. Creation writes the reviewed files without starting a build.
+From the saved application, choose **Configure** or **Build**, review the exact command and
+new output path, then start that operation. Each attempt retains its outcome and bounded
+log; leaving the view does not cancel it.
+
+The first creator supports Linux, one minimal C application/image, an existing resolved
+west workspace and installed GNU Zephyr SDKs. It rejects existing destinations, symlinked
+application paths and source paths containing whitespace. No flashing, SDK installation,
+workspace update or existing-project import is included. Device Tree editing remains
+planned. Generated source files and their README commands work independently of the
+utilities' metadata.
 
 ## Requirements and interpretation
 
@@ -196,12 +217,14 @@ those tools rather than generating replacements.
 The application uses a standard-library Python HTTP server and bundled HTML/CSS/JS.
 The analysis modules are independent of HTTP. See the [platform contract](docs/platform-contract.md),
 [environment analyser contract](docs/environment-analyser.md),
+[Project Creator contract](docs/project-creator.md),
 [memory API contract](docs/implementation-contract.md) and
 [Memory Explorer master plan](docs/memory-explorer-masterplan.md) for details.
 
 Existing snapshot layouts, IDs, exports and legacy memory endpoints are preserved.
 `--data-dir` remains the memory-history directory; environment observations use
-`.features/projects/environments/` below it. Other feature storage is likewise namespaced
+`.features/projects/environments/` below it. Project profiles and build attempts use
+`.features/projects/creator/`. Other feature storage is likewise namespaced
 under `.features/`. No history migration is performed on launch.
 
 Later stages cover region budgets, optimization recommendations, runtime stack/heap/arena

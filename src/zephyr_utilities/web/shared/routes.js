@@ -18,7 +18,11 @@ export function routeHash(path) {
 export function activeJobRoute(jobs, features) {
   for (const job of jobs) {
     const feature = features.find((item) => item.id === (job.feature || job.feature_id) && item.status === "available");
-    if (feature) return feature.entry_path || feature.id;
+    if (feature) {
+      const view = job.metadata?.view;
+      if (typeof view === "string" && /^[a-z0-9_-]+(?:\/[a-z0-9_-]+)*$/.test(view)) return `${feature.id}/${view}`;
+      return feature.entry_path || feature.id;
+    }
   }
   return "home";
 }

@@ -14,6 +14,8 @@ research master plan, not a general coding-assistant integration.
 - Contributor guidance, agent instructions, repeatable checks and feature scaffolding.
 - Project environment analysis with local board/chip and installed-SDK discovery,
   bounded offline probes, saved observations, refresh and diagnostics.
+- Reviewed minimal-C workspace application creation, explicit configure/build jobs and
+  versioned profiles/attempt evidence in fresh output directories.
 
 ## Feature ownership and next useful slices
 
@@ -21,11 +23,11 @@ research master plan, not a general coding-assistant integration.
 | --- | --- | --- |
 | Memory Explorer (`memory`) | Available | Existing-build reports, visualization, snapshots and comparisons |
 | Device Tree Editor (`devicetree`) | Planned | Inspect resolved tree and source overlays, then add validated reviewable edits |
-| Project Creator (`projects`) | Environment analysis available; creation planned | Next: select a template and preview safe project generation |
+| Project Creator (`projects`) | Analysis, minimal creation and explicit single-image builds available | Next: existing-build inspection and Device Tree handoff |
 | TinyML Experiments (`tinyml`) | Planned | Connect model/build/run identities and compare imported experiment measurements |
 
 Planned catalog entries are development boundaries. They do not yet edit Device Trees,
-create projects, run inference or perform training.
+run inference or perform training.
 
 ## Memory Explorer
 
@@ -65,23 +67,26 @@ SDKs. Search, provenance, partial results, cancellation and explicit refresh are
 Saved observations use schema version 1; they do not claim configured build readiness.
 See the [environment analyser guide](environment-analyser.md).
 
-P2 begins a small reproducible project-generation workflow:
+P2 adds the first creator workflow:
 
-1. Discover boards and template requirements from the selected workspace/version.
-2. Collect application name, destination and configuration choices.
-3. Produce a preview of the exact files and options to be generated.
-4. Create the project without overwriting unrelated existing files.
-5. Offer an explicit build as a shared job and make its artifacts available to other tools.
+1. Choose a new workspace application destination and exact discovered target.
+2. Select an installed GNU SDK and the minimal-C template.
+3. Review every generated file and the command recipe before creation.
+4. Create without replacing an existing destination.
+5. Review and explicitly run Configure or Build in a new output directory, retaining
+   requested/effective context, bounded logs and live artifact hashes.
 
-Keep template versions and generated build commands in project metadata. A new project
-should integrate with the existing Zephyr environment; it must not require another
-utilities server or hidden environment installation.
+The source and README commands work without Utilities metadata. This release is Linux
+only, requires a resolved existing west workspace/module list, and keeps SDK installation,
+advanced profile editing, project import and Device Tree handoff deferred. See the
+[Project Creator guide](project-creator.md) and
+[ADR 0004](decisions/0004-reviewed-project-creation.md).
 
 The detailed [Project Creator and environment analyser master plan](project-creator-masterplan.md)
-prioritizes new applications in the existing workspace. It stages local capability
-analysis, board/SoC and installed-SDK selection, safe generation, Device Tree integration,
-advanced composition and environment migration. P0/P1 are delivered within the documented
-analysis scope; P2 and later creation/editor/build workflows remain proposed work.
+prioritizes new applications in the existing workspace. P0 through P2 are delivered
+within their documented limits. P3 introduces existing-build inspection and the first
+Device Tree reader connection; later stages cover editing, advanced composition and
+environment migration. Build evidence does not establish hardware operation.
 
 ## TinyML model and experiment analysis
 

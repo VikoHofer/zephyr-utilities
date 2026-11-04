@@ -43,3 +43,11 @@ test("the shared job link opens the registered owner instead of assuming Memory"
   assert.equal(activeJobRoute([{feature: "planned"}], features), "home");
   assert.equal(activeJobRoute([], features), "home");
 });
+
+test("a job can return to its owning feature's operation view", () => {
+  const features = [{id: "projects", status: "available", entry_path: "/#/projects/environment"}];
+  assert.equal(activeJobRoute([{feature: "projects", metadata: {view: "create"}}], features), "projects/create");
+  for (const view of ["../memory", "https://outside.invalid", "/home", "create?x=1"]) {
+    assert.equal(activeJobRoute([{feature: "projects", metadata: {view}}], features), "/#/projects/environment");
+  }
+});

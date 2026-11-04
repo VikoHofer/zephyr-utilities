@@ -4,9 +4,9 @@ Zephyr Utilities runs as one local Python process serving one browser applicatio
 shared shell owns navigation and workspace selection. Features supply domain services,
 HTTP routes and scoped browser modules through an explicit registry.
 
-Memory Explorer and Project Creator's environment analyser are working features.
-Project generation, Device Tree editing and TinyML experiments remain planned workflows
-inside the same application rather than separate servers.
+Memory Explorer and Project Creator's environment analyser, minimal-C creation and
+explicit configure/build workflow are working features. Device Tree editing and TinyML
+experiments remain planned workflows inside the same application.
 
 ## Dependency direction
 
@@ -17,7 +17,7 @@ CLI
      └─ explicit feature registry
          ├─ features/memory/
          ├─ features/devicetree/  [planned]
-         ├─ features/projects/    [environment analysis; creation planned]
+         ├─ features/projects/    [analysis, creation and single-image builds]
          └─ features/tinyml/      [planned]
 
 Browser shell → registered feature modules → shared authenticated API
@@ -45,7 +45,7 @@ src/zephyr_utilities/
     memory/                 # Report discovery/generation/model/snapshots/comparison
       web/                  # Feature entry module, template and stylesheet
     devicetree/             # Planned editor scope
-    projects/               # Environment analysis, metadata adapters, storage and UI
+    projects/               # Environment analysis, creation, builds, storage and UI
     tinyml/                 # Planned model/experiment-analysis scope
   web/                      # Shared HTML shell, styles and JavaScript helpers
   memory/                   # Compatibility imports for the first release
@@ -119,6 +119,13 @@ analysis checks fingerprints and can reuse an unchanged catalogue. Future format
 rejected without overwriting their data. See [ADR 0003](decisions/0003-environment-observations.md)
 and the [environment analyser contract](environment-analyser.md).
 
+Projects also owns schema-version-1 project/profile and build-attempt JSON under
+`feature_data("projects") / "creator"`. Project definitions retain template/input identity;
+attempt records retain reviewed commands, bounded logs, outcomes and live output hashes.
+Unknown formats are preserved. Interrupted work is shown as interrupted after restart,
+not resumed. See [ADR 0004](decisions/0004-reviewed-project-creation.md) and the
+[creator contract](project-creator.md).
+
 ## Browser feature boundary
 
 The shell fetches the session and feature catalog, loads a registered template and
@@ -132,7 +139,7 @@ scopes selectors/styles to its root. It removes listeners, timers and observers 
 dispose and can restore state when mounted again.
 
 The canonical paths are `/#/home` and `/#/memory/overview` (with other memory views below
-the same prefix), plus `/#/projects/environment`. Earlier hashes such as `#overview` map to the equivalent memory view.
+the same prefix), plus `/#/projects/environment` and `/#/projects/create`. Earlier hashes such as `#overview` map to the equivalent memory view.
 All browser assets are bundled with the Python package and served by the same process.
 
 ## Local access boundary
@@ -144,15 +151,23 @@ workspace paths. Keep these checks centralized when adding routes.
 
 Selecting a Zephyr build selects its local tooling environment. Report generation runs
 the selected footprint script against an existing ELF; it does not invoke a build or
-flasher. Future editor and creator operations need a separate, explicit write path with
-reviewable output and tests for destination handling.
+flasher. Project creation uses a separate reviewed plan and an explicit source-write
+action; configure/build likewise require a reviewed command plan. Future editor writes
+need their own destination/conflict handling.
 
 Environment analysis reads workspace/module, hardware model v2 and SDK metadata through
 feature-owned adapters. Local version/manifest/Git probes are bounded subprocesses;
 analysis does not execute project CMake, configure firmware or install/update tools.
-Sources, declared/discovered evidence, unknowns and diagnostics remain distinct. Only
-`EnvironmentSnapshot` is implemented; shared configured-build and editor contracts are
-still proposed and must not be inferred from this metadata catalogue.
+Sources, declared/discovered evidence, unknowns and diagnostics remain distinct.
+`EnvironmentSnapshot` remains an analysis-only observation. Creator execution rechecks
+selected environment and application inputs, then uses explicit CMake argument arrays
+and a fresh output directory. Application/Zephyr/toolchain code runs only for an explicit
+configure/build action. It is not sandboxed by output-directory separation.
+
+Project/profile and attempt context are feature-owned. They capture requested and
+effective target/toolchain values separately, with partial input coverage and live
+artifact references. Shared configured-build/editor contracts remain proposed until a
+second implemented feature needs them; no cross-feature private imports are introduced.
 
 ## Measurement boundary
 
@@ -171,6 +186,7 @@ or worst-case resource demand. The [research roadmap](roadmap.md) and
 - [ADR 0001: One process and explicit features](decisions/0001-one-application-explicit-features.md)
 - [ADR 0002: Preserve evidence and storage compatibility](decisions/0002-evidence-and-storage-compatibility.md)
 - [ADR 0003: Versioned environment observations](decisions/0003-environment-observations.md)
+- [ADR 0004: Reviewed creation and build attempts](decisions/0004-reviewed-project-creation.md)
 - [Adding a feature](adding-a-feature.md)
 - [HTTP/browser integration contract](platform-contract.md)
 

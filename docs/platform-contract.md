@@ -15,7 +15,7 @@ src/zephyr_utilities/
     memory/              # Existing analysis modules, service and HTTP routes
       web/               # index.js, view.html, style.css
     devicetree/          # Planned feature manifest and scope
-    projects/            # Environment analyser, adapters, storage, API and web assets
+    projects/            # Environment analyser, creator, build attempts, API and web assets
     tinyml/              # Planned feature manifest and scope
   web/                   # index.html, shell.js, shell.css; shared client helpers
   memory/                # Compatibility imports for the original Python package
@@ -44,11 +44,19 @@ servers, ports or environments. `zephyr-utils memory` opens the same app directl
   `snapshots`, `snapshots/:id`, `snapshots/:id/export`, `import`, and `compare`.
   Preserve legacy unnamespaced memory endpoints as compatibility aliases.
 - Legacy memory job fields (`snapshot_id`, logs, status) remain available.
+- Job `metadata.view` can optionally name a relative subview in that job's feature,
+  such as `create`. The shell validates this value before using it for the running-job
+  badge; absent/invalid values fall back to the registered feature entry path. It does
+  not name another feature or load a URL, and introduces no feature-specific shell import.
 - `GET /api/projects/environment` returns the selected workspace's saved environment
-  observation and latest retained job without starting analysis.
+  observation and latest retained analysis job without starting analysis.
 - `POST /api/projects/analyze` submits offline environment discovery through the shared
   job manager. Its completed result contains `snapshot`. See the
   [environment API/data contract](environment-analyser.md) for options, schema and limits.
+- `GET /api/projects/creator` reads the selected workspace's saved projects/attempts and
+  retained creator jobs. Creation and execution use separate preview/apply endpoints:
+  `POST /api/projects/preview` and `/create`, then `/build-preview` and `/build`. Mutation
+  requests include the expected workspace. See the [creator API/data contract](project-creator.md).
 - Shared job cancellation uses `POST /api/jobs/:id/cancel` with a JSON object body `{}`.
 - Every API except session requires the existing session token. Preserve loopback host,
   origin and request-body protections. New routes go through the same router checks.
@@ -75,9 +83,13 @@ Feature code scopes DOM queries and styles to its root, and releases listeners, 
 and observers on dispose. Leaving a feature does not cancel server jobs. On re-entry,
 memory can resume its last job through context.state and the shared jobs API. Projects
 reloads the current workspace's saved observation/latest retained job and keeps discovery
-path options separately per workspace in browser-session state.
+path options separately per workspace in browser-session state. Its Environment and
+Create application subviews dispose their local requests/timers when switching. Creator
+form choices are workspace-scoped; reviewed plans are discarded on remount. Projects and
+attempts persist separately from the shared job manager's in-memory retention.
 
 The Home view is a working feature catalog. Planned features are clearly labeled and do
-not pretend to implement editors, model training or project creation. The available
-Project Creator entry exposes environment analysis only; creation controls remain absent.
+not pretend to implement editors or model training. Project Creator exposes environment
+analysis and a minimal workspace-app creation/configure/build workflow. Advanced project
+composition and Device Tree handoff remain planned.
 UI remains English and offline. No runtime CDN or hosted service dependency.

@@ -53,13 +53,13 @@ class ProjectsServiceTests(unittest.TestCase):
         self.assertEqual(data, {"workspace": str(self.workspace), "snapshot": None, "job": None})
         self.assertFalse((self.root / "data/.features/projects").exists())
 
-    def test_analysis_available_but_creation_stays_unimplemented(self):
+    def test_analysis_and_reviewed_creation_share_the_feature(self):
         feature = next(item for item in self.call("GET", "/api/features").data["features"] if item["id"] == "projects")
         self.assertEqual(feature["status"], "available")
         self.assertEqual(feature["entry_path"], "/#/projects/environment")
-        self.assertIn("planned", feature["description"])
+        self.assertIn("create", feature["description"])
         self.assertIn(b"mount", self.app.asset("/assets/projects/index.js").data)
-        with self.assertRaises(FileNotFoundError):
+        with self.assertRaises(ValueError):
             self.call("POST", "/api/projects/create")
 
     def test_completed_observation_survives_application_restart(self):

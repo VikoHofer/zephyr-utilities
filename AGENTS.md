@@ -2,8 +2,9 @@
 
 Zephyr Utilities is one local application with a Python backend and an English,
 offline browser interface. `zephyr-utils` starts the entire application. Memory
-Explorer and Project Creator's environment analyser are implemented. Project generation,
-Device Tree editing and TinyML experiment analysis remain planned feature areas.
+Explorer and Project Creator's environment analysis, minimal application creation,
+configuration and single-image builds are implemented. Device Tree editing and TinyML
+experiment analysis remain planned feature areas.
 
 ## Start here
 

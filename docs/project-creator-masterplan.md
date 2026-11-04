@@ -1,15 +1,17 @@
 # Zephyr Project Creator and environment analyser master plan
 
-Status: P0 foundation and P1 environment analysis implemented on 2026-11-04. Project
-Creator (`projects`) now exposes analysis; project creation and Device Tree Editor
-(`devicetree`) remain planned. P2 and later stages below are proposals. The agreed first
-creation priority is **new applications inside the existing `zephyrproject` workspace**.
+Status: P0 foundation, P1 environment analysis and P2 minimal application creation with
+explicit configure/build actions are implemented on 2026-11-04. Device Tree Editor
+(`devicetree`) and P3 onward remain planned. The agreed first creation priority is
+**new applications inside the existing `zephyrproject` workspace**.
 
-The delivered contract is `EnvironmentSnapshot` version 1, with offline board/chip and
-installed-SDK discovery, refresh, diagnostics and saved observations. Build profiles,
-configured build context and editor handoff remain future contracts. See the
-[environment analyser guide](environment-analyser.md) and
-[ADR 0003](decisions/0003-environment-observations.md) for implemented behaviour and limits.
+Delivered records are `EnvironmentSnapshot` version 1 and feature-owned version-1
+project/profile and attempt records. The first creator is Linux only, minimal C, one
+image and an explicit installed GNU SDK. Shared editor/build contracts remain future
+work. See the [environment analyser guide](environment-analyser.md),
+[Project Creator guide](project-creator.md),
+[ADR 0003](decisions/0003-environment-observations.md) and
+[ADR 0004](decisions/0004-reviewed-project-creation.md) for implemented behaviour and limits.
 
 Build a small project creator on top of an environment analyser that discovers what
 the selected Zephyr installation actually supports. Extend it into configuration,
@@ -296,10 +298,13 @@ in the build. Enabling a node is not proof its driver is enabled or linked. See
 
 ### Proposed shared contracts
 
-`EnvironmentSnapshot` version 1 is implemented as a feature-owned observation record;
-its exact fields are in the [environment contract](environment-analyser.md). The other
-records below remain design proposals. Define their minimum versions and record an ADR
-when a shared configured-build implementation is introduced.
+`EnvironmentSnapshot` version 1 is a feature-owned observation record; its exact fields
+are in the [environment contract](environment-analyser.md). P2 also implements a narrow
+feature-owned project/profile, reviewed plan and attempt context, documented in the
+[creator contract](project-creator.md). The shared cross-feature records below remain
+design proposals; the current attempt record does not satisfy every proposed field or
+freshness guarantee. Define the minimum public interfaces and record an ADR when the
+Device Tree reader becomes a second consumer.
 
 | Record | Minimum contents | Purpose |
 | --- | --- | --- |
@@ -398,15 +403,15 @@ See [sysbuild](https://docs.zephyrproject.org/latest/build/sysbuild/index.html).
 
 ## Staged delivery and exit gates
 
-Stages are capability boundaries, not calendar estimates. P0/P1 now provide environment
-analysis; P2 completes the first creator workflow. P3 and P4 deliver the first useful
-editor integration. P5 through P7 remain optional expansion based on actual projects.
+Stages are capability boundaries, not calendar estimates. P0/P1 provide environment
+analysis and P2 delivers the first creator workflow. P3 and P4 remain the next editor
+integration stages. P5 through P7 are optional expansion based on actual projects.
 
 | Stage | Outcome | Status | Depends on | Relative scope |
 | --- | --- | --- | --- | --- |
 | P0 | Observation contract, capability policy and synthetic fixtures | Available | Existing platform | Small |
 | P1 | Offline environment analyser and target catalogue | Available | P0 | Medium |
-| P2 | New workspace application and explicit single-image build | Planned | P1 | Medium |
+| P2 | New workspace application and explicit single-image build | Available within documented limits | P1 | Medium |
 | P3 | Existing-build inspection and Device Tree handoff | Planned | P2; editor reader | Medium |
 | P4 | Reviewable configuration and overlay editing | Planned | P3 | Large |
 | P5 | Reusable components and advanced project layouts | Planned | P2; P4 for integrated editing | Large, split into slices |
@@ -420,7 +425,7 @@ evidence boundary, documented Linux host scope, and bounded adapter behaviour. S
 fixtures cover hardware model v2 shapes used by Zephyr 3.7 and 4.4, a backported extension,
 and legacy/unknown metadata that degrades safely. This is metadata-shape coverage; it
 does not establish builds on both releases. The current local checkout is the integration
-reference. Build-profile and editor contracts remain deferred until their consumers exist.
+reference. The shared editor contracts remain deferred; P2 profiles are feature-owned.
 
 Exit gate: fixture definitions cover qualified/revisioned targets, missing SDKs/modules,
 custom roots, valid board extensions versus duplicate definitions, equal-version SDKs
@@ -444,27 +449,40 @@ tools give useful partial results; unsupported schemas cannot produce a supposed
 validated target. A board extension adds its qualifier with contributing origins intact,
 and explicit-path SDK inspection retains two equal-version installations. Scanning
 changes no firmware inputs, repositories or tool installation.
-Create remains absent until P2 is complete; the delivered slice is labeled analysis only.
-Dynamic CMake-derived roots, configuration validation, binding/shield/snippet catalogues
-and legacy hardware support are outside this release's supported discovery scope.
+The Environment view remains analysis only; P2 creation and execution are separate
+reviewed actions. Dynamic CMake-derived roots, configuration validation,
+binding/shield/snippet catalogues and legacy hardware support remain outside the
+analyser's discovery scope.
 
 ### P2 Deliver the first Project Creator release
 
-Implement the seven-step flow above for a minimal C application inside the existing
-workspace, exact board selection and an installed toolchain. Generate a reproducible
-command and keep the project independent of utilities metadata. Add explicit configure
-and compile jobs, context capture and separate output directories. No flashing.
+Delivered: the seven-step flow for a minimal C application inside the existing workspace,
+exact discovered target and explicit installed GNU SDK. Every generated file is reviewed;
+publication cannot replace an existing destination. The application README provides
+independent direct CMake commands. Configure and Build require separate exact-command
+reviews, run as shared cancellable jobs and use fresh output directories. Requests capture
+their workspace and selected environment. Feature-owned version-1 project/profile and
+attempt records preserve commands, source hashes, outcomes, partial context, bounded logs
+and live artifact identities. No flashing is included.
 
-Exit gate: the generated project configures and builds using the selected environment
-on at least one real supported target with the SDK available, and independently through
-the displayed command. Test collisions, path traversal, symlink changes, whitespace,
-cancellation and partial failures. Verify a second installed SDK selection where
-available, or retain fixture-only evidence and state that limitation. Confirm workspace
-switches and leaving/reopening the view cannot redirect or cancel an active job.
+The supported slice is Linux, a resolved existing west workspace with a nonempty resolved
+module list, one minimal C application/image and GNU SDK selection. Source paths with
+whitespace are rejected to match Zephyr's build-system limitation. Automatic configuration
+packages are disabled; ordinary application configuration/overlay discovery stays with
+Zephyr. Profile editing/migration, sample import, sysbuild and cross-feature handoff remain
+later work. See the [creator contract](project-creator.md) and
+[ADR 0004](decisions/0004-reviewed-project-creation.md).
 
-Stop here if the immediate need is simply reliable new-project creation. Do not require
-a graphical Kconfig editor, generic sample importer, network installation or custom-board
-wizard to release this stage.
+Exit gate: generate/configure/build with a real local target and SDK, independently run
+the displayed recipe, and exercise collision, traversal, symlink-change, whitespace,
+cancellation and partial-failure cases. Verify workspace switches and leaving/reopening
+cannot redirect or cancel active jobs. Only one actual SDK is available in the local
+integration environment; separate installed-SDK selection has fixture coverage. Real
+integration evidence is recorded in the creator guide without claiming all discovered
+targets or hardware operation.
+
+Stop here when the immediate need is reliable new-project creation. The next stage does
+not require a graphical Kconfig editor, network installation or a custom-board wizard.
 
 ### P3 Connect existing builds and Device Tree inspection
 
@@ -575,23 +593,23 @@ firmware artifacts, private project sources, models or device captures into Git.
 Follow [contributing](../CONTRIBUTING.md): run focused checks during implementation,
 then `python scripts/check.py --quick` and `python scripts/check.py` in the development
 environment. Use `python scripts/verify_package.py` when adding/moving browser assets.
-Report socket, SDK or hardware limitations precisely. P2 and later acceptance gates
-describe future work; environment discovery does not establish those builds or device
-tests. The current analyser's supported scope and test categories are documented in
-[the environment guide](environment-analyser.md).
+Report socket, SDK or hardware limitations precisely. P3 and later acceptance gates
+describe future work. Environment discovery does not establish build success; configured
+or compiled attempt evidence does not establish device operation. See the
+[environment guide](environment-analyser.md) and [creator guide](project-creator.md) for
+current supported scope, contracts and validation limits.
 
 ## Decisions for the next implementation task
 
-The user has selected **new apps in the existing workspace** as the first priority.
-The proposed defaults are a minimal C template, `<workspace>/applications/<name>`, local
-analysis without downloads, explicit installed-SDK selection, and one image per newly
-created profile. Choose a first smoke-test board from the analysed local environment
-when implementation starts; retain broader discovery without promising every target is
-tested.
+The user selected **new apps in the existing workspace** as the first priority. P2 now
+uses the minimal C template, `<workspace>/applications/<name>`, explicit installed GNU SDK
+selection and one image per project profile. Analysis and previews do not download tools
+or change firmware inputs. Profile/attempt persistence is versioned and feature-owned.
 
-P0/P1 are now available. The next implementation task is P2: settle the minimal
-profile persistence schema and first tested target/SDK combination before adding file
-generation and explicit builds. Before P4, select
-the initial edit operations. Before P5/P7, prioritize actual needs such as sensors,
-networking, custom boards or multicore builds. Those choices need not force every later
-feature into the first creator release.
+P0 through P2 are available. The next proposed task is P3: existing-build inspection and
+a Device Tree reader consuming a narrowly shared build-context/artifact interface.
+Define freshness checks and read-root boundaries before exposing live artifacts through
+another feature. Keep current Project Creator and Memory Explorer behaviour intact.
+Before P4, select the first edit operations. Before P5/P7, prioritize actual needs such
+as sensors, networking, custom boards or multicore builds. These later stages are context,
+not authorization to implement them automatically.
