@@ -1,11 +1,15 @@
-"""Planned visual overlay and hardware configuration editor."""
+"""Limited source-preserving overlay editor; modules and pin configuration are planned."""
 
-from ...core.features import FeatureDefinition
+from pathlib import Path
+
+from ...core.features import FeatureDefinition, FrontendDefinition
+from .api import register
 
 FEATURE = FeatureDefinition(
     id='devicetree',
     title='Device Tree Editor',
-    description='Visually define application overlays, add hardware modules and assign their signals to pins. Planned after the Project Creator workflow.',
-    status="planned",
-    entry_path="/#/devicetree",
+    description='Edit overlay status and simple properties, review and save source changes, and recover drafts. Modules and pin configuration are planned.',
+    entry_path="/#/devicetree/editor",
+    frontend=FrontendDefinition(Path(__file__).parent / "web"),
+    register=register,
 )

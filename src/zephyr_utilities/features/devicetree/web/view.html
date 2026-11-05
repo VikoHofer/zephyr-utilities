@@ -1,9 +1,9 @@
 <section class="dte-workspace" data-dte-root>
   <header class="dte-heading">
-    <div><p class="dte-eyebrow">Device Tree Editor</p><h1>Visual and source drafts</h1></div>
-    <span class="dte-badge">Draft preview</span>
+    <div><p class="dte-eyebrow">Device Tree Editor</p><h1>Visual overlay editor</h1></div>
+    <span class="dte-badge">Status and literal properties</span>
   </header>
-  <p class="dte-intro">Edit supported properties visually or in source. Changes stay in this application session; saving files is planned for the next stage.</p>
+  <p class="dte-intro">Edit an existing application overlay visually or in source, then review and save its changes. Pin assignment, module placement and build validation are planned.</p>
 
   <section class="dte-card dte-picker" aria-labelledby="dte-project-heading">
     <div class="dte-section-heading"><h2 id="dte-project-heading">Registered applications</h2><button type="button" data-dte-refresh-catalog>Refresh list</button></div>
@@ -54,9 +54,14 @@
       <div class="dte-draft-toolbar">
         <button type="button" data-dte-undo disabled>Undo</button><button type="button" data-dte-redo disabled>Redo</button>
         <button type="button" data-dte-sync disabled>Sync draft</button><button type="button" data-dte-reconcile hidden>Reconcile draft</button>
-        <button type="button" disabled title="File saving is planned for D4">Save file · Planned</button>
+        <button type="button" class="dte-primary" data-dte-save disabled>Review and Save</button>
+        <button type="button" data-dte-compare disabled>Compare with disk</button>
+        <button type="button" data-dte-reload disabled>Reload / discard draft</button>
+        <button type="button" data-dte-export disabled>Export draft</button>
       </div>
       <p class="dte-muted" role="status" data-dte-draft-status>Choose an available overlay to begin.</p>
+      <p class="dte-muted" data-dte-recovery-status></p>
+      <p class="dte-status" role="status" data-dte-save-status hidden></p>
       <p class="dte-error" role="alert" data-dte-draft-error hidden></p>
       <div class="dte-conflict" data-dte-conflict hidden><p>Your retained text is shown below. Review the server draft before choosing the text to continue with.</p><details><summary>Inspect competing server draft</summary><pre class="dte-source" data-dte-server-source></pre></details><button type="button" data-dte-use-local>Continue with my text</button><button type="button" data-dte-use-server>Use server draft</button></div>
       <div class="dte-draft-columns">
@@ -92,7 +97,36 @@
   </section>
   <details class="dte-card dte-retained" data-dte-retained-panel hidden><summary data-dte-retained-summary>Retained drafts</summary>
     <p class="dte-muted">Drafts and pending typing remain separate for each context during this application session. This view does not apply text to another project.</p>
-    <label>Retained draft<select data-dte-retained></select></label><button type="button" data-dte-view-retained>View retained text</button>
+    <label>Retained draft<select data-dte-retained></select></label><button type="button" data-dte-view-retained>View retained text</button><button type="button" data-dte-export-retained>Export retained text</button>
     <textarea class="dte-source dte-source-editor" aria-label="Retained draft source" data-dte-retained-source readonly rows="10" hidden></textarea>
   </details>
+  <section class="dte-card dte-recovery" aria-labelledby="dte-recovery-heading">
+    <div class="dte-section-heading"><h2 id="dte-recovery-heading">Recoverable drafts</h2><button type="button" data-dte-refresh-recovery>Find recoverable drafts</button></div>
+    <p class="dte-muted">Acknowledged changes are retained on this computer. Recovery never writes an overlay automatically. Unsent local typing remains available only while this page stays open.</p>
+    <p class="dte-muted" role="status" data-dte-recoveries-status>Select Find recoverable drafts to check saved recovery data.</p>
+    <p class="dte-error" role="alert" data-dte-recoveries-error hidden></p>
+    <div data-dte-recoveries-controls hidden>
+      <label>Recoverable draft<select data-dte-recoveries></select></label>
+      <button type="button" data-dte-review-recovery>Review recovery</button>
+    </div>
+    <details data-dte-publications-panel hidden><summary>Publication recovery evidence</summary><p class="dte-muted">These records describe earlier save actions. Compare the current overlay before relying on a recorded outcome. No publication is replayed automatically.</p><div data-dte-publications></div></details>
+  </section>
+  <dialog class="dte-review" data-dte-review aria-labelledby="dte-review-heading">
+    <div class="dte-review-heading"><h2 id="dte-review-heading" data-dte-review-title>Review overlay changes</h2><button type="button" data-dte-review-close aria-label="Close review">Close</button></div>
+    <div class="dte-review-body">
+      <p data-dte-review-summary></p>
+      <p class="dte-path" data-dte-review-path></p>
+      <div data-dte-review-notices></div>
+      <p class="dte-error" role="alert" data-dte-review-error hidden></p>
+      <div data-dte-review-diff-panel><h3>Changes</h3><p class="dte-muted" data-dte-review-diff-status></p><pre class="dte-source dte-diff" data-dte-review-diff></pre></div>
+      <details><summary>Complete candidate source</summary><pre class="dte-source" data-dte-review-source></pre></details>
+      <details data-dte-review-disk-panel><summary>Current source on disk</summary><pre class="dte-source" data-dte-review-disk></pre></details>
+    </div>
+    <div class="dte-review-actions">
+      <button type="button" data-dte-review-export>Export draft</button>
+      <button type="button" data-dte-review-delete hidden>Delete recovery record</button>
+      <button type="button" data-dte-review-cancel>Cancel</button>
+      <button type="button" class="dte-primary" data-dte-review-confirm disabled>Save overlay</button>
+    </div>
+  </dialog>
 </section>

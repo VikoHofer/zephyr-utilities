@@ -1,11 +1,12 @@
 # Device Tree Editor master plan
 
-Status: visual editor planned; D0–D3 complete within their staged scopes on
+Status: limited overlay editor available; D0–D4 complete within their staged scopes on
 2026-11-05, with verification and measured limits recorded in their handoffs. The next product
 priority is the visual Device Tree Editor
 following the delivered everyday Project Creator workflow. This plan does not imply
 that every advanced item in the Project Creator roadmap is complete. The editor's
-runtime feature remains planned until its first usable editing workflow is delivered.
+runtime now exposes existing-overlay editing, reviewed Save and recovery. Module placement,
+pins and semantic validation remain later stages.
 
 Build an offline visual hardware editor inside the existing `zephyr-utils` application.
 Users open a project, select its exact configuration, place hardware modules, connect
@@ -23,7 +24,8 @@ The [foundation contract](device-tree-editor-contract.md),
 evidence. The [D1 handoff](device-tree-editor-d1-handoff.md) describes the injected
 read-only workspace. The [D2 handoff](device-tree-editor-d2-handoff.md) records the
 source engine, verification and measured limits. The [D3 handoff](device-tree-editor-d3-handoff.md)
-records synchronized session drafts and unified undo. D4 is next.
+records synchronized session drafts and unified undo. The [D4 handoff](device-tree-editor-d4-handoff.md)
+records guarded existing-overlay Save and recovery. D5 is next.
 
 ## Product experience
 
@@ -109,7 +111,7 @@ selected Zephyr environment. Bundle runtime assets for offline use.
 
 | Existing area | Reuse and boundary |
 | --- | --- |
-| `features/devicetree/feature.py` | Planned feature identity; new editor services and browser modules belong here |
+| `features/devicetree/feature.py` | Delivered limited editor identity; later hardware services and browser modules belong here |
 | `core/context.py` | Shared workspace, jobs, build observations and `feature_data("devicetree")` |
 | `core/source_files.py` | Bounded source reads, hashes and workspace/path checks; does not provide an editor writer |
 | `core/builds.py` | Verified build/image observations and artifact reads; does not prove current source freshness |
@@ -132,7 +134,8 @@ The D0/D1 namespace decision preserves Inspector's existing routes:
 
 The context/selection portion is implemented in D1's read-only preview. D2 adds an
 in-memory source document and reversible source changes. D3 adds context-bound browser
-drafts and unified history. Save reviews, validation, pin and recipe interfaces remain planned. Concrete delivered
+drafts and unified history. D4 adds reviewed Save and durable recovery. Validation, pin and
+recipe handoff interfaces remain planned. Concrete delivered
 fields and limits are recorded in the foundation contract.
 
 | Contract | Required information |
@@ -319,7 +322,8 @@ D0 is **complete** within its foundation/prototype scope. D1 is **complete** wit
 read-only preview scope. D2 is **complete** within its in-memory source-engine scope;
 its handoff records verification and the initial latency limitation. D3 is **complete**
 within its session-draft preview scope; its handoff records synchronization checks and
-the source lookup optimization. D4–D15 are **not started**.
+the source lookup optimization. D4 is **complete** for existing-overlay Save, conflict
+comparison and durable recovery. D5–D15 are **not started**.
 The default order is sequential; shared contracts
 and source safety precede richer visuals. Split a stage further if its exit gate cannot
 be delivered and tested in a reviewable change. Complete the selected slice without
@@ -336,7 +340,7 @@ until D4. This uses the same application/server, not a separate feature launcher
 | D1 | Open project and exact editor context | Complete read-only preview; see D1 handoff |
 | D2 | Source-preserving overlay patch engine | Complete in-memory operations; verification and limits in D2 handoff |
 | D3 | Synchronized visual/source draft and undo | Complete session-draft preview; see D3 handoff |
-| D4 | Guarded Save, reload and recovery | First usable visual editor |
+| D4 | Guarded Save, reload and recovery | Complete existing-overlay editor; see D4 handoff |
 | D5 | Explicit validation and build handoff | Verified editing loop |
 | D6 | Binding-aware properties and references | General structured editing |
 | D7 | Peripheral and bus configuration | Common hardware topology |
@@ -450,6 +454,12 @@ Do not add filesystem Save, configure or build execution in this stage.
 ```
 
 ### D4 Guarded Save and recovery
+
+Status: complete for one existing overlay at a time. Missing destinations remain
+recoverable/exportable; new overlay creation is not exposed. See the
+[D4 handoff](device-tree-editor-d4-handoff.md) and
+[ADR 0020](decisions/0020-guarded-overlay-save-and-recovery.md) for publication limits,
+recovery schema and verification. D5 is the next stage.
 
 Scope: implement single-overlay Review and Save, identity/hash checks, participating
 writer locks, conflict comparison, reload/discard and versioned draft recovery. Define
@@ -755,10 +765,10 @@ performance claims without measurements.
 
 ## Starting point
 
-The next implementation request should be **D4 only**.
+The next implementation request should be **D5 only**.
 D0's contracts/source experiment, D1's read-only context and D2's source operations
 provide the foundation; D3 connects source and visual session drafts. D4 delivers the first small
-usable editor; D5 closes its configure/build loop; D8–D10 deliver the initial complete
+usable existing-overlay editor. D5 closes its configure/build loop; D8–D10 deliver the initial complete
 module-and-pin experience. Later stages expand coverage while preserving the same
 source synchronization and save semantics.
 
@@ -767,8 +777,7 @@ editor interaction design must wait. Its broader creator/environment milestones 
 separate. No editor implementation, firmware changes, or hardware verification are
 part of the original planning change. D0 subsequently added only foundation documents,
 synthetic fixtures and an unregistered in-memory prototype.
-D1 adds only the public selection provider and explicitly injected read-only preview;
-the built-in visual editor remains planned.
+D1 added only the public selection provider and explicitly injected read-only preview.
 D2 adds the production in-memory syntax/patch engine. D3 connects it to visual and source
-drafts, shared undo/redo and context-bound navigation retention. Source publication is
-still planned; neither stage promotes the built-in feature.
+drafts, shared undo/redo and context-bound navigation retention. D4 adds reviewed
+single-overlay publication and explicit recovery and promotes only that limited workflow.

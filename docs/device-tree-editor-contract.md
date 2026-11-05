@@ -1,23 +1,22 @@
 # Device Tree Editor foundation contract
 
-Status: D0 design baseline, D1 context, D2 source operations and D3 session drafts,
-2026-11-05. Final D3 verification is tracked in its handoff.
-D1 supplies an explicitly injected development/test preview; the built-in editor stays
-planned. Persistent recovery and source writes remain future work.
+Status: D0–D4 contracts, 2026-11-05. D4 adds reviewed existing-overlay Save and durable
+draft recovery, exposing the limited editor in the default application. Hardware modules,
+pins and semantic validation remain planned. Verification is tracked in the stage handoffs.
 The D0 executable evidence is a bounded in-memory source prototype under
 `scripts/prototypes/`, outside the installed application. See the
 [master plan](device-tree-editor-masterplan.md) and
 [ADR 0019](decisions/0019-device-tree-editor-foundation.md). Verification is recorded in
 the [D1 handoff](device-tree-editor-d1-handoff.md) and
-[D2 handoff](device-tree-editor-d2-handoff.md) and [D3 handoff](device-tree-editor-d3-handoff.md).
+[D2 handoff](device-tree-editor-d2-handoff.md), [D3 handoff](device-tree-editor-d3-handoff.md)
+and [D4 handoff](device-tree-editor-d4-handoff.md).
 
 ## Ownership and compatibility
 
 The editor uses feature ID `devicetree`, service key `devicetree_editor`, API namespace
-`/api/devicetree/editor/`, and shell view `devicetree/editor`. D1 registers them only
-when `features/devicetree/preview.py::PREVIEW_FEATURE` is explicitly injected. The
-production feature remains planned with no frontend, registration callback or
-implemented navigation entries.
+`/api/devicetree/editor/`, and shell view `devicetree/editor`. D1–D3 registered these only
+through explicit `PREVIEW_FEATURE` injection. D4 registers the delivered overlay editor
+in the default application; the preview definition remains available to existing tests.
 
 Inspector retains both `context.services["inspector"]` and its alias
 `context.services["devicetree"]`, pointing to the same service. Its existing POST paths
@@ -327,11 +326,52 @@ The browser serializes mutations, retains pending text per binding and reconcile
 uncertain results before retrying. A current visual projection is shown only after the
 corresponding source has been acknowledged. Source linking converts UTF-8 byte spans
 to textarea UTF-16 positions explicitly, preserving the original line-ending bytes
-outside the changed range. D4 must add publication/recovery without treating this
-session state as durable evidence.
+outside the changed range. D4 adds separate durable acknowledgement and publication;
+the earlier session-only state is not durable evidence.
 
-## Persistent drafts and change plan proposal for D4
+## D4 reviewed Save, reconciliation and recovery
 
+D4 implements existing-overlay replacement only. All routes remain authenticated POST
+requests under `/api/devicetree/editor/drafts/`. Ordinary draft mutations retain the D3
+guards. Recovery storage is feature-owned; no project code or configure/build tool runs.
+
+| Route | Request beyond D3 context binding | Result |
+| --- | --- | --- |
+| `review` | Draft mutation guard | Ready plan, incomplete-source refusal or current-file conflict comparison |
+| `save` | Draft mutation guard plus `plan_id` | Saved/unchanged receipt and refreshed context/document/draft, or conflict/uncertain evidence |
+| `compare` | Draft mutation guard | Base, candidate and current text plus a pinned `comparison_id` |
+| `reload` | Draft mutation guard, `comparison_id`, `mode: keep` or `discard` | Rebase retained text or explicitly discard/reload without writing firmware |
+| `recovery/list` | Only `workspace` | Bounded recovery summaries, publication evidence and diagnostics |
+| `recovery/read` | Only `workspace`, `recovery_id` | Versioned retained source plus current-file comparison |
+| `recovery/restore` | Context binding, `document_id`, `recovery_id`, `expected_recovery_revision`, `comparison_id`, `mode` | Explicitly restored unsaved draft bound to the reviewed current context |
+| `recovery/discard` | Only `workspace`, `recovery_id`, `expected_recovery_revision` | Explicit recovery-record removal; source files remain unchanged |
+
+Save plans and comparison tokens expire after ten minutes, with 32 retained entries each.
+Plans bind exact candidate bytes, original identity/hash and directory ancestry. The review
+includes a bounded diff, complete candidate text, unresolved semantic validation, overlay
+usage and unknown effects on other configurations sharing the file. Successful Save
+rebinds the same draft/history to the new baseline. Duplicate requests return a retained
+response without replaying publication; 64 completed responses are retained in session.
+
+The production draft payload reports persistence status and Save capability. Version-1
+records under `drafts/` retain base/source bytes, hashes, revision, bounded history and
+captured context/file observations. Recovery requires explicit comparison and never applies
+firmware changes. Existing recovery records have 64-record/32-MiB total and 16-MiB per-record
+bounds. The publisher retains at most 64 version-1 records under `publications/`, each at
+most 4 MiB, plus displaced originals beside the overlay. Unknown/malformed records remain
+untouched. No prior persistent draft schema exists to migrate.
+
+Linux atomic exchange preserves supported file metadata and verifies both sides. A failure
+before exchange leaves the destination untouched; after exchange, an uncertain result may
+already be visible and retains evidence without automatic rollback/replay. Loaded publication
+records require comparison after restart. Unchanged Save performs no file replacement or
+publication-journal write. See [ADR 0020](decisions/0020-guarded-overlay-save-and-recovery.md)
+for locks, identity checks, metadata support and the remaining external-writer race.
+
+## Later persistent change-plan extensions
+
+The following earlier design envelope also describes later create/multi-file extensions;
+the preceding D4 section and ADR 0020 define the delivered existing-file format.
 Source bytes are authoritative; the hardware graph is derived. Byte offsets belong to
 the server's UTF-8 source representation, not JavaScript UTF-16 indices. D3 converts
 editor positions explicitly and tests non-ASCII comments before using text selections.
@@ -359,7 +399,7 @@ not automatic retry. D4 defines retention limits and tests duplicate requests.
 Drafts, receipts and later journals belong under
 `context.feature_data("devicetree")`, with versioned envelopes. D0 creates no records,
 directories or migration. Introduce the concrete storage layout and compatibility tests
-in D4. Unknown future versions remain untouched and explain why they cannot be opened.
+in D4 as recorded above. Unknown future versions remain untouched and explain why they cannot be opened.
 Recovery never automatically applies source changes. Layout/recipe metadata cannot become
 necessary for standalone firmware builds.
 
@@ -494,6 +534,7 @@ frontend, browser and package validation for the injected preview. A successful 
 load is not a configure/build or hardware test.
 
 The [D2 handoff](device-tree-editor-d2-handoff.md) records source-engine verification.
-After that exit gate, implement D3 only: connect revisioned source/visual drafts to the
-engine and exact D1 context, with selection, diff and unified undo/redo. Filesystem
-publication remains D4.
+The [D3 handoff](device-tree-editor-d3-handoff.md) records synchronized drafts and the
+[D4 handoff](device-tree-editor-d4-handoff.md) records guarded publication and recovery.
+The next stage is D5 only: explicit validation and the Projects handoff, preserving the
+separation between saving source and executing project tooling.

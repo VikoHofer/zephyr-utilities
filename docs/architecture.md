@@ -5,8 +5,8 @@ shared shell owns navigation and workspace selection. Features supply domain ser
 HTTP routes and scoped browser modules through an explicit registry.
 
 Memory Explorer, Project Creator's analyser/creation/build workflow, existing-build
-inspection in Build Inspector are working features. Visual Device Tree editing
-and TinyML experiments remain planned workflows inside the same application.
+inspection in Build Inspector and limited Device Tree overlay editing are working features.
+Hardware modules, pin configuration and TinyML experiments remain planned.
 
 ## Dependency direction
 
@@ -16,7 +16,7 @@ CLI
      ├─ core/ (HTTP, feature contracts, workspace, jobs)
      └─ explicit feature registry
          ├─ features/memory/
-         ├─ features/devicetree/  [visual editor planned]
+         ├─ features/devicetree/  [overlay editing, guarded Save and recovery]
          ├─ features/inspector/   [advanced read-only build/source inspection]
          ├─ features/projects/    [analysis, creation and single-image builds]
          └─ features/tinyml/      [planned]
@@ -45,7 +45,7 @@ src/zephyr_utilities/
     __init__.py             # Explicit built-in registrations
     memory/                 # Report discovery/generation/model/snapshots/comparison
       web/                  # Feature entry module, template and stylesheet
-    devicetree/              # Planned visual overlay, hardware and pin editor
+    devicetree/              # Overlay editing, guarded Save and draft recovery
     inspector/              # Build outputs, resolved trees, sources and bindings
     projects/               # Environment analysis, creation, builds, storage and UI
     tinyml/                 # Planned model/experiment-analysis scope
@@ -187,7 +187,7 @@ The canonical paths are `/#/home`, `/#/memory/overview`, `/#/projects/applicatio
 `/#/projects/create`, `/#/projects/environment`, and `/#/inspector/builds` or
 `/#/inspector/sources`. Earlier memory hashes retain their destinations. Old
 `projects/builds`, `devicetree/inspect` and `devicetree/application` deep links map to
-Inspector; bare `/#/devicetree` opens the planned visual editor's scope.
+Inspector; bare `/#/devicetree` opens the delivered overlay editor.
 All browser assets are bundled with the Python package and served by the same process.
 Shared Zephyr color tokens and action-feedback rules apply to every feature. See
 [UI guidelines](ui-guidelines.md) and [ADR 0014](decisions/0014-visible-action-feedback.md).
@@ -202,8 +202,8 @@ workspace paths. Keep these checks centralized when adding routes.
 Selecting a Zephyr build selects its local tooling environment. Report generation runs
 the selected footprint script against an existing ELF; it does not invoke a build or
 flasher. Project creation uses a separate reviewed plan and an explicit source-write
-action; configure/build likewise require a reviewed command plan. Future editor writes
-need their own destination/conflict handling.
+action; configure/build likewise require a reviewed command plan. Editor writes use a
+separate reviewed destination, conflict comparison and recoverable publication protocol.
 
 Environment analysis reads workspace/module, hardware model v2 and SDK metadata through
 feature-owned adapters. Local version/manifest/Git probes are bounded subprocesses;
@@ -236,10 +236,11 @@ application path; Build Inspector validates it without importing Projects intern
 creating a profile. See [ADR 0008](decisions/0008-application-source-browsing.md).
 Inspector now owns the read-only implementation previously under Device Tree and
 Projects. Legacy HTTP paths remain aliases, and persistence is unchanged. The built-in
-visual editor has no executable registration. See [ADR 0009](decisions/0009-project-navigation-and-inspector.md).
+editor does not replace those inspection routes. See [ADR 0009](decisions/0009-project-navigation-and-inspector.md).
 
-The built-in editor remains planned. D1 adds a read-only `PREVIEW_FEATURE` for explicit
-development/test injection, replacing that planned definition in the same application.
+D1 introduced a read-only `PREVIEW_FEATURE` for explicit development/test injection.
+D4 promotes only the delivered overlay workflow to the built-in feature; the preview
+definition remains compatible for existing development callers.
 Its `/api/devicetree/editor/` routes and `devicetree_editor` service key remain separate
 from Inspector's `devicetree` alias. Application composition supplies a Projects-owned
 `ProjectContextProvider` through the optional `context.project_context` field after
@@ -248,10 +249,9 @@ The provider captures Original/named configuration and registration revisions, e
 target, fragment intent and separate historical evidence without a build preview or
 tool execution. Unregistered directories remain partial source-only contexts.
 
-The preview retains at most 16 contexts for 30 minutes, rechecks source/context identity
+The editor retains at most 16 contexts for 30 minutes, rechecks source/context identity
 before follow-up reads, and selects an application overlay without changing it. It
-does not attach a build/image, create persistent editor data or import the D0 prototype
-into the runtime. File saving remains D4.
+does not attach a build/image or import the D0 prototype into the runtime.
 
 D2's feature-owned `source_syntax.py` indexes source occurrences and byte spans;
 `source.py` plans and applies immutable, reversible source changes in memory. Neither
@@ -269,8 +269,19 @@ workspace identity, configuration/source fingerprint and overlay identity separa
 drafts. Source and visual edits share monotonic revision/hash preconditions. Incomplete
 typing remains source data while stale visual controls are withheld. The browser retains
 pending text separately across feature navigation and reconciles uncertain requests.
-There are no draft files, Save endpoints, configure/build jobs or new processes. See the
+The D3 session-only boundary is recorded in the
 [D3 handoff](device-tree-editor-d3-handoff.md).
+
+D4 adds feature-owned `SavingService`, `DraftStore` and `OverlayPublisher`. Acknowledged
+drafts and histories use a version-1 envelope under `feature_data("devicetree")/drafts`.
+Bounded, expiring Save plans bind the exact draft, original file identity and ancestor
+chain. Linux publication locks the opened parent/destination, stages exact bytes,
+persists recovery evidence, exchanges atomically and verifies both the displaced original
+and current candidate. There is no automatic rollback or replay after interference.
+Save returns a refreshed context/baseline while retaining unified undo history.
+Recovery, reload and discard require comparison with current source. No configure/build
+jobs are introduced. See [ADR 0020](decisions/0020-guarded-overlay-save-and-recovery.md)
+and the [D4 handoff](device-tree-editor-d4-handoff.md) for limits and failure semantics.
 See the [foundation contract](device-tree-editor-contract.md) and
 [ADR 0019](decisions/0019-device-tree-editor-foundation.md) for the adopted staged design.
 

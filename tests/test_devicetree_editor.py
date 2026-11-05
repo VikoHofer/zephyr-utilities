@@ -70,17 +70,16 @@ class EditorContextApiTests(unittest.TestCase):
             result["document_id"] = document["id"]
         return result
 
-    def test_default_catalogue_keeps_editor_planned_and_does_not_expose_preview_routes(self):
+    def test_default_catalogue_exposes_the_limited_editor_and_its_assets(self):
         default = self.make_app()
         features = default.router.dispatch(Request("GET", "/api/features")).data["features"]
         editor = next(item for item in features if item["id"] == "devicetree")
-        self.assertEqual(editor["status"], "planned")
-        self.assertIsNone(editor["frontend"])
+        self.assertEqual(editor["status"], "available")
+        self.assertEqual(editor["entry_path"], "/#/devicetree/editor")
+        self.assertEqual(editor["frontend"]["module"], "/assets/devicetree/index.js")
         self.assertEqual(editor["navigation"], [])
-        with self.assertRaises(FileNotFoundError):
-            self.call("catalog", {"workspace": str(self.workspace)}, app=default)
-        with self.assertRaises(FileNotFoundError):
-            default.asset("/assets/devicetree/index.js")
+        self.assertEqual(self.call("catalog", {"workspace": str(self.workspace)}, app=default)["workspace"], str(self.workspace))
+        self.assertTrue(default.asset("/assets/devicetree/index.js"))
 
     def test_preview_and_inspector_work_in_both_registration_orders(self):
         for features in ((PREVIEW_FEATURE, INSPECTOR), (INSPECTOR, PREVIEW_FEATURE)):
@@ -473,7 +472,8 @@ class EditorContextHttpTests(unittest.TestCase):
         self.assertEqual(self.server.app.context.jobs.list(), [])
 
     def test_draft_routes_share_authentication_and_synchronize_without_writing(self):
-        for operation in ("open", "get", "source", "command", "undo", "redo"):
+        for operation in ("open", "get", "source", "command", "undo", "redo", "review", "save", "compare", "reload",
+                          "recovery/list", "recovery/read", "recovery/restore", "recovery/discard"):
             for authorized, expected in ((False, 403), (True, 400)):
                 with self.subTest(operation=operation, authorized=authorized), self.assertRaises(HTTPError) as error:
                     self.request(PREFIX + "drafts/" + operation, method="POST", body={}, authorized=authorized)
@@ -497,7 +497,7 @@ class EditorContextHttpTests(unittest.TestCase):
             "kind": "set_status", "node_id": draft["nodes"][0]["id"], "status": "disabled"}})
         self.assertIn('status = "disabled"', edited["text"])
         self.assertTrue(edited["dirty"])
-        self.assertFalse(edited["capabilities"]["save"])
+        self.assertTrue(edited["capabilities"]["save"])
         invalid = post("drafts/source", {**mutation(edited), "text": '&uart0 { status = "'})
         self.assertEqual(invalid["nodes"], [])
         self.assertEqual(invalid["text"], '&uart0 { status = "')
@@ -507,4 +507,50 @@ class EditorContextHttpTests(unittest.TestCase):
         self.assertEqual(original["text"], draft["text"])
         self.assertFalse(original["dirty"])
         self.assertEqual(source_bytes(self.source), before)
+        self.assertEqual(self.server.app.context.jobs.list(), [])
+
+    def test_reviewed_save_reopen_undo_and_recovery_use_the_shared_http_server(self):
+        def post(operation, body):
+            with self.request(PREFIX + operation, method="POST", body=body) as response:
+                return json.load(response)
+
+        workspace = str(self.root)
+        overlay = self.source / "app.overlay"
+        original = overlay.read_bytes()
+        cmake = (self.source / "CMakeLists.txt").read_bytes()
+        context = post("open", {"workspace": workspace, "application_path": str(self.source)})
+        binding = {"workspace": workspace, "context_id": context["id"], "expected_revision": context["revision"]}
+        draft = post("drafts/open", {**binding, "document_id": context["documents"][0]["id"]})
+
+        def guard(value):
+            return {**binding, "draft_id": value["id"], "expected_draft_revision": value["revision"],
+                    "expected_draft_sha256": value["sha256"]}
+
+        text = draft["text"].replace('"okay"', '"disabled"')
+        edited = post("drafts/source", {**guard(draft), "text": text})
+        self.assertEqual(overlay.read_bytes(), original)
+        review = post("drafts/review", guard(edited))
+        self.assertEqual(review["status"], "ready")
+        self.assertEqual(review["plan"]["candidate_text"], text)
+        self.assertEqual(review["plan"]["validation"]["state"], "unvalidated")
+        request = {**guard(edited), "plan_id": review["plan"]["id"]}
+        saved = post("drafts/save", request)
+        self.assertEqual(saved["status"], "saved")
+        self.assertFalse(saved["draft"]["dirty"])
+        self.assertEqual(overlay.read_bytes(), text.encode())
+        self.assertEqual(post("drafts/save", request), saved)
+        binding = {"workspace": workspace, "context_id": saved["context"]["id"],
+                   "expected_revision": saved["context"]["revision"]}
+        undone = post("drafts/undo", guard(saved["draft"]))
+        self.assertEqual(undone["text"].encode(), original)
+        self.assertTrue(undone["dirty"])
+        self.assertEqual(overlay.read_bytes(), text.encode(), "Undo only changes the draft")
+        records = post("drafts/recovery/list", {"workspace": workspace})
+        self.assertTrue(any(record["id"] == undone["id"] for record in records["records"]))
+        comparison = post("drafts/compare", guard(undone))
+        self.assertEqual(comparison["current_text"], text)
+        reset = post("drafts/reload", {**guard(undone), "comparison_id": comparison["comparison_id"], "mode": "discard"})
+        self.assertEqual(reset["draft"]["text"], text)
+        self.assertFalse(reset["draft"]["dirty"])
+        self.assertEqual((self.source / "CMakeLists.txt").read_bytes(), cmake)
         self.assertEqual(self.server.app.context.jobs.list(), [])

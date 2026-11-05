@@ -14,7 +14,7 @@ src/zephyr_utilities/
     __init__.py          # Explicit built-in feature registry
     memory/              # Existing analysis modules, service and HTTP routes
       web/               # index.js, view.html, style.css
-    devicetree/           # Planned visual overlay/hardware/pin editor
+    devicetree/           # Overlay editing, reviewed Save and recovery
     inspector/            # Advanced read-only builds, trees, sources and bindings
     projects/            # Environment analyser, creator, build attempts, API and web assets
     tinyml/              # Planned feature manifest and scope
@@ -53,7 +53,7 @@ servers, ports or environments. `zephyr-utils memory` opens the same app directl
   reads also carry a transient `catalog_id` and a node path or opaque file ID. No arbitrary
   source-path read route is exposed. See the [inspection contract](build-inspection.md).
   Original `/api/devicetree/*` and Projects build-inspection routes remain aliases to
-  Inspector's read-only services. Planned Device Tree Editor registers no implementation.
+  Inspector's read-only services. Device Tree Editor registers its separate `/editor/` routes.
 - `POST /api/memory/inspection` previews an inspected image without starting work.
   `POST /api/memory/jobs` optionally accepts `selection: {workspace, inspection_id, domain}`
   alongside `build_path` to preserve that image's verified ELF and context through capture.
@@ -109,8 +109,8 @@ are discarded on remount. Projects and
 attempts persist separately from the shared job manager's in-memory retention.
 
 The Home view is a working feature catalog. Planned features are clearly labeled and do
-not pretend to implement editors or model training. Device Tree Editor describes future
-visual overlays, hardware modules and pin assignment. Project Creator exposes environment
+not pretend to implement model training or planned hardware tools. Device Tree Editor supports
+existing-overlay edits, reviewed Save and recovery; modules and pins remain planned. Project Creator exposes environment
 analysis and a minimal workspace-app creation/configure/build workflow. Advanced project
 composition remains planned. Existing-build inspection hands a workspace-bound shared
 observation ID and domain to Inspector's read-only Device Tree reader and Memory's explicit
@@ -125,5 +125,5 @@ when the route changes, but not for same-route workspace notifications.
 Sidebar subnavigation comes from feature descriptors. The optional Advanced group opens
 when navigating to Inspector; primary project work does not require it. Legacy
 `projects/builds/...`, `devicetree/inspect/...` and `devicetree/application/...` hashes
-redirect to corresponding Inspector views. Bare `devicetree` remains the planned editor.
+redirect to corresponding Inspector views. Bare `devicetree` opens the delivered overlay editor.
 See [ADR 0009](decisions/0009-project-navigation-and-inspector.md).

@@ -4,9 +4,9 @@ Zephyr Utilities is one local application with a Python backend and an English,
 offline browser interface. `zephyr-utils` starts the entire application. Memory
 Explorer and Project Creator's environment analysis, minimal application creation,
 configuration and single-image builds are implemented. Build Inspector owns advanced
-read-only build, source and binding inspection. Device Tree Editor is reserved for future
-visual overlay, hardware-module and pin configuration, after the Project Creator workflow.
-Visual editing and TinyML experiment analysis remain planned.
+read-only build, source and binding inspection. Device Tree Editor supports existing-overlay
+status/property and source edits, reviewed Save and draft recovery. Hardware modules,
+pin configuration and TinyML experiment analysis remain planned.
 
 ## Start here
 
@@ -18,6 +18,7 @@ Visual editing and TinyML experiment analysis remain planned.
 3. Select the smallest complete change that satisfies the request. The roadmap and
    research master plan provide context; they do not authorize implementing every item.
 4. Keep user-facing text, code comments, and repository documentation in English.
+5. Do not use emojis in the interface, documentation, examples or previews.
 
 ## Repository map
 

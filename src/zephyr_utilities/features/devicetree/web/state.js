@@ -175,7 +175,21 @@ export function createEditorSession({api, state, workspace, onChange}) {
   }
 
   followWorkspace();
-  return {catalog, openProject, openApplication, selectDocument, revalidate,
+  function adopt(data, document) {
+    if (disposed || data?.workspace !== workspace() || state.workspace !== workspace()) return false;
+    verifyContext(data, state.workspace, null, state.selection);
+    if (!document || data.editing_document?.id !== document.id || data.editing_document?.path !== document.path
+        || data.editing_document?.sha256 !== document.sha256 || typeof document.text !== "string") {
+      throw new Error("The refreshed overlay does not match the saved context. Open the application again.");
+    }
+    generation++; request?.abort();
+    Object.assign(state, {data, document, contextRef: {id: data.id, revision: data.revision},
+      loading: false, documentLoading: false, error: "", documentError: ""});
+    publish();
+    return true;
+  }
+
+  return {catalog, openProject, openApplication, selectDocument, revalidate, adopt,
     async navigate(view = "editor") {
       if (disposed) return false;
       const changed = followWorkspace();

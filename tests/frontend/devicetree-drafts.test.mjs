@@ -63,7 +63,7 @@ function harness(api, state = {}) {
 }
 
 test("source mapping preserves mixed newlines and Unicode byte positions", () => {
-  const source = "/* 😀 温度 */\r\n&a {\n status = \"disabled\";\r\n};";
+  const source = "/* 𐐀 温度 */\r\n&a {\n status = \"disabled\";\r\n};";
   assert.equal(sourceFromEditor(source, editorText(source)), source);
   assert.equal(sourceFromEditor(source, editorText(source).replace("disabled", "okay")), source.replace("disabled", "okay"));
   const start = source.indexOf("&a");
@@ -71,8 +71,8 @@ test("source mapping preserves mixed newlines and Unicode byte positions", () =>
   assert.equal(utf8ToUtf16(source, byte), start);
   const [normalized] = sourceSelection(source, byte, byte + 2);
   assert.equal(sourceOffset(source, normalized), byte);
-  const emoji = source.indexOf("😀");
-  assert.equal(utf16ToUtf8(source, emoji + 1), utf16ToUtf8(source, emoji));
+  const astral = source.indexOf("𐐀");
+  assert.equal(utf16ToUtf8(source, astral + 1), utf16ToUtf8(source, astral));
   assert.equal(sourceFromEditor("a\r\nb\r\n", "a\nb\nc\n"), "a\r\nb\r\nc\r\n");
 });
 

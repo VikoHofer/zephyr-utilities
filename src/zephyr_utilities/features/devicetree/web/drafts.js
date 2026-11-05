@@ -132,7 +132,7 @@ export function createDraftSession({api, state, workspace, onChange, delay = 350
   function schedule() {
     cancelTimer();
     const current = entry();
-    if (!active() || !current || current.error || current.uncertain || current.conflict || !isPending(current) || !state.draftView.ready) return;
+    if (!active() || !current || current.externalOperation || current.error || current.uncertain || current.conflict || !isPending(current) || !state.draftView.ready) return;
     timer = setTimer(() => { timer = undefined; void flush(); }, delay);
   }
 
@@ -301,14 +301,14 @@ export function createDraftSession({api, state, workspace, onChange, delay = 350
     const current = entry();
     const captured = binding;
     if (!active(captured) || !current?.server || !state.draftView?.ready || current.flight
-        || isPending(current) || current.uncertain || current.server.syntax.blocked) return false;
+        || current.externalOperation || isPending(current) || current.uncertain || current.server.syntax.blocked) return false;
     return mutate("command", {command: value}, current, captured);
   }
 
   async function history(kind) {
     const captured = binding;
     const current = entry();
-    if (!active(captured) || !current || current.historyOperation) return false;
+    if (!active(captured) || !current || current.externalOperation || current.historyOperation) return false;
     const localGeneration = current.generation;
     current.historyOperation = true;
     publish();
@@ -323,7 +323,59 @@ export function createDraftSession({api, state, workspace, onChange, delay = 350
     } finally { current.historyOperation = false; if (active(captured)) publish(); }
   }
 
-  return {bind, detach, type, command, flush, reconcile,
+  function pause() {
+    cancelTimer();
+    const current = entry();
+    if (!current || current.externalOperation) return null;
+    const token = {};
+    current.externalOperation = token;
+    publish();
+    return () => {
+      if (current.externalOperation !== token) return;
+      current.externalOperation = null;
+      if (entry() === current && active()) { publish(); schedule(); }
+    };
+  }
+
+  function adopt(envelope, captured, {preserveLocal = false} = {}) {
+    const {context, document, draft} = envelope || {};
+    const old = captured?.entry;
+    const key = draftKey(context, document);
+    if (!old || !key || !active() || entry() !== old || captured.key !== binding?.key
+        || context.workspace !== workspace() || context.application?.path !== captured.context.application?.path
+        || context.project?.id !== captured.context.project?.id || context.configuration?.id !== captured.context.configuration?.id
+        || context.target?.requested !== captured.context.target?.requested
+        || document.id !== captured.document.id || document.path !== captured.document.path
+        || context.editing_document?.id !== document.id || context.editing_document?.sha256 !== document.sha256) {
+      throw new Error("The saved result belongs to another context. Reopen the application to reconcile; retained text is still available.");
+    }
+    const nextBinding = {key, workspace: context.workspace, context_id: context.id,
+      expected_revision: context.revision, fingerprint: context.fingerprint, document_id: document.id,
+      path: document.path, base_sha256: document.sha256};
+    verify(draft, nextBinding, old);
+    const other = state.draftCache[key];
+    if (other && other !== old && (isPending(other) || other.server?.dirty || other.server?.can_undo)) {
+      throw new Error("Another retained draft already uses the refreshed context. Both texts remain available; reopen the overlay to reconcile.");
+    }
+    const changedDuringRequest = old.generation !== captured.localGeneration;
+    receive(old, draft, preserveLocal || changedDuringRequest);
+    old.localEdited = isPending(old);
+    old.conflict = changedDuringRequest && isPending(old);
+    old.attempt = null;
+    if (old.conflict) conflict(old);
+    if (key !== captured.key) {
+      delete state.draftCache[captured.key];
+      state.draftCache[key] = old;
+    }
+    binding = nextBinding;
+    bindingTag = `${key}:${context.id}:${context.revision}`;
+    generation++;
+    opening = null;
+    state.draftView = {entry: old, ready: true, loading: false, error: ""};
+    return true;
+  }
+
+  return {bind, detach, type, command, flush, reconcile, pause, adopt,
     async resolveConflict(choice) {
       const current = entry();
       if (!active() || !current?.conflict || current.flight || !["local", "server"].includes(choice)) return false;

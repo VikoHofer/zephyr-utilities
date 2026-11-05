@@ -7,7 +7,8 @@ workspace selection and background jobs. Memory Explorer and Project Creator's e
 analysis, minimal C/C++ creation, curated local sample cloning and explicit configure/build workflow are available.
 Advanced Build Inspector reads existing outputs, resolved Device Trees, current sources
 and bindings, and carries the selected image into Memory Explorer for report generation.
-Device Tree Editor is planned as a visual overlay, hardware-module and pin editor.
+Device Tree Editor supports visual status/simple-property edits, editable overlay source,
+reviewed single-file Save and draft recovery. Hardware modules and pin configuration remain planned.
 TinyML model/experiment analysis also remains planned.
 
 ## Start
@@ -82,7 +83,7 @@ src/zephyr_utilities/
   core/                  # Shared HTTP, feature contracts, workspace and jobs
   features/
     memory/              # Working Memory Explorer and its web/ assets
-    devicetree/           # Planned visual overlay, hardware and pin editor
+    devicetree/           # Overlay editing, guarded Save and draft recovery
     inspector/            # Advanced build, resolved tree and source inspection
     projects/            # Environment analysis, reviewed creation and explicit builds
     tinyml/              # Planned model and experiment analysis
@@ -152,8 +153,8 @@ creation and explicit configure/build jobs. See the
 
 Project Creator opens **Applications**. Its sidebar links separate application management,
 **Create application**, **Custom boards**, and **Environment**. Detailed build/source inspection lives in
-the optional **Advanced → Build Inspector** area. **Device Tree Editor** is planned as
-a visual tool for overlays, hardware modules and pin assignment, after the creator workflow.
+the optional **Advanced → Build Inspector** area. **Device Tree Editor** edits existing
+application overlays; hardware modules and pin assignment are later stages.
 
 Use **Create application** or `/#/projects/create` after analysis. Choose the name, new
 destination, C/C++ template or supported local sample, exact target and installed GNU SDK; inspect **Preview application**, then
@@ -177,14 +178,15 @@ Original after an environment rescan. Earlier attempts retain their captured cho
 An optional reviewed change creates the matching default overlay for an additional board. Fragment
 selection supports automatic discovery, ordered appended files, or replacement
 application-file lists for Kconfig and Device Tree overlays. Select existing files in
-the application; saving keeps their contents unchanged. Visual overlay editing remains planned.
+the application; saving the fragment selection keeps their contents unchanged. Use Device Tree Editor
+to edit and separately review changes to an overlay's source.
 
 The creator supports Linux, minimal C/C++ and curated sample applications with one image, an existing resolved
 west workspace and installed GNU Zephyr SDKs. It rejects existing destinations, symlinked
 application paths and source paths containing whitespace. No flashing, SDK installation,
 or workspace update is included. Existing applications can be imported without changing
-source files; moved applications can be reconnected while preserving their saved history. Device Tree editing remains
-planned. Generated source files and their README commands work independently of the
+source files; moved applications can be reconnected while preserving their saved history.
+Generated source files and their README commands work independently of the
 utilities' metadata.
 
 Use **Custom boards** to register an existing board root, reconnect a moved folder, or
@@ -275,19 +277,31 @@ The analysis modules are independent of HTTP. See the [platform contract](docs/p
 [Project Creator contract](docs/project-creator.md),
 [memory API contract](docs/implementation-contract.md) and
 [Memory Explorer master plan](docs/memory-explorer-masterplan.md) for details.
-The planned [Device Tree Editor master plan](docs/device-tree-editor-masterplan.md)
+The [Device Tree Editor master plan](docs/device-tree-editor-masterplan.md)
 divides live overlay editing, hardware-module placement and pin configuration into
 16 implementation stages with individual prompts and acceptance gates.
 Its [D0 foundation](docs/device-tree-editor-d0-handoff.md) defines the contracts and
-tests a bounded source-edit prototype; the runtime visual editor remains planned.
+tests a bounded source-edit prototype.
 The [D1 read-only preview](docs/device-tree-editor-d1-handoff.md) adds project/configuration
 context loading and overlay inspection through explicit development/test injection.
-The default application still labels the visual editor planned.
 The [D2 source engine](docs/device-tree-editor-d2-handoff.md) adds pure in-memory,
 reversible operations for literal properties, status and source node declarations.
 It preserves surrounding overlay bytes. The [D3 draft preview](docs/device-tree-editor-d3-handoff.md)
 connects visual status/property controls and editable source with diff and undo/redo.
-Drafts stay in the running application; writing overlay files remains D4.
+The [D4 workflow](docs/device-tree-editor-d4-handoff.md) makes this limited editor available
+in the normal application. Open a project/configuration or application directory, choose
+an existing overlay, edit it, then use **Review and Save**. The review shows the destination,
+source diff and unresolved validation before writing. Saving does not configure, build,
+activate the overlay or change a recipe. Undo after Save produces another unsaved draft.
+
+Acknowledged drafts are retained under `.features/devicetree/drafts/` in the data directory.
+**Find recoverable drafts** compares retained text with current files before an explicit restore;
+it never replays firmware writes. Keep or export pending text if recovery storage fails.
+Linux Save uses guarded atomic exchange, retaining original/candidate evidence under
+`.features/devicetree/publications/` and a hidden original beside the overlay. Conflicts or
+interrupted publication require comparison; files may already contain the candidate after
+an uncertain exchange. Known incomplete syntax stays recoverable but cannot be saved.
+Missing files, links, changed directories and unsupported permissions fail closed.
 
 Existing snapshot layouts, IDs, exports and legacy memory endpoints are preserved.
 `--data-dir` remains the memory-history directory; environment observations use

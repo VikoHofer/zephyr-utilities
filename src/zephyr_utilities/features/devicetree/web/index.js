@@ -1,6 +1,7 @@
 import {createEditorSession} from "./state.js";
 import {createDraftSession, editorText, nodeSelection, propertySelection, restoreNodeSelection,
   restorePropertySelection, sourceOffset, sourceSelection} from "./drafts.js";
+import {createSaveSession} from "./saving.js";
 
 const array = (value) => Array.isArray(value) ? value : [];
 const text = (value, fallback = "Unknown") => value == null || value === "" ? fallback : String(value);
@@ -19,6 +20,10 @@ export function mount(host, context) {
   let renderedDraftControls;
   let session;
   let drafts;
+  let saving;
+  let shownReview;
+  let reviewTrigger;
+  const downloadUrls = new Set();
 
   function node(tag, className, value) {
     const element = document.createElement(tag);
@@ -149,7 +154,7 @@ export function mount(host, context) {
     $("overlay-status").textContent = data.application?.availability?.state !== "available"
       ? data.application?.availability?.reason || "Application sources are unavailable. Restore the selected source directory and reopen it."
       : !array(data.documents).length ? "No application overlays were found. Source creation is planned for a later stage."
-      : selected ? "Draft changes stay in this session. Selecting an overlay does not activate it in the build recipe."
+      : selected ? "Save changes only this overlay. Selecting or saving it does not activate it in the build recipe."
         : "Choose the overlay to inspect. A file being present does not prove that the selected build uses it.";
     const documentFacts = $("document-facts"); documentFacts.replaceChildren();
     if (selected) {
@@ -206,14 +211,15 @@ export function mount(host, context) {
     const entry = view?.entry;
     const server = entry?.server;
     const pending = drafts?.pending();
-    const busy = Boolean(view?.loading || entry?.flight || entry?.historyOperation);
-    const error = view?.error || entry?.error || "";
+    const busy = Boolean(view?.loading || entry?.flight || entry?.historyOperation || entry?.externalOperation);
+    const error = state.saveView?.review ? view?.error || entry?.error || "" : state.saveView?.error || view?.error || entry?.error || "";
     const available = Boolean(view?.ready && server && !pending && !busy && !entry.uncertain && !entry.conflict && !server.syntax.blocked);
     $("draft-status").textContent = view?.loading ? "Opening and revalidating the draft…"
       : entry?.uncertain ? "The last request needs reconciliation. Your local text is retained."
-        : busy ? "Updating the session draft…" : pending ? "Local typing is waiting to sync. Visual controls are paused."
-          : server ? `Session draft revision ${server.revision}. No file has been written.${server.history_truncated ? " Earlier undo history reached its limit." : ""}`
-            : "Choose an available overlay to begin. Drafts are retained until this application session ends.";
+        : entry?.externalOperation ? "Reviewing the current draft. Source editing resumes when the review closes."
+          : busy ? "Updating the draft…" : pending ? "Local typing is waiting to sync. Visual controls are paused."
+            : server ? `Draft revision ${server.revision}.${server.dirty ? " Changes have not been saved to the overlay." : " Draft matches its observed file."}${server.history_truncated ? " Earlier undo history reached its limit." : ""}`
+              : "Choose an available overlay to begin.";
     $("dirty").textContent = pending || server?.dirty ? "Unsaved changes" : "Unchanged";
     $("draft-error").hidden = !error; $("draft-error").textContent = error;
     $("conflict").hidden = !entry?.conflict;
@@ -224,8 +230,17 @@ export function mount(host, context) {
     $("sync").disabled = !view?.ready || busy || !pending || entry?.conflict;
     $("undo").disabled = !view?.ready || busy || entry?.conflict || (!pending && !server?.can_undo);
     $("redo").disabled = !view?.ready || busy || entry?.conflict || (!pending && !server?.can_redo);
+    $("save").disabled = !view?.ready || busy || entry?.conflict;
+    $("save").textContent = state.saveView?.busy && !state.saveView?.review ? "Preparing review…" : "Review and Save";
+    $("compare").disabled = !server || busy;
+    $("reload").disabled = !server || busy;
+    $("export").disabled = !entry;
+    $("save-status").hidden = !state.saveView?.message;
+    $("save-status").textContent = state.saveView?.message || "";
+    $("recovery-status").textContent = server?.recovery?.message || (server
+      ? "Acknowledged changes are retained for recovery. Unsent typing is kept only in this open page." : "");
     $("source").disabled = !view?.ready;
-    $("source").readOnly = Boolean(entry?.historyOperation || (entry?.flight && entry.flightKind && entry.flightKind !== "source"));
+    $("source").readOnly = Boolean(entry?.externalOperation || entry?.historyOperation || (entry?.flight && entry.flightKind && entry.flightKind !== "source"));
     const value = entry ? editorText(entry.text) : state.document ? editorText(state.document.text) : "";
     if ($("source").value !== value) {
       const start = $("source").selectionStart; const end = $("source").selectionEnd;
@@ -291,8 +306,111 @@ export function mount(host, context) {
     if (entries.some(([key]) => key === selected)) select.value = selected;
     if (!$("retained-source").hidden) $("retained-source").value = editorText(state.draftCache[select.value]?.text || "");
   }
+  function exportSource(source, path) {
+    if (typeof source !== "string") return;
+    const url = URL.createObjectURL(new Blob([source], {type: "text/plain;charset=utf-8"}));
+    downloadUrls.add(url);
+    const link = document.createElement("a");
+    link.href = url; link.download = `${String(path || "draft.overlay").split("/").at(-1)}.draft.txt`;
+    link.hidden = true; root.append(link); link.click(); link.remove();
+    state.saveView.message = "Draft export requested. The overlay on disk was not changed.";
+    context.notify?.(state.saveView.message);
+    renderSaving();
+  }
+  function closeReview({restoreFocus = true} = {}) {
+    const dialog = $("review");
+    const open = dialog.open;
+    if (!open && !shownReview) return;
+    if (open) dialog.close();
+    shownReview = null;
+    const trigger = reviewTrigger; reviewTrigger = null;
+    if (open && restoreFocus && !disposed && trigger?.isConnected && !trigger.disabled && !trigger.closest("[hidden]")) trigger.focus({preventScroll: true});
+  }
+  function renderSaving() {
+    const view = state.saveView;
+    if (!view) return;
+    $("save-status").hidden = !view.message; $("save-status").textContent = view.message;
+    const recoveries = view.recoveries?.workspace === context.workspace.path ? view.recoveries : null;
+    $("refresh-recovery").disabled = view.recoveryLoading;
+    $("refresh-recovery").textContent = view.recoveryLoading ? "Finding drafts…" : "Find recoverable drafts";
+    $("recoveries-error").hidden = !view.recoveryError; $("recoveries-error").textContent = view.recoveryError;
+    $("recoveries-status").textContent = view.recoveryLoading ? "Reading recovery records…" : recoveries
+      ? `${recoveries.records.length} recoverable draft${recoveries.records.length === 1 ? "" : "s"}; ${array(recoveries.publications).length} publication records.${recoveries.diagnostics.length ? " " + recoveries.diagnostics.map((item) => item.message || String(item)).join(" ") : ""}`
+      : "Select Find recoverable drafts to check saved recovery data.";
+    $("recoveries-controls").hidden = !recoveries?.records.length;
+    const select = $("recoveries"); const selected = select.value;
+    select.replaceChildren();
+    for (const record of recoveries?.records || []) option(select, record.id, `${record.path} · revision ${record.revision}${record.status ? " · " + record.status : ""}`);
+    if (recoveries?.records.some((record) => record.id === selected)) select.value = selected;
+    $("review-recovery").disabled = view.busy || !select.value;
+    $("publications-panel").hidden = !array(recoveries?.publications).length;
+    const publications = $("publications"); publications.replaceChildren();
+    for (const receipt of array(recoveries?.publications)) {
+      const group = node("div", "dte-evidence");
+      group.append(node("p", "dte-path", receipt.path || "Unknown destination"), node("p", "dte-muted", `${receipt.status}: ${receipt.message || "Compare with the current file before continuing."}`));
+      if (receipt.recovery?.journal) group.append(node("p", "dte-path", `Recovery record: ${receipt.recovery.journal}`));
+      if (receipt.recovery?.staged_path) group.append(node("p", "dte-path", `Retained source: ${receipt.recovery.staged_path}`));
+      publications.append(group);
+    }
+    const review = view.review;
+    if (!review) { closeReview(); return; }
+    const data = review.data;
+    const recovery = ["recovery", "discard-recovery"].includes(review.kind);
+    const deleting = review.kind === "discard-recovery";
+    const comparison = recovery ? data.comparison : data;
+    const candidate = recovery ? data.record.text : review.kind === "save" ? data.candidate_text : data.text;
+    $("review-title").textContent = review.kind === "save" ? "Review and Save overlay" : deleting ? "Delete recoverable draft" : recovery ? "Review recoverable draft"
+      : review.kind === "outcome" ? "Save outcome needs reconciliation"
+      : review.kind === "reload" ? "Discard draft and reload file" : review.blocked ? "Save needs attention" : "Compare draft with disk";
+    $("review-summary").textContent = review.kind === "save" ? "Save the exact candidate below to this existing overlay."
+      : deleting ? "Permanently delete this recovery record. Export its source first if you need a copy. This does not change the overlay file or an open session draft."
+        : recovery ? "Restore this retained source as an unsaved draft for the matching open overlay. Discard any existing edited session draft first. Restoration does not write the file."
+        : review.kind === "reload" ? "Discard this draft and its edit history, including unsent typing, and load the reviewed file. The file on disk is not changed."
+          : review.message || comparison.message || "Compare the draft against the current file. Continuing retains this draft as unsaved source based on the reviewed file.";
+    $("review-path").textContent = data.path || data.record?.path || comparison.path || "";
+    const notices = $("review-notices"); notices.replaceChildren();
+    if (review.kind === "save") {
+      notice(notices, data.validation?.message || "Build and hardware validation have not run.");
+      notice(notices, `Overlay usage: ${data.usage?.state || "unknown"}. ${data.usage?.message || "Saving does not change overlay selection."}`);
+      notice(notices, data.effects?.message || "Other configurations may share this overlay.");
+      notice(notices, `This review expires ${new Date(data.expires_at * 1000).toLocaleTimeString()}.`);
+    } else if (review.kind === "outcome") {
+      notice(notices, "This plan will not be repeated. Close this review to compare the current file or inspect recoverable drafts. Keep all recovery files until the result is reconciled.");
+      if (review.receipt?.status) notice(notices, `Publication outcome: ${review.receipt.status}.`);
+      if (review.receipt?.recovery?.journal) notice(notices, `Recovery record: ${review.receipt.recovery.journal}`);
+      if (review.receipt?.recovery?.staged_path) notice(notices, `Retained source: ${review.receipt.recovery.staged_path}`);
+    } else if (recovery && (!state.data || data.record.path !== state.document?.path)) {
+      notice(notices, "Open this overlay in its original application/configuration, then review recovery again to restore it. Export remains available.");
+    } else if (comparison.message) notice(notices, comparison.message);
+    if (!recovery && review.captured.entry.text !== review.captured.entry.server.text) {
+      notice(notices, "This comparison describes acknowledged source. Newer local typing is retained and can be exported before discarding it.");
+    }
+    const diff = review.kind === "save" ? data.diff : comparison.diff;
+    $("review-diff").textContent = diff?.text || "No source differences in this comparison.";
+    $("review-diff-status").textContent = diff?.truncated ? "The diff is shortened. Review complete candidate and current source below." : "Compared with the observed file.";
+    $("review-source").textContent = candidate || "";
+    $("review-disk-panel").hidden = review.kind === "save" || comparison.current_text == null;
+    $("review-disk").textContent = comparison.current_text || "";
+    $("review-error").hidden = !view.error; $("review-error").textContent = view.error;
+    $("review-confirm").textContent = view.busy ? "Working…" : review.kind === "save" ? review.uncertain ? "Check save result" : "Save overlay"
+      : deleting ? "Delete recovery record" : recovery ? "Restore as unsaved draft" : review.kind === "reload" ? "Discard and reload" : "Continue draft against current file";
+    $("review-confirm").hidden = review.kind === "outcome";
+    $("review-confirm").disabled = view.busy || (review.kind === "save" || deleting ? false
+      : !comparison.can_reload || !comparison.comparison_id || (recovery && (!review.captured || data.record.path !== state.document?.path))
+        || (review.blocked && comparison.status !== "conflict"));
+    $("review-close").disabled = $("review-cancel").disabled = view.busy;
+    $("review-delete").hidden = review.kind !== "recovery";
+    $("review-delete").disabled = view.busy;
+    $("review-export").disabled = typeof candidate !== "string";
+    if (shownReview !== review) {
+      shownReview = review;
+      for (const details of $("review").querySelectorAll("details")) details.open = false;
+      if (!$("review").open) $("review").showModal();
+    }
+  }
   function render() {
     if (disposed) return;
+    saving?.sync();
     if (renderedWorkspace !== state.workspace) {
       renderedWorkspace = state.workspace; renderedCatalog = undefined; renderedData = undefined;
       if (state.selection?.kind === "project") {
@@ -312,6 +430,7 @@ export function mount(host, context) {
     $("select-overlay").disabled = state.loading || state.documentLoading || !$("overlay").value;
     $("select-overlay").textContent = state.documentLoading ? "Reading…" : "Open overlay draft";
     renderDraft();
+    renderSaving();
   }
   async function action(operation, destination) {
     const captured = ++actionGeneration;
@@ -414,11 +533,51 @@ export function mount(host, context) {
     context.reveal?.($("retained-source"));
   });
   listen($("retained"), "change", () => { $("retained-source").hidden = true; });
+  async function savingAction(operation, trigger, {recovery = false} = {}) {
+    const captured = ++actionGeneration; const workspace = context.workspace.path;
+    reviewTrigger = trigger;
+    const accepted = await operation();
+    if (disposed || captured !== actionGeneration || workspace !== context.workspace.path) return;
+    if (state.saveView.review) return;
+    if (state.saveView.error) context.reveal?.($("draft-error"));
+    else if (recovery) context.reveal?.($(state.saveView.recoveryError ? "recoveries-error" : "recoveries-status"));
+    else if (accepted && state.saveView.message) context.reveal?.($("save-status"));
+  }
+  listen($("save"), "click", () => { void savingAction(() => saving.reviewSave(), $("save")); });
+  listen($("compare"), "click", () => { void savingAction(() => saving.compare(), $("compare")); });
+  listen($("reload"), "click", () => { void savingAction(() => saving.reviewReload(), $("reload")); });
+  listen($("export"), "click", () => { const entry = draftEntry(); exportSource(entry?.text, entry?.path); });
+  listen($("export-retained"), "click", () => {
+    const entry = state.draftCache[$("retained").value]; exportSource(entry?.text, entry?.path);
+  });
+  listen($("refresh-recovery"), "click", () => {
+    void savingAction(() => saving.listRecoveries(), $("refresh-recovery"), {recovery: true});
+  });
+  listen($("review-recovery"), "click", () => {
+    void savingAction(() => saving.reviewRecovery($("recoveries").value), $("review-recovery"), {recovery: true});
+  });
+  listen($("review-confirm"), "click", () => {
+    void savingAction(() => saving.confirm(), reviewTrigger);
+  });
+  for (const name of ["review-close", "review-cancel"]) listen($(name), "click", () => saving.cancel());
+  listen($("review"), "cancel", (event) => { event.preventDefault(); if (!state.saveView.busy) saving.cancel(); });
+  listen($("review-export"), "click", () => {
+    const review = state.saveView.review; if (!review) return;
+    exportSource(review.kind === "save" ? review.data.candidate_text : ["recovery", "discard-recovery"].includes(review.kind) ? review.data.record.text
+      : review.captured.entry.text, review.data.path || review.data.record?.path);
+  });
+  listen($("review-delete"), "click", () => { saving.reviewRecoveryDiscard(); });
   drafts = createDraftSession({api: context.api, state, workspace: () => context.workspace.path, onChange: render});
   session = createEditorSession({api: context.api, state, workspace: () => context.workspace.path, onChange: render});
+  saving = createSaveSession({api: context.api, state, workspace: () => context.workspace.path, drafts,
+    adopt: (data, document) => session.adopt(data, document), onChange: render});
   render();
   return {
-    navigate(view) { actionGeneration++; return session.navigate(view); },
-    dispose() { disposed = true; actionGeneration++; lifetime.abort(); session.dispose(); drafts.dispose(); },
+    navigate(view) { actionGeneration++; saving.cancel(); return session.navigate(view); },
+    dispose() {
+      disposed = true; actionGeneration++; lifetime.abort(); saving.dispose(); closeReview({restoreFocus: false});
+      session.dispose(); drafts.dispose();
+      for (const url of downloadUrls) URL.revokeObjectURL(url);
+    },
   };
 }

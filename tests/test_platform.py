@@ -65,7 +65,7 @@ class PlatformTests(unittest.TestCase):
         self.assertEqual(catalog[-1]["frontend"]["module"], "/assets/demo/index.js")
         self.assertEqual(app.asset("/assets/demo/index.js").data, b"export function mount() {}")
         planned = [item for item in catalog if item["status"] == "planned"]
-        self.assertEqual({item["id"] for item in planned}, {"devicetree", "tinyml"})
+        self.assertEqual({item["id"] for item in planned}, {"tinyml"})
         self.assertTrue(all(item["frontend"] is None for item in planned))
 
     def test_workspace_changes_future_operations_but_keeps_submitted_inputs(self):

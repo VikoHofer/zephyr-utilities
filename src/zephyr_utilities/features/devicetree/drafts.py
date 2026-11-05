@@ -1,6 +1,8 @@
-"""Context-bound canonical overlay drafts retained only in the application session."""
+"""Context-bound canonical overlay drafts and optional durable recovery records."""
 
+from copy import deepcopy
 from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 import hashlib
 import re
 from threading import RLock
@@ -8,6 +10,7 @@ import uuid
 
 from .source import PropertyValue, SourceDocument
 from .source_syntax import MAX_BYTES, SourceError
+from .recovery import DraftStore
 
 
 MAX_DRAFTS = 16
@@ -105,6 +108,8 @@ class Draft:
     undo: tuple[bytes, ...] = ()
     redo: tuple[bytes, ...] = ()
     history_truncated: bool = False
+    context: dict | None = None
+    observation: dict | None = None
 
     @property
     def retained_bytes(self):
@@ -112,10 +117,10 @@ class Draft:
 
 
 class DraftService:
-    """One revision/history for visual and raw-source changes, with no disk writes."""
+    """One revision/history for visual and raw-source changes; no firmware writes."""
 
     def __init__(self, editor_service, *, max_drafts=MAX_DRAFTS, max_bytes=MAX_RETAINED_BYTES,
-                 history_limit=HISTORY_LIMIT):
+                 history_limit=HISTORY_LIMIT, storage=None, publisher=None):
         if (type(max_drafts) is not int or not 1 <= max_drafts <= MAX_DRAFTS
                 or type(max_bytes) is not int or not 1 <= max_bytes <= MAX_RETAINED_BYTES
                 or type(history_limit) is not int or not 1 <= history_limit <= HISTORY_LIMIT):
@@ -124,6 +129,34 @@ class DraftService:
         self.max_drafts, self.max_bytes, self.history_limit = max_drafts, max_bytes, history_limit
         self.drafts = {}
         self.lock = RLock()
+        self.store = DraftStore(storage) if storage is not None else None
+        self.publisher = publisher
+        self.recovery_failures = {}
+
+    def _capture(self, context):
+        captured = deepcopy(context)
+        captured["source_guard"] = deepcopy(self.editor.contexts[context["id"]].source_guard)
+        return captured
+
+    def _record(self, draft):
+        return {"schema_version": 1, "id": draft.id, "workspace": draft.workspace,
+                "context": deepcopy(draft.context), "observation": deepcopy(draft.observation),
+                "path": draft.path, "document_id": draft.document_id,
+                "base_text": draft.base.decode("utf-8"), "text": draft.source.decode("utf-8"),
+                "base_sha256": _sha(draft.base), "sha256": _sha(draft.source),
+                "revision": draft.revision, "undo": [source.decode("utf-8") for source in draft.undo],
+                "redo": [source.decode("utf-8") for source in draft.redo],
+                "history_truncated": draft.history_truncated,
+                "updated_at": datetime.now(timezone.utc).isoformat()}
+
+    def _persist(self, draft):
+        if self.store is not None:
+            try:
+                self.store.write(self._record(draft))
+            except (OSError, ValueError) as exc:
+                self.recovery_failures[draft.id] = f"Recovery metadata needs verification: {exc}. Keep or export the current source."
+                raise
+            self.recovery_failures.pop(draft.id, None)
 
     @staticmethod
     def _body(body, extra):
@@ -179,6 +212,13 @@ class DraftService:
         return (len(document.syntax.nodes) > MAX_VISUAL_NODES
                 or sum(len(node.properties) for node in document.syntax.nodes) > MAX_VISUAL_PROPERTIES)
 
+    def _recovery_status(self, draft):
+        if draft.id in self.recovery_failures:
+            return {"state": "failed", "message": self.recovery_failures[draft.id]}
+        if self.store is not None:
+            return {"state": "durable", "message": "Acknowledged draft changes are retained for recovery. Unsent typing is not durable."}
+        return {"state": "session", "message": "Drafts are retained only in this application session."}
+
     def _payload(self, draft):
         document = draft.document
         nodes = []
@@ -219,7 +259,9 @@ class DraftService:
                 "can_undo": bool(draft.undo), "can_redo": bool(draft.redo),
                 "history_limit": self.history_limit, "history_truncated": draft.history_truncated,
                 "syntax": syntax, "nodes": nodes, "diff": _diff(draft.base, draft.source),
-                "capabilities": {"edit": True, "save": False}}
+                "capabilities": {"edit": True, "save": self.publisher is not None and document is not None
+                                 and document.syntax.state != "incomplete"},
+                "recovery": self._recovery_status(draft)}
 
     def open(self, body):
         binding = self._body(body, {"document_id"})
@@ -234,10 +276,14 @@ class DraftService:
                 return payload
             observed = self.editor.document({**binding, "document_id": selected["id"]})["document"]
             source = _text_bytes(observed["text"])
+            observation = self.publisher.observe(context["workspace"], selected["path"]) if self.publisher is not None else None
+            if observation is not None and (observation["sha256"] != observed["sha256"] or observation["text"] != observed["text"]):
+                raise ValueError("The overlay changed while opening its draft. Open it again.")
             draft_id = uuid.uuid4().hex
             document, error = _parse(source, draft_id, 0)
             draft = Draft(draft_id, key, context["fingerprint"], context["workspace"], tuple(context["workspace_identity"]),
-                          selected["id"], selected["path"], source, source, 0, document, error)
+                          selected["id"], selected["path"], source, source, 0, document, error,
+                          context=self._capture(context), observation=observation)
             removing = []
             if len(self.drafts) >= self.max_drafts:
                 clean = next((item.id for item in self.drafts.values()
@@ -287,7 +333,10 @@ class DraftService:
         self._within_budget(candidate, replacing=draft.id)
         payload = self._payload(candidate)
         self._scope(body, self._context(binding))
+        self._persist(candidate)
+        self._scope(body, self._context(binding))
         self.drafts[draft.id] = candidate
+        payload["recovery"] = self._recovery_status(candidate)
         return payload
 
     def source(self, body):
@@ -364,3 +413,4 @@ class DraftService:
     def close(self):
         with self.lock:
             self.drafts.clear()
+            self.recovery_failures.clear()

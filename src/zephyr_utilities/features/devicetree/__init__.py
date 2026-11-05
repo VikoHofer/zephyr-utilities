@@ -1,1 +1,1 @@
-"""Planned visual Device Tree editing; read-only inspection lives in inspector."""
+"""Source-preserving overlay editing; advanced read-only inspection lives in inspector."""

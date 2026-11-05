@@ -1,4 +1,4 @@
-"""Explicit development/test injection; the built-in editor stays planned until D4."""
+"""Compatible explicit development/test injection for the delivered limited editor."""
 
 from pathlib import Path
 
@@ -9,7 +9,7 @@ from .api import register
 PREVIEW_FEATURE = FeatureDefinition(
     id="devicetree",
     title="Device Tree Editor preview",
-    description="Synchronized visual and source drafts with undo. File saving is planned.",
+    description="Overlay drafts, reviewed single-file Save and recovery. Modules and pins are planned.",
     entry_path="/#/devicetree/editor",
     frontend=FrontendDefinition(Path(__file__).parent / "web"),
     register=register,

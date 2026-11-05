@@ -30,13 +30,12 @@ research master plan, not a general coding-assistant integration.
 | Feature | State | Initial implementation direction |
 | --- | --- | --- |
 | Memory Explorer (`memory`) | Available | Existing-build reports, visualization, snapshots and comparisons |
-| Device Tree Editor (`devicetree`) | Planned visual editor; next product priority | Follow the staged editor master plan for live overlay editing, hardware modules and pin assignment |
+| Device Tree Editor (`devicetree`) | Existing-overlay editing, reviewed Save and draft recovery available | D5 validation/handoff next; hardware modules and pins remain later stages |
 | Project Creator (`projects`) | Applications, creation/build and environment discovery available | Maintain the delivered everyday workflow and add focused public editor handoffs |
 | Build Inspector (`inspector`) | Advanced build, resolved-tree, current source and binding navigation available | Preserve available inspection; further depth deferred |
 | TinyML Experiments (`tinyml`) | Planned | Connect model/build/run identities and compare imported experiment measurements |
 
-Planned catalog entries are development boundaries. They do not yet edit Device Trees,
-run inference or perform training.
+Planned catalog entries are development boundaries. TinyML does not yet run inference or training.
 
 ## Memory Explorer
 
@@ -48,7 +47,7 @@ its evidence, proposed experiment, trade-offs and observed result.
 The detailed [memory master plan](memory-explorer-masterplan.md) remains the research and
 measurement reference. The architecture guide describes the current implementation layout.
 
-## Build Inspector and the future Device Tree Editor
+## Build Inspector and Device Tree Editor
 
 Advanced → Build Inspector opens an inspected image's resolved DTS, supports node/property
 navigation and shares Projects' target/domain context. It checks output identity;
@@ -58,8 +57,9 @@ the selected image. Generated header records are distinguished from current cand
 include links and direct property summaries do not perform schema resolution or validation.
 Applications can also be opened before configuration to browse current sources and local
 bindings. Conventional include locations are candidates, not configured search paths.
-The user-facing Device Tree Editor remains planned. Its goal is visual overlay creation,
-hardware-module placement and pin/signal assignment. Following the delivered everyday
+The Device Tree Editor now supports existing-overlay source and literal property editing,
+reviewed Save and draft recovery. Its broader goal is hardware-module placement and
+pin/signal assignment. Following the delivered everyday
 Project Creator workflow, the [Device Tree Editor master plan](device-tree-editor-masterplan.md)
 is the next product direction. It defines D0–D15 with separate implementation prompts
 and exit gates: source-preserving edits and guarded saving first, then peripherals,
@@ -72,14 +72,16 @@ D0 foundation is complete: the [editor contract](device-tree-editor-contract.md)
 ownership, context/version proposals and source-preservation limits, with a tested
 in-memory literal-edit prototype. D1 adds read-only project/configuration context loading,
 overlay evidence and source inspection through an explicitly injected preview in the
-existing application. The built-in editor remains planned. See the
+existing application. See the
 [D0 handoff](device-tree-editor-d0-handoff.md) and [D1 handoff](device-tree-editor-d1-handoff.md)
 for evidence and remaining limits. D2 now implements production in-memory source
 operations, with verification and measured limits recorded in the [D2 handoff](device-tree-editor-d2-handoff.md).
 D3 connects those operations to visual/source session drafts, shared undo/redo and
 context-bound navigation retention. See the [D3 handoff](device-tree-editor-d3-handoff.md)
-for verification and measured service latency. Guarded saving and durable recovery are
-the next stage, D4; the built-in editor remains planned until then.
+for verification and measured service latency. D4 adds guarded single-overlay saving,
+conflict comparison, explicit reload/discard and versioned recovery, making the limited
+editor available. See the [D4 handoff](device-tree-editor-d4-handoff.md). D5's explicit
+validation and Projects handoff is next; saving alone does not validate firmware.
 
 The [Project Creator and environment analyser master plan](project-creator-masterplan.md)
 provides the earlier shared-context proposal; the editor master plan now defines its
@@ -128,7 +130,7 @@ Reviewed configuration editing now supports renaming and refreshing target/SDK c
 with an explicit optional default-overlay patch. Import/reconnect retains history;
 managed build outputs support verified reuse and cleanup. Ordered Kconfig/overlay selection is also available with
 independent automatic, append and replacement modes, bounded app-local discovery and
-reviewed source checks. Visual overlay/hardware editing is the next planned workflow,
+reviewed source checks. Broader hardware editing follows the delivered overlay workflow,
 scoped independently in the editor master plan; advanced creator milestones remain separate.
 P5 provides a Minimal C++ starter alongside the original C template and curated local
 Hello World, Blinky and Button cloning through the same reviewed creation/build workflow.
