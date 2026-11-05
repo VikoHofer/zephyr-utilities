@@ -176,7 +176,7 @@ class SampleCheckServiceTests(unittest.TestCase):
                     return {"status": "built", "sample_compatibility": result, "context": {}, "artifacts": [], "diagnostics": []}
 
                 with patch("zephyr_utilities.features.projects.creator.execute_build", side_effect=execute), \
-                        patch("zephyr_utilities.features.projects.creator.inspect_sample_requirements",
+                        patch("zephyr_utilities.features.projects.build_workflow.inspect_sample_requirements",
                               return_value={"status": "compatible", "message": "Configured requirements checked.", "details": []}) as inspect:
                     job = self.call("POST", "build", self.body(build_plan_id=build_plan["id"])).data
                     built = wait_job(self.app.context.jobs, job["id"])

@@ -13,7 +13,7 @@ export function createConfigurationView({node, fact, choices}) {
     const control = root.ownerDocument.activeElement;
     const section = control?.closest("[data-configuration-project]");
     if (!section || !root.contains(section)) return null;
-    const attribute = ["data-configuration-select", "data-configuration-field", "data-configuration-add", "data-configuration-remove", "data-configuration-save", "data-configuration-close", "data-fragment-control"].find((name) => control.hasAttribute(name));
+    const attribute = ["data-configuration-select", "data-configuration-field", "data-configuration-add", "data-configuration-edit", "data-configuration-remove", "data-configuration-save", "data-configuration-close", "data-fragment-control"].find((name) => control.hasAttribute(name));
     if (!attribute) return null;
     return {project: section.dataset.configurationProject, attribute, value: control.getAttribute(attribute),
       start: control.selectionStart, end: control.selectionEnd, direction: control.selectionDirection};
@@ -36,9 +36,11 @@ export function createConfigurationView({node, fact, choices}) {
     const add = node("button", "projects-button", "Add configuration");
     add.type = "button"; add.dataset.configurationAdd = project.id;
     add.setAttribute("aria-controls", `configuration-form-${project.id}`);
+    const edit = node("button", "projects-button", "Edit selected");
+    edit.type = "button"; edit.dataset.configurationEdit = project.id; edit.setAttribute("aria-controls", `configuration-form-${project.id}`);
     const remove = node("button", "projects-button", "Remove configuration");
     remove.type = "button"; remove.dataset.configurationRemove = project.id;
-    row.append(label, add, remove);
+    row.append(label, edit, add, remove);
     const facts = node("dl", "projects-identity"); facts.dataset.configurationFacts = "";
     const overlays = node("div"); overlays.dataset.configurationOverlays = "";
     const notice = node("p", "projects-banner"); notice.dataset.configurationNotice = "";
@@ -47,7 +49,8 @@ export function createConfigurationView({node, fact, choices}) {
     form.id = `configuration-form-${project.id}`;
     form.dataset.configurationForm = project.id;
     form.setAttribute("aria-label", `New build configuration for ${project.name}`);
-    form.append(node("h4", "", "Add a build configuration"), node("p", "projects-muted", "Save a target, SDK and application fragment selection for future Configure and Build actions."));
+    const title = node("h4", "", "Add a build configuration"); title.dataset.configurationTitle = "";
+    form.append(title, node("p", "projects-muted", "Choose a target, SDK and application fragments from the latest analyzed environment, then review the change before applying it. Analyze Environment again after changing tools or boards."));
     const requirement = node("p", "projects-banner"); requirement.dataset.configurationRequirement = "";
     form.append(requirement);
     const grid = node("div", "projects-option-grid");
@@ -67,10 +70,14 @@ export function createConfigurationView({node, fact, choices}) {
       label.append(field); grid.append(label);
     }
     const targetNote = node("p", "projects-muted"); targetNote.dataset.configurationTargetNote = "";
+    const defaultLabel = node("label", "projects-checkbox");
+    const defaultOverlay = node("input"); defaultOverlay.type = "checkbox"; defaultOverlay.dataset.configurationField = "create_default_overlay";
+    defaultLabel.append(defaultOverlay, node("span", "", "Create a board-matched default overlay if one is missing"));
+    const defaultNote = node("p", "projects-muted", "Optional source change. The review lists the exact file contents before anything is written.");
     const actions = node("div", "projects-actions");
-    const save = node("button", "projects-button primary", "Save configuration"); save.type = "submit"; save.dataset.configurationSave = "";
+    const save = node("button", "projects-button primary", "Review changes"); save.type = "submit"; save.dataset.configurationSave = "";
     const close = node("button", "projects-button", "Close"); close.type = "button"; close.dataset.configurationClose = project.id;
-    actions.append(save, close); form.append(grid, targetNote, fragmentView.create(), actions);
+    actions.append(save, close); form.append(grid, targetNote, fragmentView.create(), defaultLabel, defaultNote, actions);
     section.append(row, facts, overlays, notice, form);
     return section;
   }
@@ -107,8 +114,10 @@ export function createConfigurationView({node, fact, choices}) {
     form.hidden = !open;
     const add = section.querySelector("[data-configuration-add]");
     add.disabled = busy; add.setAttribute("aria-expanded", String(open));
+    const edit = section.querySelector("[data-configuration-edit]"); edit.disabled = busy || !selected; edit.setAttribute("aria-expanded", String(open));
     if (!open) return;
     const draft = state.configurationDrafts[project.id];
+    form.querySelector("[data-configuration-title]").textContent = draft._editing ? `Edit ${draft._configuration_id ? "configuration" : "Original configuration"}` : "Add a build configuration";
     const snapshot = state.snapshot;
     const inputs = Object.fromEntries([...form.querySelectorAll("[data-configuration-field]")].map((input) => [input.dataset.configurationField, input]));
     const key = JSON.stringify([snapshot?.id, snapshot?.fingerprint, draft.search, draft.board_id]);
@@ -123,8 +132,9 @@ export function createConfigurationView({node, fact, choices}) {
       form.querySelector("[data-configuration-target-note]").textContent = board ? `${board.name} · ${array(board.socs).join(", ") || "Chip unknown"}. Configuration validates compatibility and resolves defaults.` : "Select a board and its full declared target, including any SoC, CPU, variant and revision.";
     }
     for (const [name, input] of Object.entries(inputs)) {
-      if (input.value !== draft[name]) input.value = draft[name];
-      input.disabled = busy;
+      if (input.type === "checkbox") input.checked = Boolean(draft[name]);
+      else if (input.value !== draft[name]) input.value = draft[name];
+      input.disabled = busy || name === "name" && draft._editing && draft._configuration_id === "";
     }
     const requirement = form.querySelector("[data-configuration-requirement]");
     requirement.hidden = Boolean(snapshot) && snapshot.status !== "stale";
@@ -136,7 +146,7 @@ export function createConfigurationView({node, fact, choices}) {
     const save = form.querySelector("[data-configuration-save]");
     fragmentView.update(form.querySelector("[data-fragments]"), draft, state.configurationFiles[project.id], busy);
     save.disabled = busy || !snapshot || snapshot.status === "stale" || !draft.name.trim() || !draft.board_id || !draft.target || !draft.sdk_id || Boolean(fragmentSelectionError(copyFragments(draft.fragments), state.configurationFiles[project.id]));
-    save.textContent = state.busy === "configuration-save" ? "Saving…" : "Save configuration";
+    save.textContent = state.busy === "management-preview" ? "Preparing review…" : "Review changes";
     form.querySelector("[data-configuration-close]").disabled = busy;
   }
   return {create, update, captureFocus, restoreFocus};

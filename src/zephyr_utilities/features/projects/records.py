@@ -48,12 +48,16 @@ class ProjectStore:
         if any(p.is_symlink() for p in (self.root, path.parent, path)):
             raise ValueError("Project records must not be symlinks.")
         data = json.loads(read_regular(path, MAX_RECORD).decode("utf-8"))
-        if not isinstance(data, dict) or data.get("schema_version") != SCHEMA_VERSION:
+        versions = (1, 2) if path.parent.name in {"projects", "configurations"} else (1,)
+        if not isinstance(data, dict) or data.get("schema_version") not in versions:
             raise ValueError("Unsupported project record schema. Existing data was preserved.")
+        if data.get("schema_version") == 2 and (type(data.get("revision")) is not int or data["revision"] < 0):
+            raise ValueError("Unsupported saved record revision. Existing data was preserved.")
         return data
 
     def _write(self, path, data):
-        if data.get("schema_version") != SCHEMA_VERSION:
+        versions = (1, 2) if path.parent.name in {"projects", "configurations"} else (1,)
+        if data.get("schema_version") not in versions:
             raise ValueError("Unsupported project record schema.")
         if any(p.is_symlink() for p in (self.root, path.parent, path)):
             raise ValueError("Project records must not be symlinks.")
@@ -88,6 +92,52 @@ class ProjectStore:
                 raise ValueError("The project does not belong to the selected workspace.")
             return data
 
+    def update_project(self, updated, expected):
+        """Replace a reviewed registration/profile without rewriting captured attempts."""
+        with self.lock:
+            current = self.project(expected["id"], expected["workspace"])
+            if current != expected:
+                raise ValueError("The saved application changed since review. Refresh and review again.")
+            if (updated.get("id") != current["id"] or updated.get("workspace") != current["workspace"] or
+                    updated.get("schema_version") != 2 or updated.get("revision") != current.get("revision", 0) + 1):
+                raise ValueError("Invalid application update identity or revision.")
+            self._validate_removal(current)
+            self._validate_removal(updated)
+            self._write(self.root / "projects" / f"{current['id']}.json", updated)
+
+    def save_output(self, output):
+        """Keep managed output ownership independent of removable attempt history."""
+        with self.lock:
+            self._validate_output(output)
+            self.project(output["project_id"], output["workspace"])
+            path = self.root / "outputs" / f"{identifier(output['id'])}.json"
+            if path.exists():
+                current = self._read(path)
+                if any(current.get(key) != output.get(key) for key in ("id", "project_id", "workspace", "path", "source_dir")):
+                    raise ValueError("Managed build output identity cannot be changed.")
+            self._write(path, output)
+
+    def outputs(self, project_id, workspace):
+        with self.lock:
+            self.project(project_id, workspace)
+            values, errors = self._items("outputs", 4000)
+            if errors:
+                raise ValueError("Managed build output records could not be read completely. Existing outputs were preserved.")
+            for value in values:
+                self._validate_output(value)
+            return [value for value in values if value.get("project_id") == project_id and value.get("workspace") == str(workspace)]
+
+    @staticmethod
+    def _validate_output(output):
+        for key in ("id", "project_id", "latest_attempt_id"):
+            identifier(output.get(key))
+        if output.get("schema_version") != 1 or output.get("state") not in {"available", "cleaned"}:
+            raise ValueError("Unsupported managed output state. Existing outputs were preserved.")
+        for key in ("workspace", "path", "source_dir"):
+            value = output.get(key)
+            if not isinstance(value, str) or not Path(value).is_absolute() or ".." in Path(value).parts:
+                raise ValueError("Invalid managed output path. Existing outputs were preserved.")
+
     def save_attempt(self, attempt):
         with self.lock:
             self._write(self.root / "attempts" / f"{identifier(attempt['id'])}.json", attempt)
@@ -113,10 +163,11 @@ class ProjectStore:
             project = self.project(project_id, workspace)
             configurations, errors = self._configurations()
             attempts, more_errors = self._items("attempts", 2000)
-            if errors or more_errors:
+            outputs, output_errors = self._items("outputs", 4000)
+            if errors or more_errors or output_errors:
                 raise ValueError("Saved application records could not be read completely. Existing data was preserved.")
             records = [("projects", project)]
-            for kind, children in (("configurations", configurations), ("attempts", attempts)):
+            for kind, children in (("configurations", configurations), ("attempts", attempts), ("outputs", outputs)):
                 for child in children:
                     if child.get("project_id") == project_id:
                         if child.get("workspace") != str(workspace):
@@ -145,6 +196,8 @@ class ProjectStore:
     def _validate_configuration(self, data):
         identifier(data.get("id"))
         identifier(data.get("project_id"))
+        if data.get("schema_version") == 2 and (type(data.get("revision")) is not int or data["revision"] < 0):
+            raise ValueError("Unsupported saved configuration revision.")
         if configuration_name(data.get("name")) != data["name"]:
             raise ValueError("Saved configuration names must be trimmed.")
         profile = data.get("profile")
@@ -185,6 +238,36 @@ class ProjectStore:
             if len(matching) >= MAX_CONFIGURATIONS or len(records) >= MAX_CONFIGURATION_RECORDS:
                 raise ValueError("The saved build configuration limit was reached (32 per application).")
             self._write(path, configuration)
+
+    def validate_configuration_change(self, updated, expected=None):
+        """Check names, limits and the captured revision before a reviewed edit."""
+        with self.lock:
+            self._validate_configuration(updated)
+            self.project(updated["project_id"], updated["workspace"])
+            records, errors = self._configurations()
+            if errors:
+                raise ValueError("Saved configuration records could not be read completely. Existing data was preserved.")
+            matching = [record for record in records if record["project_id"] == updated["project_id"] and
+                        record["workspace"] == updated["workspace"]]
+            if expected is not None:
+                current = self.configuration(expected["id"], expected["project_id"], expected["workspace"])
+                if current != expected:
+                    raise ValueError("The saved configuration changed since review. Refresh and review again.")
+                if (updated["id"] != expected["id"] or updated["project_id"] != expected["project_id"] or
+                        updated["workspace"] != expected["workspace"] or updated.get("schema_version") != 2 or
+                        updated.get("revision") != expected.get("revision", 0) + 1):
+                    raise ValueError("Invalid configuration update identity or revision.")
+            elif any(record["id"] == updated["id"] for record in records):
+                raise ValueError("A different configuration already uses this identity.")
+            elif len(matching) >= MAX_CONFIGURATIONS or len(records) >= MAX_CONFIGURATION_RECORDS:
+                raise ValueError("The saved build configuration limit was reached (32 per application).")
+            if any(record["id"] != updated["id"] and record["name"].casefold() == updated["name"].casefold() for record in matching):
+                raise ValueError("This application already has a configuration with that name.")
+
+    def update_configuration(self, updated, expected):
+        with self.lock:
+            self.validate_configuration_change(updated, expected)
+            self._write(self.root / "configurations" / f"{updated['id']}.json", updated)
 
     def _configurations(self):
         records, errors = self._items("configurations", MAX_CONFIGURATION_RECORDS)

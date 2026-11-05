@@ -125,11 +125,14 @@ analysis checks fingerprints and can reuse an unchanged catalogue. Future format
 rejected without overwriting their data. See [ADR 0003](decisions/0003-environment-observations.md)
 and the [environment analyser contract](environment-analyser.md).
 
-Projects also owns schema-version-1 project/profile, named configuration and build-attempt JSON under
+Projects owns versioned project/profile, named configuration, build-attempt and output JSON under
 `feature_data("projects") / "creator"`. Project definitions retain template/input identity;
 attempt records retain reviewed commands, bounded logs, outcomes and live output hashes.
-Named configurations are additive immutable records; the original project profile
-remains available. Attempts capture the selected profile before execution. See
+Imported and explicitly edited project/configuration records use schema version 2 with
+compare-and-swap revisions; earlier version-1 records stay readable. Original edits
+retain the creation profile. Attempts capture their selection before execution and
+retain it after configuration edits or reconnection. Output ownership has separate
+version-1 records, allowing cleanup after history removal. See
 [ADR 0010](decisions/0010-named-build-configurations.md).
 Explicit removal can delete a registration and its dependent records, a named
 configuration or an attempt history entry without deleting source/build files.
@@ -200,7 +203,11 @@ analysis does not execute project CMake, configure firmware or install/update to
 Sources, declared/discovered evidence, unknowns and diagnostics remain distinct.
 `EnvironmentSnapshot` remains an analysis-only observation. Creator execution rechecks
 selected environment and application inputs, then uses explicit CMake argument arrays
-and a fresh output directory. Application/Zephyr/toolchain code runs only for an explicit
+and a fresh output directory by default. Explicit reuse revalidates a managed output,
+its captured cache/profile and configuration revision before reconfiguring in place.
+Reviewed cleanup removes only an owned output tree and retains historical evidence.
+See [ADR 0017](decisions/0017-project-management-and-build-outputs.md).
+Application/Zephyr/toolchain code runs only for an explicit
 configure/build action. It is not sandboxed by output-directory separation.
 
 Project/profile and attempt context remain feature-owned. The shared build-inspection

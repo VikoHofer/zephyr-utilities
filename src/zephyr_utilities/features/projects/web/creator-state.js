@@ -2,9 +2,10 @@
 import {activeJob, filterBoards} from "./environment-state.js";
 import {copyFragments, fragmentFormatError, fragmentKinds, fragmentModes, fragmentSelectionError, needsFragmentFiles, profileFragments} from "./fragment-state.js";
 import {isLocalSample, validateSampleCatalogue, readySample, sampleSelectionError, sampleLabel, sampleCheckSelection, sameSampleSelection, validateSampleCheckResult, currentSampleCompatibility} from "./sample-state.js";
+import {createManagementActions} from "./management-state.js";
 
 const defaults = () => ({name: "my_app", destination: "", search: "", board_id: "", target: "", sdk_id: "", template_id: "minimal-c", sample_id: ""});
-const configurationDefaults = () => ({name: "", search: "", board_id: "", target: "", sdk_id: ""});
+const configurationDefaults = () => ({name: "", search: "", board_id: "", target: "", sdk_id: "", create_default_overlay: false});
 const array = (value) => Array.isArray(value) ? value : [];
 const templateLanguages = {"minimal-c": "C", "minimal-cpp": "C++", "local-sample": "C"};
 const templateVersion = (entry) => entry?.id === "local-sample" ? entry.version === 1 : [1, 2].includes(entry?.version);
@@ -17,6 +18,7 @@ export function creatorTemplates(value) {
 export const creatorTemplateId = (form) => form.template_id === undefined ? "minimal-c" : form.template_id;
 export const selectedCreatorTemplate = (state) => creatorTemplates(state.templates).find((entry) => entry.id === creatorTemplateId(state.form)) || null;
 export function creatorTemplateLabel(template, templates, sample) {
+  if (template?.id === "imported") return "Imported existing application";
   if (template?.id === "local-sample" && template.version === 1) return sampleLabel(sample);
   const descriptor = creatorTemplates(templates).find((entry) => entry.id === template?.id && entry.version === template?.version);
   const title = descriptor?.title || (templateVersion(template) && Object.hasOwn(templateLanguages, template?.id) ? `Minimal ${templateLanguages[template.id]}` : template?.id);
@@ -35,7 +37,7 @@ export function configurationBody(form) {
 }
 export function selectedConfiguration(state, project) {
   const id = state.configurationSelections?.[project.id];
-  return id ? array(project.configurations).find((entry) => entry.id === id) || null : {id: null, name: "Original", profile: project.profile};
+  return id ? array(project.configurations).find((entry) => entry.id === id) || null : {id: null, name: "Original", profile: project.profile, revision: project.profile_revision || 0};
 }
 export function currentCreatorJob(state) {
   return array(state.jobs).find(activeJob) || array(state.jobs).find((job) => job.id === state.jobId) || array(state.jobs)[0] || null;
@@ -52,6 +54,7 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
   let readSequence = 0;
   let fileSequence = 0;
   let sampleSequence = 0;
+  let management;
   Object.assign(state, {loading: false, busy: "", error: "", cancelling: false, removalNotice: ""});
   // Review plans are server-session capabilities; fetch new ones after remount.
   state.plan = null;
@@ -77,6 +80,7 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
     }
     epoch++; formRevision++; buildRevision++; configurationRevision++; fileSequence++; sampleSequence++;
     Object.assign(state, {workspace: path, snapshot: null, templates: [], projects: [], unavailableProjects: [], jobs: [], diagnostics: [], jobId: null, plan: null, buildPlan: null, error: "", removalNotice: "", loading: false, busy: "", cancelling: false, form: {...defaults(), ...state.formsByWorkspace?.[path]}, configurationSelections: {}, configurationDrafts: {}, configurationEditor: "", configurationNotice: null, configurationFiles: {}, sampleCatalogue: null, sampleCheck: null});
+    state.management = null;
     return true;
   }
   function choosePending() {
@@ -100,6 +104,7 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
       state.plan = null; state.buildPlan = null; formRevision++; buildRevision++; configurationRevision++;
       sampleSequence++; state.sampleCatalogue = null;
       invalidateSampleCheck();
+      management?.invalidate();
     }
     const previousProjects = array(state.projects);
     state.snapshot = snapshot;
@@ -284,18 +289,20 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
     buildRevision++; configurationRevision++; state.buildPlan = null; state.configurationNotice = null; state.error = "";
     publish();
   }
-  function editConfiguration(projectId) {
+  function editConfiguration(projectId, {editSelected = false} = {}) {
     if (disposed) return;
     followWorkspace();
     const project = array(state.projects).find((item) => item.id === projectId);
     if (!project) return;
-    const profile = selectedConfiguration(state, project)?.profile;
+    const selected = selectedConfiguration(state, project);
+    const profile = selected?.profile;
     if (state.configurationEditor !== projectId && state.configurationFiles[state.configurationEditor]?.loading) delete state.configurationFiles[state.configurationEditor];
-    if (!state.configurationDrafts[projectId]) {
+    if (!state.configurationDrafts[projectId] || editSelected || state.configurationDrafts[projectId]._editing) {
       const board = creatorBoards(state.snapshot).find((item) => item.id === profile?.board_id);
-      state.configurationDrafts[projectId] = {...configurationDefaults(), board_id: board?.id || "",
+      state.configurationDrafts[projectId] = {...configurationDefaults(), name: editSelected ? selected?.name || "" : "", board_id: board?.id || "",
         target: array(board?.targets).includes(profile?.target) ? profile.target : "",
         sdk_id: creatorSdks(state.snapshot).some((item) => item.id === profile?.sdk?.id) ? profile.sdk.id : "",
+        ...(editSelected ? {_editing: true, _configuration_id: selected?.id || "", _expected_revision: selected?.revision || 0} : {}),
         ...(profileFragments(profile) === undefined ? {} : {fragments: copyFragments(profileFragments(profile))})};
     }
     state.configurationEditor = projectId;
@@ -419,13 +426,16 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
     if (!state.plan) return Promise.resolve();
     return action("create", "/api/projects/create", () => ({plan_id: state.plan.id}), acceptJob);
   };
-  const previewBuild = (projectId, operation) => {
+  const previewBuild = (projectId, operation, reuseAttemptId = null) => {
     if (!["configure", "build"].includes(operation) || !array(state.projects).some((project) => project.id === projectId)) return Promise.resolve();
     const project = state.projects.find((item) => item.id === projectId);
     const formatError = fragmentFormatError(copyFragments(profileFragments(selectedConfiguration(state, project)?.profile)));
     if (formatError) { state.error = formatError; state.buildPlan = null; publish(); return Promise.resolve(); }
     const configurationId = state.configurationSelections[projectId];
-    return action("build-preview", "/api/projects/build-preview", {project_id: projectId, operation, ...(configurationId ? {configuration_id: configurationId} : {})}, (data) => {
+    if (reuseAttemptId && !array(project.attempts).some((attempt) => attempt.id === reuseAttemptId && attempt.reuse_allowed)) {
+      state.error = "This output is no longer eligible for reuse. Review a fresh build instead."; state.buildPlan = null; publish(); return Promise.resolve();
+    }
+    return action("build-preview", "/api/projects/build-preview", {project_id: projectId, operation, ...(configurationId ? {configuration_id: configurationId} : {}), ...(reuseAttemptId ? {reuse_attempt_id: reuseAttemptId} : {})}, (data) => {
       if (data.plan?.workspace === state.workspace) state.buildPlan = data.plan;
     }, {review: () => buildRevision});
   };
@@ -455,6 +465,35 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
     if (!state.buildPlan) return Promise.resolve();
     return action("build", "/api/projects/build", () => ({build_plan_id: state.buildPlan.id}), acceptJob);
   };
+  function acceptProject(project) {
+    if (!project || typeof project.id !== "string" || project.workspace !== state.workspace || typeof project.path !== "string") throw new Error("The updated application record could not be verified. Refresh applications.");
+    const previous = [...array(state.projects), ...array(state.unavailableProjects)].find((item) => item.id === project.id);
+    const updated = {...previous, ...project, configurations: project.configurations || previous?.configurations || [], attempts: project.attempts || previous?.attempts || []};
+    state.projects = [updated, ...array(state.projects).filter((item) => item.id !== project.id)];
+    state.unavailableProjects = array(state.unavailableProjects).filter((item) => item.id !== project.id);
+    readSequence++; buildRevision++; state.buildPlan = null; state.needsReload = true;
+    delete state.configurationFiles[project.id];
+  }
+  function acceptManagedConfiguration(data, projectId) {
+    const configuration = data.configuration;
+    if (!data.project || data.project.id !== projectId || !configuration || !configuration.profile || configuration.id !== null && typeof configuration.id !== "string") throw new Error("The updated configuration could not be verified. Refresh applications.");
+    acceptProject(data.project);
+    const project = state.projects.find((item) => item.id === projectId);
+    if (configuration.id) project.configurations = [...array(project.configurations).filter((item) => item.id !== configuration.id), configuration];
+    state.configurationSelections[projectId] = configuration.id || "";
+    clearConfigurationDraft(projectId);
+    state.configurationNotice = {project_id: projectId, message: `Configuration “${configuration.name}” saved. Review Configure or Build to use it.`};
+  }
+  async function previewConfiguration(projectId) {
+    const form = state.configurationDrafts[projectId];
+    if (!form || !array(state.projects).some((project) => project.id === projectId)) return false;
+    const fragmentError = fragmentSelectionError(copyFragments(form.fragments), state.configurationFiles[projectId]);
+    if (fragmentError) { state.error = fragmentError; publish(); return false; }
+    const body = {project_id: projectId, ...configurationBody(form), create_default_overlay: Boolean(form.create_default_overlay),
+      ...(form._editing ? {configuration_id: form._configuration_id, expected_revision: form._expected_revision} : {})};
+    if (!management.open("configuration", body)) return false;
+    return management.preview();
+  }
   function dismissReview(kind) {
     if (disposed) return;
     if (kind === "create") { state.plan = null; formRevision++; }
@@ -489,7 +528,7 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
       delete state.configurationSelections[projectId]; clearConfigurationDraft(projectId);
       if (state.configurationNotice?.project_id === projectId) state.configurationNotice = null;
       state.jobs = array(state.jobs).filter((job) => job.metadata?.project_id !== projectId && job.result?.project?.id !== projectId && job.project?.id !== projectId);
-      state.removalNotice = `Saved application “${project.name}”, its configurations and build history removed. Application and build files remain on disk.`;
+      state.removalNotice = `Saved application “${project.name}”, its configurations, build history and output records removed. Application and build files remain on disk.`;
     });
   }
   function removeConfiguration(projectId, configurationId) {
@@ -541,9 +580,11 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
   }
   const tick = (options) => Promise.all([tickCreator(options), pollSampleCheck()]);
   function queue() { timer = schedule(async () => { await tick(); if (!disposed) queue(); }, 1200); }
+  management = createManagementActions({state, action, publish, acceptProject, acceptConfiguration: acceptManagedConfiguration, acceptJob});
   followWorkspace(); queue();
   return {load, loadSamples, ensureSamples, refresh: () => tick({force: true}), preview, create, previewBuild, build, cancel, changeField,
     removeProject, removeConfiguration, removeAttempt, dismissReview, checkSample, cancelSampleCheck,
+    management, previewConfiguration,
     selectConfiguration, editConfiguration, closeConfiguration, changeConfigurationField, saveConfiguration, loadConfigurationFiles, changeFragment,
     tick, dispose() { disposed = true; epoch++; lifetime.abort(); if (timer !== undefined) unschedule(timer); }};
 }

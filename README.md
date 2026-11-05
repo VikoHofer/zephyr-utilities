@@ -101,7 +101,9 @@ branches. See [architecture](docs/architecture.md) and [adding a feature](docs/a
 - Create a minimal C or C++ application inside the existing workspace from a reviewed file plan.
 - Clone local Hello World, Blinky or Button samples with supporting files, license evidence and source provenance.
   Select an exact board target and installed GNU SDK, then explicitly configure or build
-  in a fresh output directory with saved commands, logs and attempt evidence.
+  in fresh or verified reusable outputs with saved commands, logs and attempt evidence.
+- Import or reconnect workspace applications, review saved configuration edits, and clean
+  managed build outputs independently of attempt history.
 - Browse local folders and discover ordinary Zephyr builds and sysbuild images.
 - Generate RAM/ROM JSON directly from an existing final ELF with that build's Zephyr
   `size_report` script and recorded Python environment. This does not invoke CMake,
@@ -164,14 +166,15 @@ Every new project also includes an editable default overlay named for its exact 
 target, including discovered custom boards. Previews show expected overlay selection;
 completed configurations show the files actually used, separately from copied overlays
 for other boards. Existing project files are preserved.
-Open **Applications** in the Project Creator sidebar. Choose **Configure** or **Build**, review the exact command and
-new output path, then start that operation. Each attempt retains its outcome and bounded
+Open **Applications** in the Project Creator sidebar. Choose **Configure fresh** or
+**Build fresh**, review the exact command and new output path, then start that operation.
+Managed build outputs offer explicit incremental reuse and reviewed disk cleanup. Each attempt retains its outcome and bounded
 log; leaving the view does not cancel it.
 
 Use **Add configuration** on a saved application to name another exact board target and
-installed SDK. Select it from **Build configuration** before reviewing a build. Saving
-only records that choice; application sources and the original configuration are retained.
-After an environment upgrade, analyze again and save a new configuration. Fragment
+installed SDK. Select it from **Build configuration** before reviewing a build. Use **Edit selected** to rename or update an existing selection, including refreshing
+Original after an environment rescan. Earlier attempts retain their captured choices.
+An optional reviewed change creates the matching default overlay for an additional board. Fragment
 selection supports automatic discovery, ordered appended files, or replacement
 application-file lists for Kconfig and Device Tree overlays. Select existing files in
 the application; saving keeps their contents unchanged. Visual overlay editing remains planned.
@@ -179,7 +182,8 @@ the application; saving keeps their contents unchanged. Visual overlay editing r
 The creator supports Linux, minimal C/C++ and curated sample applications with one image, an existing resolved
 west workspace and installed GNU Zephyr SDKs. It rejects existing destinations, symlinked
 application paths and source paths containing whitespace. No flashing, SDK installation,
-workspace update or existing-project import is included. Device Tree editing remains
+or workspace update is included. Existing applications can be imported without changing
+source files; moved applications can be reconnected while preserving their saved history. Device Tree editing remains
 planned. Generated source files and their README commands work independently of the
 utilities' metadata.
 

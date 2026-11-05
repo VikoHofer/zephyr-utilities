@@ -5,8 +5,9 @@ C++ starter and curated local sample slices of P5 from the [master plan](project
 minimal C/C++ application or supported sample copy in the existing workspace, with an exact board target and an
 explicit installed GNU Zephyr SDK. Creation, configuration and compilation are separate
 reviewed actions. Saved applications can have several named target/SDK configurations
-with ordered Kconfig and overlay file selections. Device Tree editing and existing-project
-import remain planned.
+with ordered Kconfig and overlay file selections. Existing applications can be imported or
+reconnected, saved configurations can be edited, and managed build outputs can be reused
+or explicitly cleaned. Visual Device Tree editing remains planned.
 
 ## Sidebar workflow
 
@@ -44,9 +45,9 @@ and returns focus to its initiating control. Starting an operation reveals progr
 completion offers an explicit action to open the result without interrupting the
 current view. Open attempt details stay open while job updates arrive.
 
-Configure generates a fresh build system and captures its resolved context. Build first
-configures another fresh output directory, then compiles. It does not reuse a preceding
-Configure directory. Each operation has a shared job, logs and cancellation. Leaving the
+The main Configure fresh and Build fresh actions create new output directories. Build
+configures that directory before compiling. Managed build outputs also offer explicit
+Configure again here / Build again here actions for eligible outputs, described below. Each operation has a shared job, logs and cancellation. Leaving the
 view does not cancel the job, and switching workspace cannot redirect its captured
 inputs. Reopening reads saved projects and retained jobs without starting an operation.
 
@@ -62,14 +63,14 @@ An unreadable location stays listed with a diagnostic rather than being treated 
 **Remove saved application** removes that registration, its named configurations and its
 saved attempt history after confirmation. This also works for unavailable applications.
 It leaves application source files and build output on disk. Use the file manager to
-move or delete those folders, then refresh the list. Relocating a saved registration to
-another path and importing an existing application remain planned.
+move or delete those folders, then refresh the list. Use **Reconnect folder** to review a new location for the same registration. Use
+**Import existing application** to register an application that Utilities did not create.
 If older registrations share the current folder's exact saved identity, remove those
 unavailable entries first. Utilities blocks removal of the current entry until then,
 so an older duplicate cannot reappear as the current application.
 
 Each saved attempt offers **Remove history entry**. Removing history leaves its build
-directory intact. Active operations must finish or be cancelled before related records
+directory and its managed output record intact, so it can still be cleaned later. Active operations must finish or be cancelled before related records
 can be removed. Removal invalidates pending command reviews; it does not run a build,
 cancel a job or change another workspace's records.
 
@@ -99,8 +100,8 @@ Changing the selection clears a pending review. Each configuration uses fresh ou
 directories through the same build workflow; attempts retain their captured selection.
 
 Configurations are saved choices, not moving references to the newest SDK. After a
-Zephyr/toolchain change, run **Analyze workspace** and save a new configuration from
-the refreshed catalogue. The build rechecks the captured environment and rejects stale
+Zephyr/toolchain change, run **Analyze workspace**, then **Edit selected** to review
+the updated selection from the refreshed catalogue. The build rechecks the captured environment and rejects stale
 choices rather than silently retargeting them. Discovery alone does not establish target
 and SDK compatibility; an explicit configure/build provides that evidence.
 
@@ -110,7 +111,56 @@ configurations can be saved per application. **Remove configuration** removes th
 selected named configuration after confirmation. The selector returns to **Original**;
 review it before building. Existing attempts retain the configuration/profile captured
 for their run. Original belongs to the application registration and cannot be removed
-separately. Renaming configurations and importing existing applications remain later work.
+separately. **Edit selected** can rename a named configuration or update its target, SDK
+and fragment selections. Original keeps its reserved name but its selection can be
+updated. Earlier attempts retain the name/profile captured for their operation.
+
+## Import or reconnect an application
+
+Choose **Import existing application** in Applications, enter the existing directory and
+registration name, then select a discovered board/target and SDK. Review the source file
+observation and apply the import. Import changes only Utilities metadata: it does not
+execute CMake, create files, add overlays or claim compatibility. Configure/Build remains
+a separate reviewed action. Imported applications must satisfy the same workspace,
+protected-directory, regular-file and bounded source rules as managed applications.
+
+Choose **Reconnect folder** on a current or unavailable application after moving its
+folder, or when deliberately attaching a replacement copy. Review both paths, source
+changes and whether the directory identity matches. Apply preserves the registration ID,
+configurations, creation provenance and captured build history. Historical output paths
+are not rewritten. Start a fresh build at the reconnected location; existing CMake caches
+may contain absolute paths to the old source. Duplicate registrations are rejected.
+
+## Edit configurations and manage build outputs
+
+**Edit selected** opens the current named or Original configuration using the latest
+saved environment catalogue. Review and apply target, SDK, fragment or name changes.
+A concurrent record/source edit invalidates the preview. To add a matching overlay for
+another board, opt into the default-overlay checkbox and review both the new overlay
+and CMake diff. Existing generated activation blocks must be intact; conflicts are
+reported before writing. Leaving this unchecked changes only the saved selection.
+
+**Managed build outputs** lists owned output directories independently of attempt
+history. Eligible outputs offer **Configure again here** and **Build again here**. These reconfigure
+in place and let the build system reuse unchanged compiled objects, while recording a
+new attempt. Reuse requires the latest successful attempt for the same source, profile
+and configuration revision, plus unchanged captured directory/cache identity. Edited
+configurations, moved sources, legacy outputs without identity evidence and externally
+reconfigured outputs require a fresh build. Earlier attempts retain their captured
+hashes/context and are labeled superseded when their directory is reused.
+
+**Review cleanup** shows the exact path, file count, bytes and affected attempts before
+starting a cancellable cleanup job. It removes only the reviewed managed output tree;
+source files and captured attempt history remain. Symlinks inside outputs are removed
+as links, never followed. Replaced paths or changes after review block cleanup. Failed
+and cancelled build directories can also be reviewed for cleanup. Cancellation is honored during
+revalidation. Once final deletion starts, the bounded deletion finishes. A filesystem
+error or concurrent edit may leave a partial tree; review it again before retrying. Output ownership survives
+**Remove history entry**, so cleanup remains available afterward. Remove the build output
+before removing the entire application registration if you want Utilities to clean it.
+
+See [ADR 0017](decisions/0017-project-management-and-build-outputs.md) for persistence,
+review boundaries and compatibility.
 
 ## Select Kconfig and overlay fragments
 
@@ -205,7 +255,9 @@ or board-specific overlay. Append applies the explicit files after the default; 
 Replace configuration uses your selected list without automatically adding the default.
 You can include the default explicitly in that list. Switching to another target does
 not apply the original target's default. Existing applications and newly saved build
-configurations are not silently given new files.
+configurations are not silently given new files. In Add/Edit configuration, explicitly
+select **Create a board-matched default overlay if one is missing** to review the new file and CMake patch.
+Existing matching overlays retain user edits; conflicting files are never overwritten.
 
 For standalone builds, `ZEPHYR_UTILS_DEFAULT_OVERLAY` records whether the default is
 enabled. Use a new build directory when changing overlay selection; alternatively set
@@ -319,7 +371,7 @@ selection for subsequent explicit build choices.
 | Toolchain | Explicit discovered Zephyr SDK with installed GNU compiler components |
 | Local tools | Selected Python environment, CMake and Ninja; discovered dtc when available |
 | Configuration | Named target/SDK selections with automatic, appended or replacement Kconfig/overlay file lists |
-| Output | Fresh directory per attempt; no automatic pristine, flashing, installation or workspace update |
+| Output | Fresh by default; explicit verified reuse and reviewed managed-output cleanup; no flashing, installation or workspace update |
 
 Application names start with a letter and contain at most 64 letters, digits,
 underscores or hyphens. Destinations must be inside the selected workspace and outside
@@ -368,7 +420,9 @@ profile persistence fails, the error identifies the created application path; it
 independent source files remain there.
 
 Build preview hashes bounded application inputs outside `build/` and `.git/`, records
-source/build-parent directory identity and chooses an unused output path. These checks
+source/build-parent directory identity and chooses an unused output path for a fresh
+operation. Reuse additionally captures and rechecks the selected output identity and
+CMake/cache evidence. These checks
 run again before execution. An edited source, replaced directory, symlink or newly
 occupied output requires another preview. Failure and cancellation retain partial build
 output. Applications changed during execution are marked stale in the recorded context.
@@ -389,9 +443,17 @@ not accepted back from an edited browser payload.
 | `POST /api/projects/create` | `{workspace, plan_id}` | HTTP 202 shared create job; completed result contains `project` |
 | `POST /api/projects/configuration-files` | `{workspace, project_id}` | `{workspace, project_id, files: {kconfig, overlays}, diagnostics}`; bounded read-only relative-path catalogue |
 | `POST /api/projects/configurations` | `{workspace, project_id, name, board_id, target, sdk_id, fragments?}` | `{configuration}`; saves metadata only |
-| `POST /api/projects/build-preview` | `{workspace, project_id, operation, configuration_id?}` | `{plan}` with selected configuration/profile, operation, exact fresh `build_dir`, recipe and source identities |
+| `POST /api/projects/build-preview` | `{workspace, project_id, operation, configuration_id?, reuse_attempt_id?}` | `{plan}` with selected configuration/profile, operation, exact `build_dir`, fresh/reuse mode, recipe and source/output identities |
 | `POST /api/projects/build` | `{workspace, build_plan_id}` | HTTP 202 shared job; successful result contains `attempt` |
-| `POST /api/projects/remove` | `{workspace, project_id}` | `{removed: project_id}`; removes registration, configurations and attempt records, preserving source/build files |
+| `POST /api/projects/import-preview` | `{workspace, name, path, board_id, target, sdk_id}` | `{plan}` with reviewed existing sources, profile and registration warnings; no execution or source writes |
+| `POST /api/projects/import` | `{workspace, plan_id}` | `{project}`; registers the reviewed application |
+| `POST /api/projects/reconnect-preview` | `{workspace, project_id, path}` | `{plan}` with old/new location, source differences and retained history warning |
+| `POST /api/projects/reconnect` | `{workspace, plan_id}` | `{project}`; updates location only |
+| `POST /api/projects/configurations/preview` | `{workspace, project_id, configuration_id?, name, board_id?, target?, sdk_id?, fragments?, create_default_overlay?, expected_revision?}` | `{plan}`; omit configuration ID for new, empty ID for Original, named ID for edit |
+| `POST /api/projects/configurations/apply` | `{workspace, plan_id}` | `{configuration, project}`; applies only the retained reviewed changes |
+| `POST /api/projects/outputs/preview` | `{workspace, project_id, attempt_id? or output_id?}` | `{plan}` with exact managed path, bounded inventory and affected attempts |
+| `POST /api/projects/outputs/clean` | `{workspace, plan_id}` | HTTP 202 cleanup job; result `{cleaned, output_id, attempt_ids}` |
+| `POST /api/projects/remove` | `{workspace, project_id}` | `{removed: project_id}`; removes registration, configurations, attempt and output records, preserving source/build files |
 | `POST /api/projects/configurations/remove` | `{workspace, project_id, configuration_id}` | `{removed: configuration_id}`; removes a named choice, preserving captured attempts |
 | `POST /api/projects/attempts/remove` | `{workspace, project_id, attempt_id}` | `{removed: attempt_id}`; removes history, preserving build output |
 | `GET /api/jobs/:id` | None | Shared progress, logs and outcome |
@@ -470,6 +532,7 @@ Project, configuration and attempt records are feature-owned JSON under
   projects/<project-id>.json
   configurations/<configuration-id>.json
   attempts/<attempt-id>.json
+  outputs/<output-owner-id>.json
 ```
 
 | Record | Main fields |
@@ -481,13 +544,16 @@ Project, configuration and attempt records are feature-owned JSON under
 | Captured context | Requested/effective target, revision/qualifiers, compiler/SDK, source/build paths, automatic configuration and DTS input paths when reported, freshness/coverage |
 | Artifact reference | Kind, live path, SHA-256, size, availability and generated evidence |
 
-The store preserves immutable project definitions and atomically updates an attempt
-from running to its terminal outcome. Unknown schema versions are rejected without
+The store preserves initial creation provenance and atomically updates an attempt
+from running to its terminal outcome. Imported and edited project/configuration records
+use schema version 2 with compare-and-swap revisions; existing version-1 records are
+readable without an opening-time migration. Original profile edits retain `initial_profile`.
+Output ownership uses separate version-1 records and survives attempt-history removal. Unknown schema versions are rejected without
 replacing existing records. A previously running attempt with no active
 server job appears as `interrupted` after restart; it is not automatically resumed.
 
-The optional configuration directory is additive. Existing project records retain their
-original profile without migration. Earlier attempts without configuration/profile
+The optional configuration and output directories are additive. Existing project records
+retain their original profile until explicitly edited. Earlier attempts without configuration/profile
 fields stay readable; their saved commands and context remain the evidence for that run.
 See [ADR 0010](decisions/0010-named-build-configurations.md).
 

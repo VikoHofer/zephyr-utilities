@@ -535,6 +535,11 @@ Memory's current snapshots and compatibility endpoints still pass regression che
 
 ### P4 Add controlled configuration editing
 
+Everyday management is available: reviewed import and folder reconnection, editing
+named/Original build selections, optional board-matched default-overlay creation,
+verified incremental output reuse and reviewed cleanup with retained history. See
+[ADR 0017](decisions/0017-project-management-and-build-outputs.md).
+
 First slice implemented: saved applications have named exact-target/installed-SDK
 configurations. Saving writes metadata only; Configure/Build reviews and executes the
 selected captured profile in fresh outputs. Original project profiles and earlier

@@ -17,6 +17,7 @@ import yaml
 
 from .probing import check_cancel
 from .fragments import fragment_arguments
+from .creation import path_identity, validate_identity
 
 
 MAX_LOG_BYTES = 16 * 1024 * 1024
@@ -348,7 +349,7 @@ def capture_context(profile, source_dir, build_dir, *, configured=False):
 
 
 def execute_build(profile, source_dir, build_dir, operation, *, environ=None, emit=None, cancel=None,
-                  after_configure=None):
+                  after_configure=None, reuse_identity=None, on_output_ready=None):
     """Reserve a fresh output and configure, optionally compile; preserve failed attempt evidence."""
     if os.name != "posix":
         raise ValueError("Project build execution is currently supported on Linux/POSIX hosts only.")
@@ -357,13 +358,20 @@ def execute_build(profile, source_dir, build_dir, operation, *, environ=None, em
     recipe = command_recipe(profile, source_dir, build_dir, environ=environ)
     identities = {path: _directory_identity(path) for path in (str(source_dir), recipe["cwd"])}
     check_cancel(cancel)
-    identities[str(build_dir)] = _reserve_output(build_dir)
+    if reuse_identity is None:
+        identities[str(build_dir)] = _reserve_output(build_dir)
+    else:
+        validate_identity(build_dir, reuse_identity)
+        identities[str(build_dir)] = _directory_identity(build_dir)
     emit = emit or (lambda message: None)
     result = {"schema_version": 1, "operation": operation, "recipe": recipe, "status": "failed",
-              "started_at": datetime.now(timezone.utc).isoformat(), "context": {}, "artifacts": [], "diagnostics": []}
+              "started_at": datetime.now(timezone.utc).isoformat(), "context": {}, "artifacts": [], "diagnostics": [],
+              "output_identity": path_identity(build_dir), "reuse": reuse_identity is not None}
     configured = False
     deadline = time.monotonic() + BUILD_TIMEOUT
     try:
+        if on_output_ready is not None:
+            on_output_ready(result["output_identity"])
         for step in (["configure", "build"] if operation == "build" else ["configure"]):
             for path, identity in identities.items():
                 if _directory_identity(path) != identity:

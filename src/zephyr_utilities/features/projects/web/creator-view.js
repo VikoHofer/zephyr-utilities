@@ -4,31 +4,11 @@ import {createConfigurationView} from "./configuration-view.js";
 import {appendFragmentFacts} from "./fragment-view.js";
 import {isLocalSample, selectedSample, sampleSelectionError, sampleCheckSelection, sampleCompatibilityNotice, currentSampleCompatibility} from "./sample-state.js";
 import {createOverlayView} from "./overlay-view.js";
+import {createManagementView} from "./management-view.js";
+import {createOutputView} from "./output-view.js";
+import {createReviewDialog} from "./review-dialog.js";
 
-/** A review opens only after an explicit request; refreshes can only invalidate it. */
-export function createReviewDialog(dialog) {
-  let shown;
-  let returnFocus;
-  function close({restoreFocus = true} = {}) {
-    const wasOpen = dialog.open;
-    if (wasOpen) dialog.close();
-    shown = null;
-    const control = typeof returnFocus === "function" ? returnFocus() : returnFocus;
-    returnFocus = null;
-    if (wasOpen && restoreFocus && control?.isConnected && !control.disabled && !control.closest("[hidden]")) control.focus({preventScroll: true});
-  }
-  return {
-    show(plan, trigger) {
-      if (!plan || dialog.open) return;
-      shown = plan.id;
-      returnFocus = trigger;
-      for (const details of dialog.querySelectorAll("details")) details.open = false;
-      dialog.showModal();
-    },
-    sync(plan, visible) { if (!plan || !visible || shown && shown !== plan.id) close(); },
-    close,
-  };
-}
+export {createReviewDialog} from "./review-dialog.js";
 
 /** Bound a requested result reveal to its navigation and one refresh. */
 export function createResultNavigation({workspace, view, disposed, find, reveal, refresh, error, notify}) {
@@ -88,6 +68,8 @@ export function mountCreator(root, context) {
       const job = array(state.jobs).find((item) => item.id === id);
       const attemptId = job?.metadata?.attempt_id;
       const projectId = job?.result?.project?.id || job?.project?.id;
+      const outputId = job?.result?.output_id || job?.metadata?.output_id;
+      if (outputId) return [...root.querySelectorAll("[data-output-record]")].find((item) => item.dataset.outputRecord === outputId);
       return attemptId
         ? [...root.querySelectorAll("[data-disclosure]")].find((item) => item.dataset.disclosure === `attempt:${attemptId}`)
         : [...root.querySelectorAll("[data-saved-project]")].find((item) => item.dataset.savedProject === projectId);
@@ -125,6 +107,14 @@ export function mountCreator(root, context) {
   }
   const configurations = createConfigurationView({node, fact, choices});
   const overlays = createOverlayView({node});
+  const outputs = createOutputView({node});
+  const management = createManagementView({root, context, state, session: () => session, node, fact, choices,
+    onApplied: (kind, fields) => {
+      if (kind === "clean") { showProgress(); return; }
+      const projectId = fields.project_id || state.projects?.[0]?.id;
+      const card = [...root.querySelectorAll("[data-saved-project]")].find((item) => item.dataset.savedProject === projectId);
+      if (card) context.reveal?.(card);
+    }});
   function recipe(parent, value, operation, key = "recipe") {
     parent.replaceChildren();
     if (!value) { parent.append(node("p", "projects-muted", "Commands are unavailable. Generate a new preview.")); return; }
@@ -286,6 +276,10 @@ export function mountCreator(root, context) {
     remove.type = "button"; remove.dataset.projectRemove = projectId;
     return remove;
   }
+  function reconnectButton(projectId) {
+    const button = node("button", "projects-button", "Reconnect folder"); button.type = "button"; button.dataset.projectReconnect = projectId;
+    return button;
+  }
   function renderAttempt(parent, attempt, projectId, overlayReport) {
     const detail = node("details", "projects-attempt");
     const key = `attempt:${attempt.id}`;
@@ -301,7 +295,9 @@ export function mountCreator(root, context) {
     }
     fact(facts, "Output directory", attempt.build_dir || attempt.context?.build_dir || attempt.context?.build_directory, true);
     fact(facts, "Effective target", attempt.context?.effective_target || attempt.context?.target || attempt.context?.board, true);
+    fact(facts, "Output files", attempt.output_state || "Unknown");
     detail.append(facts);
+    if (attempt.reason || attempt.output_reason) detail.append(node("p", "projects-muted", attempt.reason || attempt.output_reason));
     const overlayDetails = node("div");
     overlays.render(overlayDetails, overlayReport, {target: attempt.profile?.target, freshness: attempt.context?.application_freshness, disclosureKey: key});
     detail.append(overlayDetails);
@@ -360,21 +356,25 @@ export function mountCreator(root, context) {
         if (project.sample) card.append(disclosure("Sample provenance", `project:${project.id}:sample`, node("pre", "", JSON.stringify(project.sample, null, 2))));
         card.append(configurations.create(project));
         const actions = node("div", "projects-actions");
-        for (const [operation, label] of [["configure", "Configure"], ["build", "Build"]]) {
+        for (const [operation, label] of [["configure", "Configure fresh"], ["build", "Build fresh"]]) {
           const button = node("button", `projects-button${operation === "build" ? " primary" : ""}`, label); button.type = "button"; button.dataset.projectId = project.id; button.dataset.buildOperation = operation; actions.append(button);
         }
         const sources = node("a", "projects-button", "Browse sources");
         sources.href = `#/inspector/application/${encodeURIComponent(project.path)}`;
-        actions.append(removalButton(project.id));
+        if (array(project.build_outputs).length) {
+          const manage = node("button", "projects-button", "Manage outputs"); manage.type = "button"; manage.dataset.outputsOpen = project.id; actions.append(manage);
+        }
+        actions.append(reconnectButton(project.id), removalButton(project.id));
         card.append(actions);
         card.append(disclosure("Advanced details", `project:${project.id}:advanced`,
           node("p", "projects-muted", "Open current source and binding details in Build Inspector."), sources));
         for (const attempt of array(project.attempts)) renderAttempt(card, attempt, project.id, project.overlay_usage_by_attempt?.[attempt.id]);
+        const outputList = outputs.create(project); if (outputList) card.append(outputList);
         target.append(card);
       }
       if (unavailable.length) {
         const hidden = disclosure(`Unavailable saved applications (${unavailable.length})`, "unavailable-applications",
-          node("p", "projects-muted", "These saved locations are missing or now contain a different folder. Restore the original folder to its saved location, or remove its saved entry and history here."));
+          node("p", "projects-muted", "These saved locations are missing or now contain a different folder. Reconnect a folder to its current location, restore the original folder, or remove its saved entry and history here."));
         hidden.classList.add("projects-unavailable");
         for (const project of unavailable) {
           const card = node("article", "projects-created-app");
@@ -382,8 +382,9 @@ export function mountCreator(root, context) {
           card.append(node("h3", "", project.name), node("p", "projects-path", project.path),
             node("p", "projects-muted", `Created ${time(project.created_at)}`),
             node("p", "projects-banner", project.availability_reason || (project.availability === "replaced" ? "This folder was replaced." : "This folder is missing or was moved.")),
-            removalButton(project.id));
+            reconnectButton(project.id), removalButton(project.id));
           for (const attempt of array(project.attempts)) renderAttempt(card, attempt, project.id, project.overlay_usage_by_attempt?.[attempt.id]);
+          const outputList = outputs.create(project); if (outputList) card.append(outputList);
           hidden.append(card);
         }
         target.append(hidden);
@@ -396,6 +397,7 @@ export function mountCreator(root, context) {
     }
     for (const button of target.querySelectorAll("[data-build-operation]")) button.disabled = busy;
     for (const button of target.querySelectorAll("[data-project-remove], [data-attempt-remove]")) button.disabled = busy;
+    for (const button of target.querySelectorAll("[data-project-reconnect], [data-reuse-operation], [data-output-clean]")) button.disabled = busy;
     configurations.restoreFocus(target, focus);
   }
   function renderBuildPlan() {
@@ -405,6 +407,7 @@ export function mountCreator(root, context) {
     renderedBuildPlan = plan;
     if (!plan) return;
     $("build-preview-title").textContent = plan.operation === "configure" ? "Configure application" : "Configure and build application";
+    $("build-preview-note").textContent = `This runs the selected local application and Zephyr CMake code. ${plan.reuse ? "This updates the selected managed output directory. Other build directories are preserved." : "Existing build directories are preserved."}`;
     recipe($("build-preview-recipe"), plan.recipe, plan.operation);
     const facts = node("dl", "projects-identity");
     fact(facts, "Application", array(state.projects).find((project) => project.id === plan.project_id)?.name);
@@ -413,7 +416,8 @@ export function mountCreator(root, context) {
     fact(facts, "SDK installation", plan.profile?.sdk?.path, true);
     appendFragmentFacts(facts, plan.profile, fact);
     overlays.render($("build-preview-overlays"), plan.overlay_usage, {target: plan.profile?.target, disclosureKey: "build-preview"});
-    $("build-preview-summary").replaceChildren(facts, node("p", "projects-path", `New output directory: ${plan.build_dir}`));
+    $("build-preview-summary").replaceChildren(facts, node("p", "projects-path", `${plan.reuse ? "Reuse output directory" : "New output directory"}: ${plan.build_dir}`));
+    if (plan.reuse) $("build-preview-summary").append(node("p", "projects-banner", "This reuses and updates existing managed outputs. Earlier attempts retain their recorded evidence but share the live output files."));
     if (plan.sample_compatibility) {
       const compatibility = node("div", "projects-compatibility"); compatibility.dataset.status = plan.sample_compatibility.status;
       compatibility.append(node("h3", "", compatibilityTitle(plan.sample_compatibility.status)), node("p", "", plan.sample_compatibility.message));
@@ -426,13 +430,13 @@ export function mountCreator(root, context) {
     const job = currentCreatorJob(state);
     $("creator-job").hidden = !job;
     if (!job) return;
-    const operation = {create: "Create application", configure: "Configure", build: "Build"}[job.metadata?.operation] || "Project operation";
+    const operation = {create: "Create application", configure: "Configure", build: "Build", "clean-output": "Output cleanup"}[job.metadata?.operation] || "Project operation";
     const status = {queued: "queued", running: "running", completed: "complete", failed: "failed", cancelled: "cancelled"}[job.status] || job.status;
     $("creator-job-title").textContent = `${operation} ${status}`;
-    $("creator-job-status").textContent = activeJob(job) ? "You can leave this view while the operation continues in its captured workspace." : job.error || (job.status === "completed" ? "Review the saved application or attempt in Applications." : "Partial output, if any, is retained with this attempt.");
+    $("creator-job-status").textContent = activeJob(job) ? "You can leave this view while the operation continues in its captured workspace." : job.error || (job.metadata?.operation === "clean-output" ? "Review the managed output state below. Recorded attempt history is retained." : job.status === "completed" ? "Review the saved application or attempt in Applications." : "Partial output, if any, is retained with this attempt.");
     $("creator-job-applications").hidden = job.metadata?.operation !== "create" || job.status !== "completed";
-    $("creator-job-result").hidden = job.metadata?.operation === "create" || activeJob(job) || !job.metadata?.attempt_id;
-    $("creator-job-result").textContent = job.status === "completed" ? "View build result" : "View attempt details";
+    $("creator-job-result").hidden = job.metadata?.operation === "create" || activeJob(job) || !job.metadata?.attempt_id && job.metadata?.operation !== "clean-output";
+    $("creator-job-result").textContent = job.metadata?.operation === "clean-output" ? "View output state" : job.status === "completed" ? "View build result" : "View attempt details";
     $("creator-logs").textContent = array(job.logs).join("\n") || "No log messages yet.";
     $("creator-cancel").hidden = !activeJob(job); $("creator-cancel").disabled = state.cancelling;
     $("creator-cancel").textContent = state.cancelling ? "Cancelling…" : "Cancel operation";
@@ -456,7 +460,7 @@ export function mountCreator(root, context) {
     $("creator-intro").textContent = creating ? "Choose a template, destination, board and SDK, then review the files before creation." : "Choose an application's build configuration, configure it or start a build.";
     $("creator-page-link").textContent = creating ? "View applications" : "Create application";
     $("creator-page-link").href = creating ? "#/projects/applications" : "#/projects/create";
-    $("creator-scope").textContent = creating ? "Creation writes the files you review. Configure or build the new app from Applications when you are ready." : "Configure and Build each use a new output directory and a separate command review. Neither action flashes hardware.";
+    $("creator-scope").textContent = creating ? "Creation writes the files you review. Configure or build the new app from Applications when you are ready." : "Use fresh outputs or review reuse of a managed output directory. Configure, Build and output cleanup each require a separate review. No action flashes hardware.";
     $("creator-form").hidden = !creating;
     $("creator-applications").hidden = creating;
     $("creator-workspace").textContent = state.workspace || context.workspace.path;
@@ -479,10 +483,12 @@ export function mountCreator(root, context) {
     for (const button of root.querySelectorAll("[data-review-close]")) button.disabled = state.busy === "create" || state.busy === "build";
     $("creator-refresh").disabled = Boolean(state.loading || state.busy);
     $("creator-refresh").textContent = state.loading ? "Refreshing…" : "Refresh list";
+    $("creator-import").disabled = busy;
     renderPlan(); renderJob(); renderProjects(busy); renderBuildPlan();
     const diagnostics = $("creator-diagnostics"); diagnostics.replaceChildren();
     for (const item of array(state.diagnostics)) diagnostics.append(node("p", "projects-banner", item.message || item));
     resultNavigation.show();
+    management.render();
   }
   const listen = (element, event, callback) => element.addEventListener(event, callback, {signal: lifetime.signal});
   async function perform(action, {pending, after} = {}) {
@@ -519,6 +525,7 @@ export function mountCreator(root, context) {
   listen($("build-start"), "click", () => launch(() => session.build()));
   listen($("creator-cancel"), "click", () => perform(() => session.cancel(), {after: () => context.notify?.("Cancellation requested.")}));
   listen($("creator-refresh"), "click", () => perform(() => session.refresh(), {after: () => context.notify?.("Application list refreshed.")}));
+  listen($("creator-import"), "click", () => management.open("import", {path: "", name: "", search: "", board_id: state.form.board_id || "", target: state.form.target || "", sdk_id: state.form.sdk_id || ""}, {}, () => $("creator-import")));
   listen($("samples-refresh"), "click", () => perform(() => session.loadSamples(), {after: () => {
     const error = state.sampleCatalogue?.error;
     context.notify?.(error || "Local sample list refreshed.", Boolean(error));
@@ -554,7 +561,7 @@ export function mountCreator(root, context) {
       if (!project) return;
       let removed = false;
       if (remove.hasAttribute("data-project-remove")) {
-        if (!window.confirm(`Remove saved application “${project.name}” at ${project.path}, including its saved configurations and build history?\n\nApplication and build files remain on disk. This removes the saved entry from Utilities.`)) return;
+        if (!window.confirm(`Remove saved application “${project.name}” at ${project.path}, including its saved configurations, build history and managed-output records?\n\nApplication and build files remain on disk. Use Manage outputs first if you want to clean build files before removing the saved application.`)) return;
         removed = await perform(() => session.removeProject(projectId));
       } else if (remove.hasAttribute("data-configuration-remove")) {
         const configuration = array(project.configurations).find((item) => item.id === remove.dataset.configurationId);
@@ -579,11 +586,46 @@ export function mountCreator(root, context) {
       const trigger = () => [...root.querySelectorAll("[data-build-operation]")].find((item) => item.dataset.projectId === projectId && item.dataset.buildOperation === operation);
       perform(() => session.previewBuild(projectId, operation), {pending: "Preparing operation review…", after: () => buildReview.show(state.buildPlan, trigger)});
     }
+    const reconnect = event.target.closest("[data-project-reconnect]");
+    if (reconnect && !reconnect.disabled) {
+      const projectId = reconnect.dataset.projectReconnect;
+      const project = [...array(state.projects), ...array(state.unavailableProjects)].find((item) => item.id === projectId);
+      if (project) management.open("reconnect", {project_id: projectId, path: project.path}, {}, () => [...root.querySelectorAll("[data-project-reconnect]")].find((item) => item.dataset.projectReconnect === projectId));
+    }
+    const showOutputs = event.target.closest("[data-outputs-open]");
+    if (showOutputs) {
+      const detail = [...root.querySelectorAll("[data-project-outputs]")].find((item) => item.dataset.projectOutputs === showOutputs.dataset.outputsOpen);
+      if (detail) { detail.open = true; context.reveal?.(detail); }
+    }
+    const clean = event.target.closest("[data-output-clean]");
+    if (clean && !clean.disabled) management.open("clean", {project_id: clean.dataset.projectId, output_id: clean.dataset.outputClean}, {},
+      () => [...root.querySelectorAll("[data-output-clean]")].find((item) => item.dataset.outputClean === clean.dataset.outputClean));
+    const reuse = event.target.closest("[data-reuse-operation]");
+    if (reuse && !reuse.disabled) {
+      const project = array(state.projects).find((item) => item.id === reuse.dataset.projectId);
+      const attempt = array(project?.attempts).find((item) => item.id === reuse.dataset.attemptId);
+      if (!attempt || attempt.configuration?.id && !array(project.configurations).some((item) => item.id === attempt.configuration.id)) {
+        context.notify?.("This output has no matching saved configuration and attempt for reuse. Refresh the list or review a fresh build.", true);
+        return;
+      }
+      if (attempt) {
+        session.selectConfiguration(project.id, attempt.configuration?.id || "");
+        const trigger = () => [...root.querySelectorAll("[data-reuse-operation]")].find((item) => item.dataset.attemptId === attempt.id && item.dataset.reuseOperation === reuse.dataset.reuseOperation);
+        perform(() => session.previewBuild(project.id, reuse.dataset.reuseOperation, attempt.id), {pending: "Preparing reuse review…", after: () => buildReview.show(state.buildPlan, trigger)});
+      }
+    }
     const add = event.target.closest("[data-configuration-add]");
     if (add && root.contains(add)) {
       session.editConfiguration(add.dataset.configurationAdd);
       context.reveal?.(add.closest("[data-configuration-project]").querySelector("[data-configuration-form]"), {focus: false});
       add.closest("[data-configuration-project]").querySelector('[data-configuration-field="name"]').focus({preventScroll: true});
+    }
+    const edit = event.target.closest("[data-configuration-edit]");
+    if (edit && !edit.disabled) {
+      session.editConfiguration(edit.dataset.configurationEdit, {editSelected: true});
+      const form = edit.closest("[data-configuration-project]").querySelector("[data-configuration-form]");
+      context.reveal?.(form, {focus: false});
+      form.querySelector('[data-configuration-field="name"]:not(:disabled), [data-configuration-field="search"]')?.focus({preventScroll: true});
     }
     const close = event.target.closest("[data-configuration-close]");
     if (close && root.contains(close)) {
@@ -609,23 +651,20 @@ export function mountCreator(root, context) {
   listen($("created-projects"), "change", (event) => {
     const input = event.target;
     if (input.matches("[data-configuration-select]")) session.selectConfiguration(input.dataset.configurationSelect, input.value);
-    else if (input.matches("select[data-configuration-field]")) session.changeConfigurationField(input.closest("[data-configuration-form]").dataset.configurationForm, input.dataset.configurationField, input.value);
+    else if (input.matches("select[data-configuration-field], input[type='checkbox'][data-configuration-field]")) session.changeConfigurationField(input.closest("[data-configuration-form]").dataset.configurationForm, input.dataset.configurationField, input.type === "checkbox" ? input.checked : input.value);
     else if (input.matches("[data-fragment-mode]")) session.changeFragment(input.closest("[data-configuration-form]").dataset.configurationForm, input.dataset.fragmentMode, "mode", input.value);
     else if (input.matches("[data-fragment-available]")) render();
   });
   listen($("created-projects"), "input", (event) => {
     const input = event.target;
-    if (input.matches("input[data-configuration-field]")) session.changeConfigurationField(input.closest("[data-configuration-form]").dataset.configurationForm, input.dataset.configurationField, input.value);
+    if (input.matches("input[data-configuration-field]:not([type='checkbox'])")) session.changeConfigurationField(input.closest("[data-configuration-form]").dataset.configurationForm, input.dataset.configurationField, input.value);
   });
   listen($("created-projects"), "submit", async (event) => {
     const form = event.target.closest("[data-configuration-form]");
     if (!form) return;
     event.preventDefault();
     const projectId = form.dataset.configurationForm;
-    await perform(() => session.saveConfiguration(projectId), {pending: "Saving build configuration…", after: () => context.notify?.(state.configurationNotice?.message || "Configuration saved.")});
-    if (!disposed && state.configurationNotice?.project_id === projectId && !state.configurationEditor) {
-      [...root.querySelectorAll("[data-configuration-select]")].find((input) => input.dataset.configurationSelect === projectId)?.focus();
-    }
+    await management.previewConfiguration(projectId, () => [...root.querySelectorAll("[data-configuration-form]")].find((item) => item.dataset.configurationForm === projectId)?.querySelector("[data-configuration-save]"));
   });
   session = createCreatorSession({api: context.api, state, workspace: () => context.workspace.path, isCreating: () => view === "create", onChange: render, pendingBoard: () => {
     const pending = context.state.creatorPendingBoard;
@@ -647,6 +686,6 @@ export function mountCreator(root, context) {
       else if (view === "create") session.tick().then(() => session.ensureSamples());
       else session.tick();
     },
-    dispose() { disposed = true; lifetime.abort(); creationReview.close({restoreFocus: false}); buildReview.close({restoreFocus: false}); session.dispose(); },
+    dispose() { disposed = true; lifetime.abort(); creationReview.close({restoreFocus: false}); buildReview.close({restoreFocus: false}); management.dispose(); session.dispose(); },
   };
 }

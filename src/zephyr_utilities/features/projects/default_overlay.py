@@ -57,6 +57,43 @@ def default_overlay(target):
             "cmake_block_sha256": _sha(_cmake_block(target, path))}
 
 
+def project_default_overlays(project):
+    values = [project.get("default_overlay"), *project.get("default_overlays", [])]
+    result = []
+    for value in values:
+        if isinstance(value, dict) and value not in result:
+            result.append(value)
+    return result
+
+
+def project_default_overlay(project, profile):
+    return next((item for item in project_default_overlays(project) if item.get("target") == profile.get("target")), None)
+
+
+def extend_default_overlays(contents, target, existing=()):
+    """Add another exact-target block while retaining the reviewed previous blocks."""
+    cmake = contents.get("CMakeLists.txt")
+    if not isinstance(cmake, str):
+        raise ValueError("The application needs a readable root CMakeLists.txt.")
+    stripped = cmake
+    for value in existing:
+        expected = default_overlay(value.get("target"))
+        if value != expected:
+            raise ValueError("The saved default overlay format is unsupported. Existing files were preserved.")
+        block = _cmake_block(expected["target"], expected["path"])
+        if stripped.count(block) != 1:
+            raise ValueError("A generated overlay CMake block changed. Review it externally before adding another default overlay.")
+        stripped = stripped.replace(block, "", 1)
+    updated, metadata = add_default_overlay({**contents, "CMakeLists.txt": stripped}, target)
+    new_block = _cmake_block(target, metadata["path"])
+    # Insert the new block without relocating or rewriting any existing block.
+    minimum = re.search(r"(?m)^[ \t]*cmake_minimum_required\(\s*VERSION\s+\d+\.\d+(?:\.\d+)?\s*\)"
+                        r"[ \t]*(?:\#[^\r\n]*)?(?:\r?\n|$)", cmake)
+    position = minimum.end()
+    updated["CMakeLists.txt"] = cmake[:position] + new_block + cmake[position:]
+    return updated, metadata
+
+
 def add_default_overlay(contents, target, *, archive_cmake=False):
     """Add the no-op overlay and a bounded CMake block; never replace existing paths."""
     metadata = default_overlay(target)

@@ -12,7 +12,7 @@ from unittest.mock import patch
 from test_project_samples import sample_fixture
 from test_sample_adaptations import rgb_fixture
 from zephyr_utilities.features.projects import sample_adaptations
-from zephyr_utilities.features.projects.default_overlay import ARCHIVED_CMAKE, add_default_overlay, default_overlay
+from zephyr_utilities.features.projects.default_overlay import ARCHIVED_CMAKE, add_default_overlay, default_overlay, extend_default_overlays
 from zephyr_utilities.features.projects.samples import preview_sample, validate_sample_plan
 from zephyr_utilities.features.projects.templates import render_template, select_template, template_paths, validate_template
 
@@ -188,3 +188,20 @@ class DefaultOverlayCmakeTests(unittest.TestCase):
         build = self.root / "existing"
         self.assertTrue(self.configure(build)[1])
         self.assertEqual(self.configure(build, "-DZEPHYR_UTILS_DEFAULT_OVERLAY=OFF")[1], [])
+
+    def test_extending_a_moved_intact_block_preserves_it_and_both_targets_configure(self):
+        contents = {str(path.relative_to(self.source)): path.read_text()
+                    for path in self.source.rglob("*") if path.is_file()}
+        minimum, rest = contents["CMakeLists.txt"].split("\n", 1)
+        previous_block, remainder = rest.split("find_package", 1)
+        # Moving the existing block is valid CMake and does not edit its bytes.
+        contents["CMakeLists.txt"] = previous_block + minimum + "\nfind_package" + remainder
+        updated, second = extend_default_overlays(contents, "other/chip", [self.descriptor])
+        self.assertIn(previous_block, updated["CMakeLists.txt"])
+        self.assertTrue(updated["CMakeLists.txt"].startswith(previous_block + minimum + "\n"))
+        for name, content in updated.items():
+            path = self.source / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content)
+        self.assertEqual(self.configure(self.root / "original-target")[1], [str(self.source / self.descriptor["path"])])
+        self.assertEqual(self.configure(self.root / "second-target", target="other/chip")[1], [str(self.source / second["path"])])

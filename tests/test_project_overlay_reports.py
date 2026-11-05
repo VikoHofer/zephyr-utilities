@@ -69,7 +69,8 @@ class ProjectOverlayReportTests(unittest.TestCase):
         self.assertEqual(rows["boards/other_chip.overlay"]["state"], "not_used")
         self.assertNotEqual(current["overlay_usage_by_configuration"][alternate["id"]]["status"], "confirmed")
         self.assertEqual(current["overlay_usage_by_attempt"][attempt["id"]], report)
-        self.assertEqual(current["attempts"], [attempt])
+        self.assertEqual({key: current["attempts"][0][key] for key in attempt}, attempt)
+        self.assertEqual(current["attempts"][0]["output_state"], "unmanaged")
         self.assertEqual(records, {path: path.read_bytes() for path in records})
 
     def test_build_review_uses_current_files_and_explicit_replacement(self):

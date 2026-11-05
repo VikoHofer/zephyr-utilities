@@ -223,7 +223,7 @@ class CreatorServiceTests(unittest.TestCase):
             moved.rename(source)
             restored = self.call("GET", "creator").data["projects"]
             self.assertEqual([item["id"] for item in restored], [project["id"]])
-            self.assertEqual(restored[0]["attempts"], [attempt])
+            self.assertEqual({key: restored[0]["attempts"][0][key] for key in attempt}, attempt)
             execute.assert_not_called()
         self.analyze.assert_not_called()
         self.assertEqual({path: path.read_bytes() for path in records}, records)

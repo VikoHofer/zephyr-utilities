@@ -43,10 +43,19 @@ def _default(value, cmake):
         return None, cmake, False
     if cmake is None:
         return expected, cmake, True
-    block = re.search(r"\n# Zephyr Utilities: retain automatic overlays and add this application's editable overlay\.\n"
-                      r".*?# End Zephyr Utilities default overlay\.\n\n", cmake, re.DOTALL)
-    valid = block is not None and hashlib.sha256(block[0].encode()).hexdigest() == expected["cmake_block_sha256"]
-    return expected, cmake[:block.start()] + cmake[block.end():] if valid else cmake, valid
+    blocks = list(re.finditer(r"\n# Zephyr Utilities: retain automatic overlays and add this application's editable overlay\.\n"
+                              r".*?# End Zephyr Utilities default overlay\.\n\n", cmake, re.DOTALL))
+    selected = False
+    for block in reversed(blocks):
+        match = re.search(r'if\(ZEPHYR_UTILS_DEFAULT_OVERLAY AND "\$\{BOARD\}" STREQUAL "([^"]+)"\)', block[0])
+        try:
+            known = default_overlay_metadata(match[1]) if match else None
+        except ValueError:
+            known = None
+        if known and hashlib.sha256(block[0].encode()).hexdigest() == known["cmake_block_sha256"]:
+            selected |= known == expected
+            cmake = cmake[:block.start()] + cmake[block.end():]
+    return expected, cmake, selected
 
 
 def _simple_cmake(content):

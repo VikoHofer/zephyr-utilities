@@ -75,7 +75,7 @@ class ProjectLifecycleTests(unittest.TestCase):
             current = self.creator.current()
             self.assertEqual(current["projects"], [])
             self.assertEqual(current["unavailable_projects"][0]["id"], project["id"])
-            self.assertEqual(current["unavailable_projects"][0]["attempts"], [attempt])
+            self.assertEqual({key: current["unavailable_projects"][0]["attempts"][0][key] for key in attempt}, attempt)
             self.assertEqual(current["unavailable_projects"][0]["availability"], "replaced" if redirected else "missing")
         source.unlink()
         moved.rename(source)
@@ -144,7 +144,7 @@ class ProjectLifecycleTests(unittest.TestCase):
         self.assertEqual(self.remove(project, "configurations", configuration_id=saved["id"]), {"removed": saved["id"]})
         current = self.creator.current()["projects"][0]
         self.assertEqual(current["configurations"], [])
-        self.assertEqual(current["attempts"], [attempt])
+        self.assertEqual({key: current["attempts"][0][key] for key in attempt}, attempt)
         self.assertEqual(source_inputs(project["path"]), before_sources)
         with self.assertRaisesRegex(ValueError, "expired"):
             self.run_plan(plan)

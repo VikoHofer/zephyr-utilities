@@ -5,10 +5,11 @@ preferences and transient observations. Planned features do not create user data
 
 | Created item | Removal or reconciliation | Remaining limitation |
 | --- | --- | --- |
-| Application source directory | Move/delete with the file manager; Creator checks saved directory identity on open, focus and Refresh list | No source-folder deletion, registration relocation or existing-application import in Utilities |
+| Application source directory | Move/delete with the file manager; Creator checks saved directory identity on open, focus and Refresh list | Reviewed import/reconnect is available; source-folder deletion still uses the file manager |
 | Saved application registration | Remove saved application, including dependent configurations and attempt records; unavailable folders have a separate cleanup section | Removal has no in-app undo; source/build files stay on disk |
-| Named build configuration | Remove configuration; captured attempts retain their profile | Original is part of the registration; renaming remains planned |
-| Configure/build attempt history | Remove history entry after the operation finishes | Actual output directories, including partial builds, require file-manager cleanup |
+| Named build configuration | Remove configuration; captured attempts retain their profile | Named choices can be renamed/edited; Original keeps its reserved name but its profile can be updated |
+| Configure/build attempt history | Remove history entry after the operation finishes | Managed output records survive history removal; Clean output explicitly reviews and removes their directories |
+| Managed build output | Reviewed cleanup removes the owned tree and records a cleaned state; verified reuse records a new attempt and labels earlier shared output as superseded | Legacy outputs need ownership checks; cleanup errors may leave partial output requiring another review |
 | Creation/build preview | Consumed once, invalidated by relevant removal, expires after 30 minutes; bounded to 32 server plans | No persistent data to delete |
 | Memory snapshot / imported report / annotations | Existing Delete action removes the snapshot, raw reports and annotations; selection/comparison state reconciles | No in-app undo |
 | Content-addressed captured objects | Shared objects retained when a snapshot is deleted | Unreferenced object garbage collection is not implemented; surviving snapshots and active captures may share objects |

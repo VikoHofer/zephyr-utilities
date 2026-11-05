@@ -126,6 +126,14 @@
 .projects-feature .projects-overlay-note {font-size:10px;color:var(--app-muted);margin-top:8px;line-height:1.5}
 .projects-feature .projects-overlay-usage>details>summary {padding:6px 0}
 .projects-feature .projects-overlay-usage[data-overlay-status="unknown"] {border-left:3px solid var(--app-warning-border)}
+.projects-feature .projects-checkbox {display:flex;align-items:center;gap:10px;margin:18px 0 7px;font-size:12px}
+.projects-feature .projects-checkbox>input {width:auto;flex:0 0 auto;margin:0}
+.projects-feature .projects-management-effect {padding:12px 15px;border-left:3px solid var(--app-blue-border);background:var(--app-blue-soft);border-radius:0 5px 5px 0;margin:16px 0;font-size:12px}
+.projects-feature .projects-managed-outputs {margin-top:18px;padding:12px 15px;border:1px solid var(--app-border);border-radius:7px}
+.projects-feature .projects-output-record {padding:14px 0;border-top:1px solid var(--app-border);margin-top:12px}
+.projects-feature .projects-output-record>.projects-actions {margin-top:10px}
+.projects-feature [data-management-pending] {margin:14px 0;color:var(--app-muted)}
+.projects-feature [data-management-review] {margin-top:18px}
 .projects-feature .projects-preview-file {border-top:1px solid var(--app-border);padding:3px 0 10px}
 .projects-feature .projects-preview-file summary {font-size:11px}
 .projects-feature .projects-recipe {margin-top:13px}

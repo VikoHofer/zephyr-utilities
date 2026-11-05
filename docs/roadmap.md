@@ -93,7 +93,8 @@ P2 adds the first creator workflow:
 
 The source and README commands work without Utilities metadata. This release is Linux
 only, requires a resolved existing west workspace/module list, and keeps SDK installation,
-configuration fragment editing and project import deferred. The P3 inspection slice adds the
+visual configuration editing deferred. Reviewed import/reconnection, configuration
+updates, incremental reuse and owned build-output cleanup are available. The P3 inspection slice adds the
 read-only Device Tree handoff and verified-image Memory report handoff. See the
 [Project Creator guide](project-creator.md) and
 [ADR 0004](decisions/0004-reviewed-project-creation.md).
@@ -106,7 +107,9 @@ report handoff. Current source/binding navigation is available for inspected bui
 applications before configuration; deeper source attribution remains future work.
 The first P4 slice adds named board-target/SDK configurations to saved applications,
 with explicit selection for reviewed builds and captured selection in attempt history.
-Saving changes metadata only. Ordered Kconfig/overlay selection is also available with
+Reviewed configuration editing now supports renaming and refreshing target/SDK choices,
+with an explicit optional default-overlay patch. Import/reconnect retains history;
+managed build outputs support verified reuse and cleanup. Ordered Kconfig/overlay selection is also available with
 independent automatic, append and replacement modes, bounded app-local discovery and
 reviewed source checks. Visual overlay/hardware editing remains deferred until the
 creator workflow is ready.
