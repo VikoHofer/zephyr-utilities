@@ -12,6 +12,7 @@ from .core.http import Handler, Response, Router
 from .core.jobs import JobManager
 from .core.workspace import WorkspaceService, list_folders
 from .features import builtin_features
+from .features.projects.editor_context import ProjectsEditorContextProvider
 
 WEB_ROOT = Path(__file__).parent / "web"
 MIME_TYPES = {
@@ -34,6 +35,9 @@ class Application:
             for feature in self.features:
                 if feature.register:
                     feature.register(self.router, self.context)
+            creator = self.context.services.get("project_creator")
+            if creator is not None:
+                self.context.project_context = ProjectsEditorContextProvider(self.context, creator)
         except Exception:
             self.close()
             raise

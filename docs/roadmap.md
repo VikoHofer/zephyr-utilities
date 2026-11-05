@@ -70,9 +70,12 @@ depth remains deferred.
 
 D0 foundation is complete: the [editor contract](device-tree-editor-contract.md) fixes
 ownership, context/version proposals and source-preservation limits, with a tested
-in-memory literal-edit prototype. The editor remains planned; D1 next adds read-only
-project context loading through the existing application composition. See the
-[D0 handoff](device-tree-editor-d0-handoff.md) for evidence and remaining limits.
+in-memory literal-edit prototype. D1 adds read-only project/configuration context loading,
+overlay evidence and source inspection through an explicitly injected preview in the
+existing application. The built-in editor remains planned. See the
+[D0 handoff](device-tree-editor-d0-handoff.md) and [D1 handoff](device-tree-editor-d1-handoff.md)
+for evidence and remaining limits. D1 verification is complete; D2 next adds production
+source-preserving operations; visual mutations and saving remain later gates.
 
 The [Project Creator and environment analyser master plan](project-creator-masterplan.md)
 provides the earlier shared-context proposal; the editor master plan now defines its

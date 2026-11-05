@@ -1,18 +1,21 @@
 # Device Tree Editor foundation contract
 
-Status: D0 design baseline, 2026-11-05. Runtime selection, editing, persistence and
-write APIs below are specified for later stages; they are not implemented by this
-document. The D0 executable evidence is a bounded in-memory source prototype under
+Status: D0 design baseline and D1 read-only context implementation, 2026-11-05.
+D1 supplies an explicitly injected development/test preview; the built-in editor stays
+planned. Draft editing, persistence and source-write contracts below remain future work.
+The D0 executable evidence is a bounded in-memory source prototype under
 `scripts/prototypes/`, outside the installed application. See the
 [master plan](device-tree-editor-masterplan.md) and
-[ADR 0019](decisions/0019-device-tree-editor-foundation.md).
+[ADR 0019](decisions/0019-device-tree-editor-foundation.md). Final D1 verification is
+recorded in the [D1 handoff](device-tree-editor-d1-handoff.md).
 
 ## Ownership and compatibility
 
 The editor uses feature ID `devicetree`, service key `devicetree_editor`, API namespace
-`/api/devicetree/editor/`, and future shell view `devicetree/editor`. These are reserved
-names for D1 onward. D0 registers none of them. The production feature remains planned
-with no frontend, registration callback or implemented navigation entries.
+`/api/devicetree/editor/`, and shell view `devicetree/editor`. D1 registers them only
+when `features/devicetree/preview.py::PREVIEW_FEATURE` is explicitly injected. The
+production feature remains planned with no frontend, registration callback or
+implemented navigation entries.
 
 Inspector retains both `context.services["inspector"]` and its alias
 `context.services["devicetree"]`, pointing to the same service. Its existing POST paths
@@ -33,7 +36,9 @@ promote the production definition after its usable editing workflow passes its g
 
 | Existing implementation | Audited capability and limit |
 | --- | --- |
-| `core/context.py` | Workspace, jobs, build observations and feature storage; no project-selection provider yet |
+| `core/context.py` | Workspace, jobs, build observations, feature storage and optional public `project_context` provider |
+| `core/project_context.py` | Read-only `ProjectContextProvider` protocol: catalogue, capture and revalidation |
+| `features/projects/editor_context.py` | Projects-owned detached selection provider, supplied by application composition after feature registration |
 | `core/source_files.py` | Bounded UTF-8 reads, hashes and guarded directories; no general source writer or public file-identity receipt |
 | `core/builds.py` | Existing-output observation and selected artifact reads; source freshness remains unknown |
 | `features/projects/configurations.py` | Separate original/named configuration revisions and reviewed edits |
@@ -43,46 +48,52 @@ promote the production definition after its usable editing workflow passes its g
 | `features/inspector/api.py` | Owns the legacy aliases and shared transient catalogue identities |
 | `features/inspector/parser.py` | Structural generated-DTS reader; unsuitable for editable overlay serialization |
 
-## Public project selection proposal for D1
+## Public project selection
 
-Introduce a small `ProjectContextProvider` protocol in `core/project_context.py` only
-when D1 adds its first editor consumer. Projects implements it; application composition
-supplies it explicitly. Core must not import Projects, and the editor must not call
+`ProjectContextProvider` in `core/project_context.py` has its first consumer in D1.
+Projects implements it; application composition supplies it explicitly when Projects is
+registered. Core does not import Projects, and the editor must not call
 private `CreatorService` methods or read Projects-owned JSON directly.
 
-The proposed methods are read-only:
+The implemented methods are read-only:
 
 ```text
+catalog(workspace: str) -> {workspace, projects, diagnostics}
 capture(workspace: str, project_id: str, configuration_id: str | None)
     -> ProjectSelection
 revalidate(selection: ProjectSelection) -> ProjectSelection
 ```
 
+`catalog` lists explicit Original/named configurations and retains unavailable
+registrations with their availability; unreadable entries produce visible diagnostics.
 `capture` takes identifiers, validates their relationship and directory identities, and
 returns detached data. `None` selects the original configuration; it never means the
 most recent build. `revalidate` either returns an equivalent current selection or raises
 a context-conflict/unavailable result; it must not silently substitute another profile,
-target or environment. Neither method configures, builds, rescans or mutates records.
+target or environment. No provider method configures, builds, rescans environments or
+mutates records.
 Do not call the private build-preview workflow to obtain this data: opening an editor
 does not require build readiness or create a retained executable plan.
 
 For an unregistered application, the editor uses the public source reader to create a
 partial context from its selected directory. This does not import/register the project
 or invent a build profile. Target, environment and domain can remain unknown. Opening
-an existing build adds separately identified build evidence; it does not manufacture
-a saved configuration or prove that current source matches that build.
+a build is not supported in D1: `image` and `build_evidence` remain `null`. Historical
+attempt evidence can accompany a registered selection, but does not prove that current
+source matches that attempt.
 
 ### Version 1 selection and context fields
 
-The following is a minimum JSON-compatible shape. Each field is required, with explicit
+The following describes the D1 editor-context response. Each field is required, with explicit
 `null` where allowed. Future fields require a deliberate schema change or a documented
 optional extension; consumers reject unknown schema versions without overwriting data.
 
 | Field | Type and rule |
 | --- | --- |
 | `schema_version` | Integer `1`, excluding booleans |
-| `workspace` | Absolute validated path and captured directory identity |
-| `application` | Absolute validated path, captured ancestor/directory identities and availability |
+| `workspace` | Absolute validated workspace path |
+| `workspace_identity` | Captured workspace directory identity; not accepted as authority from the browser |
+| `application` | Path, name, availability and registered directory/ancestor identity; directory-only source guards remain server-side |
 | `project` | `null` for unregistered sources, otherwise `{id: string, revision: integer >= 0}` |
 | `configuration` | `null` when no saved configuration is selected, otherwise `{id: string or null, revision: integer >= 0, name: string, profile_version: integer}`; a new registered app has an Original configuration before its first Configure |
 | `target` | `null`, or `{requested: string, board_id: string or null, revision: string or null, qualifiers: string[]}`; retain the original exact target string |
@@ -90,15 +101,16 @@ optional extension; consumers reject unknown schema versions without overwriting
 | `fragments` | `null`, or the detached version-1 selection envelope described below |
 | `default_overlay` | `null`, or preserved project metadata plus its path, exact target and selection evidence |
 | `roots` | Ordered records of `{kind, path, origin, identity, availability}`; evidence for unknown/dynamic roots remains partial |
-| `build_evidence` | `null`, or `{inspection_id, domain, artifact hashes, captured input evidence, freshness}` verified through `context.builds` |
-| `image` | `null` when unknown, otherwise a verified image/domain identity and parent-build relationship; a domain is not inferred to be a CPU core |
+| `input_evidence` | Separate `predicted` and `captured` arrays, `coverage`, and optional current-source fingerprints |
+| `build_evidence` | `null` in D1; existing-build attachment is a later capability |
+| `image` | `null` in D1; no image/domain is inferred from a project directory or historical attempt |
 | `editing_document` | `null`, or selected validated application-relative overlay path with observed hash and predicted/captured usage state |
 | `diagnostics` | Bounded records of code, severity, message and optional source reference; no raw HTML |
 
 `ProjectSelection` is the registered portion above. The editor wraps a selection or
 partial unregistered source context as `EditorContext`, adding `id` (opaque server
-session identifier), `revision` (monotonic session integer), `fingerprint` (SHA-256 of
-the captured canonical context), and `capabilities` with explanations. Identifiers are
+session identifier), `revision` (positive monotonic session integer), `fingerprint`
+(SHA-256 of the captured canonical context), and `capabilities: {edit: false, save: false}`. Identifiers are
 not filesystem permissions. Server-side validated selection remains authoritative.
 
 Original configuration revision comes from `project.profile_revision` (legacy default
@@ -112,20 +124,60 @@ validation, including its 32-file limit per kind. Legacy profile version 1 repre
 automatic discovery; version 2 carries the fragment envelope. Do not persist a profile
 migration merely by opening it.
 
-Keep this requested selection separate from `predicted_inputs` and
-`captured_inputs`. Each evidence record identifies its source, target/configuration,
-ordered paths, available hashes, and coverage (`direct`, `transitive`, or `partial`).
+Keep this requested selection separate from `input_evidence.predicted` and
+`input_evidence.captured`. Each evidence record contains `status`, `message`, `scope`,
+`target`, `files`, `board_files` and `provenance`. File records preserve `path`, `state`,
+`reason` and `role`; provenance identifies the configuration/revision and, for historical
+evidence, the attempt and capture time. Available source hashes are separate fingerprints;
+the enclosing coverage remains `partial`.
 A current file observation, old configure attempt and creation recipe are different
 evidence. Null or incomplete input order must not be turned into an authoritative empty
 list. Later overlays can shadow an edit, and includes can introduce unknown contributors.
 
-### D1 transport and failure rules
+### D1 routes and lifetime
 
-Specify final route payloads alongside their D1 consumers. A request to open a registered
-selection contains the expected workspace plus project/configuration identifiers;
-an unregistered-source request contains the expected workspace and application path.
-Reject unknown fields, invalid types, traversal, symlinks, foreign configuration IDs and
-stale workspace selection through the existing router and source validation boundaries.
+All routes are POST under `/api/devicetree/editor/`, use the shared authenticated
+router, and reject extra/missing request fields. All request bodies include the exact
+current `workspace` string.
+
+| Suffix | Other request fields | Result |
+| --- | --- | --- |
+| `catalog` | None | `{workspace, projects, diagnostics}`; each project contains its explicit saved configuration choices |
+| `open` | Either `project_id`, `configuration_id` (null for Original), or `application_path` | A new version-1 editor context with revision `1` |
+| `context` | `context_id`, `expected_revision` | The same context after revalidation |
+| `select` | `context_id`, `expected_revision`, `document_id` | The same context with the selected available overlay and revision incremented by one |
+| `document` | `context_id`, `expected_revision`, `document_id` | `{context_id, revision, document}` with verified UTF-8 source text |
+
+Catalogue project records contain `{id, name, path, availability, configurations}`;
+configuration choices contain `{id, name, revision}`, with a null ID for Original.
+The context includes `documents` containing `{id, path, relative_path, sha256,
+availability, reason, origins, usage}` and an optional `editing_document` from that list.
+Availability is `available`, `missing` or `unavailable`; usage is `unknown`, `predicted`
+or `captured`. The `document` response adds `text` to this same summary.
+The exact-target default overlay is selected on open only when available and predicted
+to participate in the chosen configuration; otherwise the user explicitly chooses a
+destination. Selecting an overlay changes session metadata only. Capabilities remain
+`{edit: false, save: false}` and no write endpoint exists.
+
+The server holds at most 16 contexts for 30 minutes from creation. Expired contexts or
+those evicted to admit newer ones require explicit reopening. Requests use positive
+integer revisions, excluding booleans. There is no persisted context, draft, watcher or
+background refresh. Leaving/reopening revalidates the retained context reference before
+showing source; expired/changed context does not silently reopen a new selection.
+
+Source discovery is application-confined, bounded to 128 overlay candidates, 1,000
+candidate scan files, 256 directories and 16 directory levels in the editor service.
+Individual overlays and the application CMake marker are limited to 256 KiB; the editor
+source observation has an 8 MiB read budget. Hidden files, hidden/tool/generated directories and
+configured-build markers are excluded. Symlinks are not followed. Missing explicit
+overlays retain an unavailable entry; incomplete scans do not silently become complete
+catalogues. The Projects provider also bounds its independent prediction reads.
+
+Follow-up reads recheck workspace/application identity, the CMake marker, current
+overlay catalogue/hashes and the captured project selection. A replaced directory,
+changed file list, changed source, registration revision or configuration revision
+requires reopening. Reading a historical configure report does not attach its build
+or establish current source freshness.
 
 Follow-up requests carry the editor context ID and expected revision. Reopening or
 changing target creates a new context identity; late results cannot populate another
@@ -293,14 +345,13 @@ descriptors or write during/after exchange; transient candidate visibility and l
 external changes cannot be excluded. Retain recoverable evidence and describe this
 limit rather than promising perfect isolation. Multi-file transactions remain D12.
 
-## Verification and D1 handoff
+## Verification and next stage
 
-Run the focused prototype tests and existing architecture/Inspector compatibility
-tests, then both repository check modes. No new browser assets, frontend behavior or
-runtime registration are introduced in D0, so browser/package verification is not D0
-evidence. Selected-environment configuration and hardware tests remain unperformed.
+The [D0 handoff](device-tree-editor-d0-handoff.md) records the prototype baseline.
+The [D1 handoff](device-tree-editor-d1-handoff.md) records provider, context-service,
+frontend, browser and package validation for the injected preview. A successful context
+load is not a configure/build or hardware test.
 
-Record actual commands, counts, benchmark observations, fixture coverage and limitations
-in the [D0 handoff](device-tree-editor-d0-handoff.md). The next stage is D1: implement
-the read-only selection provider and development/test workspace, preserve aliases in
-both feature registration orders, and leave the default runtime feature planned.
+After the D1 exit gate, implement D2 only: production source-preserving operations for
+the agreed syntax subset, using the prototype corpus while keeping UI mutations and
+filesystem publication out of scope.

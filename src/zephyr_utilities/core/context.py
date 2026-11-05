@@ -7,6 +7,7 @@ from typing import Any
 
 from .builds import BuildInspectionService
 from .jobs import JobManager
+from .project_context import ProjectContextProvider
 from .workspace import WorkspaceService
 
 
@@ -17,6 +18,7 @@ class ApplicationContext:
     data_dir: Path
     services: dict[str, Any] = field(default_factory=dict)
     builds: BuildInspectionService = field(default_factory=BuildInspectionService)
+    project_context: ProjectContextProvider | None = None
 
     def feature_data(self, feature_id):
         if not re.fullmatch(r"[a-z][a-z0-9_-]*", feature_id):

@@ -1,0 +1,65 @@
+<section class="dte-workspace" data-dte-root>
+  <header class="dte-heading">
+    <div><p class="dte-eyebrow">Device Tree Editor</p><h1>Open a project</h1></div>
+    <span class="dte-badge">Read-only preview</span>
+  </header>
+  <p class="dte-intro">Choose an application and inspect its target, overlay selection and source. Visual hardware editing is planned.</p>
+
+  <section class="dte-card dte-picker" aria-labelledby="dte-project-heading">
+    <div class="dte-section-heading"><h2 id="dte-project-heading">Registered applications</h2><button type="button" data-dte-refresh-catalog>Refresh list</button></div>
+    <form data-dte-project-form class="dte-project-form">
+      <label>Application<select data-dte-project><option value="">Choose an application</option></select></label>
+      <label>Configuration<select data-dte-configuration><option value="">Original</option></select></label>
+      <button type="submit" class="dte-primary" data-dte-open-project>Open application</button>
+    </form>
+    <p class="dte-muted" role="status" data-dte-catalog-status></p>
+    <p class="dte-error" role="alert" data-dte-catalog-error hidden></p>
+    <div data-dte-catalog-diagnostics></div>
+    <details class="dte-directory-picker" data-dte-directory-picker>
+      <summary>Open an application directory</summary>
+      <form data-dte-directory-form class="dte-directory-form">
+        <label>Application directory<input data-dte-directory type="text" autocomplete="off" spellcheck="false" placeholder="applications/weather-station"></label>
+        <button type="submit" data-dte-open-directory>Open directory</button>
+      </form>
+      <p class="dte-muted">Opening a directory does not register it or configure the project.</p>
+    </details>
+  </section>
+
+  <p class="dte-status" role="status" data-dte-loading hidden>Opening the selected context…</p>
+  <p class="dte-error" role="alert" data-dte-error hidden></p>
+  <p class="dte-empty" data-dte-empty>Open an application to inspect its editing context. No project tools run when opening it.</p>
+
+  <section class="dte-results" data-dte-results hidden>
+    <section class="dte-card" aria-labelledby="dte-context-heading" data-dte-context-panel>
+      <div class="dte-section-heading"><h2 id="dte-context-heading">Selected context</h2><button type="button" data-dte-recheck>Recheck context</button></div>
+      <dl class="dte-facts" data-dte-facts></dl>
+      <div data-dte-diagnostics></div>
+    </section>
+
+    <div class="dte-columns">
+      <section class="dte-card dte-overlay-panel" aria-labelledby="dte-overlay-heading">
+        <h2 id="dte-overlay-heading">Overlay destination</h2>
+        <form data-dte-overlay-form class="dte-overlay-form">
+          <label>Application overlay<select data-dte-overlay><option value="">Choose an overlay</option></select></label>
+          <button type="submit" data-dte-select-overlay>Inspect overlay</button>
+        </form>
+        <p class="dte-muted" data-dte-overlay-status></p>
+        <dl class="dte-facts dte-small-facts" data-dte-document-facts></dl>
+        <h3>Requested overlay selection</h3>
+        <div data-dte-fragments></div>
+        <h3>Selection evidence</h3>
+        <p class="dte-muted">Predictions describe intended inputs. Captured inputs describe an earlier configure attempt and may not match current source.</p>
+        <div data-dte-evidence></div>
+        <details class="dte-technical"><summary>Environment and root details</summary><div data-dte-environment></div></details>
+      </section>
+
+      <section class="dte-card dte-source-panel" aria-labelledby="dte-source-heading" data-dte-source-panel>
+        <div class="dte-section-heading"><h2 id="dte-source-heading">Overlay source</h2><span class="dte-badge">Read only</span></div>
+        <p class="dte-path" data-dte-source-path></p>
+        <p class="dte-muted" role="status" data-dte-source-status>Choose an available overlay to read its current source.</p>
+        <p class="dte-error" role="alert" data-dte-source-error hidden></p>
+        <pre class="dte-source" tabindex="0" aria-label="Read-only overlay source" data-dte-source hidden></pre>
+      </section>
+    </div>
+  </section>
+</section>

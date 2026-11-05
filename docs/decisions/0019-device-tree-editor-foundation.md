@@ -3,6 +3,12 @@
 Status: accepted design for D0, 2026-11-05. Runtime contracts and storage are introduced
 in their consuming stages; this decision does not declare an editor implemented.
 
+D1 implementation note: the public read-only selection provider and transient context
+routes now have an editor-preview consumer. `PREVIEW_FEATURE` is explicitly injected
+for development/tests; the built-in definition remains planned. No draft persistence,
+source writer or build-execution handoff is introduced. See the
+[D1 handoff](../device-tree-editor-d1-handoff.md) for verification status.
+
 ## Context
 
 The next product workflow is a visual editor where hardware actions immediately change

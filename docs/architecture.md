@@ -93,6 +93,7 @@ removing them requires a documented migration and regression coverage.
 | `services` | Feature-owned service instances assembled during registration |
 | `feature_data(feature_id)` | Stable persistent storage namespace |
 | `builds.inspect/get/read_text/select_artifact` | Shared read-only observations, verified text and detached artifact selections |
+| `project_context.catalog/capture/revalidate` | Optional public read-only project-selection provider, supplied after Projects registration |
 
 A task receives `(emit, cancel)` and returns a result mapping. Progress goes through
 `emit`; long-running work checks the cancellation event and releases subprocesses and
@@ -234,13 +235,23 @@ pinned application directory instead of a build selection. Projects hands off on
 application path; Build Inspector validates it without importing Projects internals or
 creating a profile. See [ADR 0008](decisions/0008-application-source-browsing.md).
 Inspector now owns the read-only implementation previously under Device Tree and
-Projects. Legacy HTTP paths remain aliases, and persistence is unchanged. The visual
-editor has no executable registration. See [ADR 0009](decisions/0009-project-navigation-and-inspector.md).
+Projects. Legacy HTTP paths remain aliases, and persistence is unchanged. The built-in
+visual editor has no executable registration. See [ADR 0009](decisions/0009-project-navigation-and-inspector.md).
 
-The editor's D0 foundation reserves `/api/devicetree/editor/` and the
-`devicetree_editor` service key without registering them. Inspector retains its
-`devicetree` service alias. A source-preserving prototype lives outside the installed
-application; no public project-context provider or draft persistence is implemented yet.
+The built-in editor remains planned. D1 adds a read-only `PREVIEW_FEATURE` for explicit
+development/test injection, replacing that planned definition in the same application.
+Its `/api/devicetree/editor/` routes and `devicetree_editor` service key remain separate
+from Inspector's `devicetree` alias. Application composition supplies a Projects-owned
+`ProjectContextProvider` through the optional `context.project_context` field after
+all features register, so Inspector/editor registration order does not determine access.
+The provider captures Original/named configuration and registration revisions, exact
+target, fragment intent and separate historical evidence without a build preview or
+tool execution. Unregistered directories remain partial source-only contexts.
+
+The preview retains at most 16 contexts for 30 minutes, rechecks source/context identity
+before follow-up reads, and selects an application overlay without changing it. It
+does not attach a build/image, create persistent editor data or import the D0 prototype
+into the runtime. Source editing and saving remain later stages.
 See the [foundation contract](device-tree-editor-contract.md) and
 [ADR 0019](decisions/0019-device-tree-editor-foundation.md) for the adopted staged design.
 

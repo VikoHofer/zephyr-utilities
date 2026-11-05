@@ -280,6 +280,10 @@ divides live overlay editing, hardware-module placement and pin configuration in
 16 implementation stages with individual prompts and acceptance gates.
 Its [D0 foundation](docs/device-tree-editor-d0-handoff.md) defines the contracts and
 tests a bounded source-edit prototype; the runtime visual editor remains planned.
+The [D1 read-only preview](docs/device-tree-editor-d1-handoff.md) adds project/configuration
+context loading and overlay inspection through explicit development/test injection.
+The default application still labels the visual editor planned; source editing and
+saving are not enabled by the preview.
 
 Existing snapshot layouts, IDs, exports and legacy memory endpoints are preserved.
 `--data-dir` remains the memory-history directory; environment observations use

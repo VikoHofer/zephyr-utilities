@@ -1,6 +1,7 @@
 # Device Tree Editor master plan
 
-Status: visual editor planned; D0 foundation completed on 2026-11-05. The next product
+Status: visual editor planned; D0 foundation completed and D1 read-only preview
+implemented on 2026-11-05, with final D1 verification recorded in its handoff. The next product
 priority is the visual Device Tree Editor
 following the delivered everyday Project Creator workflow. This plan does not imply
 that every advanced item in the Project Creator roadmap is complete. The editor's
@@ -19,7 +20,8 @@ instruction to implement the whole editor in one task.
 The [foundation contract](device-tree-editor-contract.md),
 [ADR 0019](decisions/0019-device-tree-editor-foundation.md), and
 [D0 handoff](device-tree-editor-d0-handoff.md) record the adopted design and prototype
-evidence. D1 is the next implementation stage.
+evidence. The [D1 handoff](device-tree-editor-d1-handoff.md) describes the injected
+read-only workspace and verification status. D2 is the next stage after that gate.
 
 ## Product experience
 
@@ -112,22 +114,23 @@ selected Zephyr environment. Bundle runtime assets for offline use.
 | `features/projects/` | Owns registrations, configurations, overlay selection and configure/build execution |
 | `features/inspector/` | Owns advanced read-only inspection; its resolved-tree parser and binding navigator are not source-editing or full schema engines |
 
-Projects must expose a narrow public selection and execution handoff through a core
-contract, implemented by a Projects-owned provider and composed explicitly. Do not import
+D1 exposes a narrow read-only selection handoff through `core/project_context.py`,
+implemented by a Projects-owned provider and composed explicitly. Execution handoff
+remains D5 work. Do not import
 Projects' private service classes or write its records from the editor. Extract other
 shared behavior only when two implemented consumers need it.
 
-There is a compatibility collision to resolve in D0/D1: Inspector already registers
+The D0/D1 namespace decision preserves Inspector's existing routes:
 `/api/devicetree/inspect`, `/sources`, `/bindings`, `/source-file`,
 `/application-sources`, and `/application-source-file`. It also exposes its service as
-`context.services["devicetree"]`. Preserve these aliases; use distinct editor endpoints
-such as `/api/devicetree/editor/...` and a distinct service key. Preserve legacy hash
-routes to Inspector while introducing new editor views. Test registration order.
+`context.services["devicetree"]`. D1 uses `/api/devicetree/editor/...` and the separate
+`devicetree_editor` service key. Legacy hash routes still resolve to Inspector.
 
 ### Proposed contracts
 
-These names describe planned interfaces, not implemented APIs. D0 defines their minimal
-schemas and D1 onward introduces them with consumers and tests.
+The context/selection portion is implemented in D1's read-only preview. Draft, change,
+validation, pin and recipe interfaces remain planned. Their concrete delivered fields
+and limits are recorded in the foundation contract.
 
 | Contract | Required information |
 | --- | --- |
@@ -309,7 +312,8 @@ freshness, not a green pass. Source edits do not rewrite historical build eviden
 
 ## Delivery stages
 
-D0 is **complete** within its foundation/prototype scope; D1–D15 are **not started**.
+D0 is **complete** within its foundation/prototype scope. D1 is **complete** within its
+read-only preview scope; verification is recorded in its handoff. D2–D15 are **not started**.
 The default order is sequential; shared contracts
 and source safety precede richer visuals. Split a stage further if its exit gate cannot
 be delivered and tested in a reviewable change. Complete the selected slice without
@@ -323,7 +327,7 @@ until D4. This uses the same application/server, not a separate feature launcher
 | Stage | Deliverable | Milestone |
 | --- | --- | --- |
 | D0 | Contracts, support matrix and source-edit feasibility | Complete; see foundation contract and D0 handoff |
-| D1 | Open project and exact editor context | Inspect the intended editing destination |
+| D1 | Open project and exact editor context | Complete read-only preview; see D1 handoff |
 | D2 | Source-preserving overlay patch engine | Safe source transformations |
 | D3 | Synchronized visual/source draft and undo | Live editing without disk writes |
 | D4 | Guarded Save, reload and recovery | First usable visual editor |
@@ -365,6 +369,11 @@ next-stage handoff. Do not register a working editor or write firmware files.
 ```
 
 ### D1 Open a project in its exact context
+
+Implementation: `ProjectContextProvider`, the read-only context routes and scoped
+workspace are available through explicit `PREVIEW_FEATURE` injection. The built-in
+feature remains planned. See the [D1 handoff](device-tree-editor-d1-handoff.md) for
+verification and limits; source mutation and build attachment are not part of D1.
 
 Scope: introduce the narrow public Projects selection provider and editor session
 loading; show target, environment, ordered overlays, origins and editing destination.
@@ -730,8 +739,9 @@ performance claims without measurements.
 
 ## Starting point
 
-The next implementation request should be **D1 only**. D0's contracts and bounded
-source experiment are complete. D4 delivers the first small
+The next implementation request should be **D2 only**.
+D0's contracts/source experiment and D1's read-only context implementation provide the
+foundation. D4 delivers the first small
 usable editor; D5 closes its configure/build loop; D8–D10 deliver the initial complete
 module-and-pin experience. Later stages expand coverage while preserving the same
 source synchronization and save semantics.
@@ -741,3 +751,5 @@ editor interaction design must wait. Its broader creator/environment milestones 
 separate. No editor implementation, firmware changes, or hardware verification are
 part of the original planning change. D0 subsequently added only foundation documents,
 synthetic fixtures and an unregistered in-memory prototype.
+D1 adds only the public selection provider and explicitly injected read-only preview;
+the built-in visual editor remains planned.
