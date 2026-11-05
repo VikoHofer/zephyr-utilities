@@ -1,5 +1,6 @@
 import {createTreeSession, filterNodes} from "./state.js";
 import {createSourceView} from "./navigation-view.js";
+import {createActionFeedback} from "./action-feedback.js";
 
 export function mount(host, context) {
   const root = host.querySelector("[data-dt-root]");
@@ -12,8 +13,16 @@ export function mount(host, context) {
   let renderedData;
   let renderedQuery;
   let renderedSelection;
+  let revealNextSelection = false;
+  let lastView = state.mode === "application" && state.applicationPath ? `application/${encodeURIComponent(state.applicationPath)}`
+    : state.inspectionId && state.domainName ? `inspect/${state.inspectionId}/${encodeURIComponent(state.domainName)}` : null;
+  const feedback = createActionFeedback({workspace: () => context.workspace.path,
+    reveal: context.reveal, notify: context.notify, isDisposed: () => disposed});
+  const result = () => state.error ? $("error") : state.data?.mode === "application" ? null
+    : state.data ? $(state.data.tree?.status === "parsed" ? "browser" : "results") : null;
   state.sourceNavigation ||= {};
-  const sourceView = createSourceView(root, {api: context.api, state: state.sourceNavigation, workspace: () => context.workspace.path});
+  const sourceView = createSourceView(root, {api: context.api, state: state.sourceNavigation,
+    workspace: () => context.workspace.path, reveal: context.reveal, notify: context.notify});
   function node(tag, className, text) {
     const element = document.createElement(tag);
     if (className) element.className = className;
@@ -127,20 +136,26 @@ export function mount(host, context) {
     $("refresh").hidden = !state.inspectionId;
     $("refresh").disabled = state.loading;
     renderContext(buildData);
-    sourceView.sync(state.data, state.selectedPath);
+    sourceView.sync(state.data, state.selectedPath, revealNextSelection && application);
+    if (application) revealNextSelection = false;
     if (buildData) renderNodes(buildData);
   }
   const listen = (element, event, callback) => element.addEventListener(event, callback, {signal: lifetime.signal});
   listen($("search"), "input", () => session.search($("search").value));
-  listen($("domain"), "change", () => session.switchDomain($("domain").value));
-  listen($("refresh"), "click", () => session.refresh());
+  listen($("domain"), "change", () => { feedback.invalidate(); session.switchDomain($("domain").value); });
+  listen($("refresh"), "click", () => feedback.run(() => session.refresh(), result,
+    {pending: "Rechecking the selected image…", complete: () => state.error || "Device Tree updated."}));
   listen($("more"), "click", () => session.more());
   listen($("application-form"), "submit", (event) => {
-    event.preventDefault(); session.chooseApplication($("application-directory").value);
+    event.preventDefault(); feedback.invalidate(); revealNextSelection = true;
+    session.chooseApplication($("application-directory").value);
+    if (state.error) { revealNextSelection = false; context.reveal?.($("error")); }
   });
   listen($("nodes"), "click", (event) => {
     const target = event.target.closest("[data-node-path]");
-    if (target && root.contains(target)) session.select(target.dataset.nodePath);
+    if (target && root.contains(target)) {
+      feedback.invalidate(); session.select(target.dataset.nodePath); context.reveal?.($("detail"));
+    }
   });
   listen($("detail"), "click", (event) => {
     const target = event.target.closest("[data-binding-node-path]");
@@ -148,5 +163,13 @@ export function mount(host, context) {
   });
   session = createTreeSession({api: context.api, state, workspace: () => context.workspace.path, onChange: render, navigate: context.navigate});
   render();
-  return {navigate(view) { return session.open(view); }, dispose() { disposed = true; lifetime.abort(); sourceView.dispose(); session.dispose(); }};
+  return {
+    navigate(view) {
+      const explicit = (!state.workspace || state.workspace === context.workspace.path) && Boolean(view) && view !== lastView;
+      lastView = view; feedback.invalidate();
+      if (explicit && view.startsWith("application/")) revealNextSelection = true;
+      return explicit ? feedback.run(() => session.open(view), result) : session.open(view);
+    },
+    dispose() { disposed = true; feedback.invalidate(); lifetime.abort(); sourceView.dispose(); session.dispose(); },
+  };
 }

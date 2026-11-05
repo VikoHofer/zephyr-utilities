@@ -14,9 +14,13 @@ def register(router, context):
     context.services["project_creator"] = creator
     router.add("GET", "/api/projects/creator", lambda request: creator.current())
     router.add("POST", "/api/projects/samples", lambda request: creator.samples(request.body))
+    router.add("POST", "/api/projects/sample-check", lambda request: Response(creator.sample_check(request.body), status=202))
     router.add("POST", "/api/projects/preview", lambda request: creator.preview(request.body))
     router.add("POST", "/api/projects/create", lambda request: Response(creator.create(request.body), status=202))
+    router.add("POST", "/api/projects/remove", lambda request: creator.remove_project(request.body))
     router.add("POST", "/api/projects/configurations", lambda request: creator.save_configuration(request.body))
+    router.add("POST", "/api/projects/configurations/remove", lambda request: creator.remove_configuration(request.body))
+    router.add("POST", "/api/projects/attempts/remove", lambda request: creator.remove_attempt(request.body))
     router.add("POST", "/api/projects/configuration-files", lambda request: creator.configuration_files(request.body))
     router.add("POST", "/api/projects/build-preview", lambda request: creator.build_preview(request.body))
     router.add("POST", "/api/projects/build", lambda request: Response(creator.build(request.body), status=202))

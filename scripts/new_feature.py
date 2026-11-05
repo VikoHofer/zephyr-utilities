@@ -43,6 +43,8 @@ def scaffold(feature_id, title, *, root=ROOT):
             f"# {title}\n\nStatus: planned. This skeleton does not implement a user workflow.\n\n"
             "Define inputs, outputs, persistence, failure states and acceptance cases here.\n"
             "Keep services and routes in this package; use shared core workspace and jobs.\n\n"
+            "Use shared theme tokens and visible action feedback from the UI guidelines.\n"
+            "Keep requested results in view; passive updates must preserve focus and scroll.\n\n"
             "Follow [Adding a feature](../../../../docs/adding-a-feature.md). Import `FEATURE`\n"
             "explicitly in `features/__init__.py` and add it to `builtin_features()`.\n"
             "When the workflow is implemented, attach a `FrontendDefinition` and registration\n"

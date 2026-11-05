@@ -1,83 +1,83 @@
-.dt-feature {max-width:1500px;margin:auto;padding:38px;color:#172c34;font-size:13px;line-height:1.55}
+.dt-feature {max-width:1500px;margin:auto;padding:38px;color:var(--app-text);font-size:13px;line-height:1.55}
 .dt-feature * {box-sizing:border-box}
 .dt-feature h1,.dt-feature h2,.dt-feature h3,.dt-feature h4,.dt-feature p {margin:0}
 .dt-feature h1 {font-size:clamp(28px,3vw,38px);letter-spacing:-1.2px;line-height:1.2;margin:9px 0 12px;font-weight:650}
 .dt-feature h2 {font-size:18px;font-weight:620}
 .dt-feature h3 {font-size:14px;margin:15px 0 8px}
 .dt-feature .dt-heading {display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:24px}
-.dt-feature .dt-heading p {color:#6a7d72}
-.dt-feature .dt-eyebrow {color:#29745f;font-size:9px;font-weight:650;letter-spacing:1.2px}
-.dt-feature .dt-badge {border:1px solid #cbded0;background:#eff5ec;color:#4c7759;border-radius:5px;padding:5px 8px;white-space:nowrap;font-size:11px}
+.dt-feature .dt-heading p {color:var(--app-muted)}
+.dt-feature .dt-eyebrow {color:var(--app-brand);font-size:9px;font-weight:650;letter-spacing:1.2px}
+.dt-feature .dt-badge {border:1px solid var(--app-brand-border);background:var(--app-brand-soft);color:var(--app-brand);border-radius:5px;padding:5px 8px;white-space:nowrap;font-size:11px}
 .dt-feature .dt-toolbar {display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
-.dt-feature .dt-button {display:inline-flex;align-items:center;justify-content:center;padding:10px 13px;border:1px solid #cbd9ce;border-radius:6px;color:#315944;background:#fff;font-family:inherit;font-size:11px;font-weight:600;text-decoration:none;cursor:pointer;min-height:37px}
-.dt-feature .dt-button:hover {background:#edf4e9;border-color:#b1c7b7}
+.dt-feature .dt-button {display:inline-flex;align-items:center;justify-content:center;padding:10px 13px;border:1px solid var(--app-border);border-radius:6px;color:var(--app-text);background:var(--app-surface);font-family:inherit;font-size:11px;font-weight:600;text-decoration:none;cursor:pointer;min-height:37px}
+.dt-feature .dt-button:hover {background:var(--app-brand-soft);border-color:var(--app-brand-border)}
 .dt-feature button,.dt-feature input,.dt-feature select {font:inherit}
 .dt-feature button:disabled {opacity:.55;cursor:not-allowed}
-.dt-feature button:focus-visible,.dt-feature input:focus-visible,.dt-feature select:focus-visible,.dt-feature summary:focus-visible,.dt-feature a:focus-visible,.dt-feature pre:focus-visible {outline:3px solid #2c9b87;outline-offset:3px}
-.dt-feature .dt-scope,.dt-feature .dt-muted {color:#708175;font-size:11px}
+.dt-feature button:focus-visible,.dt-feature input:focus-visible,.dt-feature select:focus-visible,.dt-feature summary:focus-visible,.dt-feature a:focus-visible,.dt-feature pre:focus-visible {outline:3px solid var(--app-focus);outline-offset:3px}
+.dt-feature .dt-scope,.dt-feature .dt-muted {color:var(--app-muted);font-size:11px}
 .dt-feature .dt-scope {margin-bottom:20px}
-.dt-feature .dt-panel {background:#fff;border:1px solid #dce4d6;border-radius:9px;padding:22px;margin-bottom:21px;min-width:0}
+.dt-feature .dt-panel {background:var(--app-surface);border:1px solid var(--app-border);border-radius:9px;padding:22px;margin-bottom:21px;min-width:0}
 .dt-feature .dt-section-heading {display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:17px}
 .dt-feature .dt-application-form {display:flex;align-items:flex-end;gap:12px;margin-bottom:10px}
 .dt-feature .dt-application-form label {flex:1}
 .dt-feature [data-dt-application-path] {margin-top:8px}
-.dt-feature label {display:block;font-size:11px;font-weight:600;color:#4b6558;min-width:220px}
-.dt-feature input,.dt-feature select {display:block;width:100%;background:#fff;border:1px solid #cbd9d0;border-radius:6px;padding:9px 10px;color:#213d36;margin-top:6px}
+.dt-feature label {display:block;font-size:11px;font-weight:600;color:var(--app-text);min-width:220px}
+.dt-feature input,.dt-feature select {display:block;width:100%;background:var(--app-surface);border:1px solid var(--app-input-border);border-radius:6px;padding:9px 10px;color:var(--app-text);margin-top:6px}
 .dt-feature .dt-path {font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;overflow-wrap:anywhere}
 .dt-feature .dt-facts {display:grid;grid-template-columns:1fr 1fr;gap:17px;margin:0 0 18px}
-.dt-feature dt {font-size:10px;color:#708575}
+.dt-feature dt {font-size:10px;color:var(--app-muted)}
 .dt-feature dd {margin:4px 0 0;overflow-wrap:anywhere}
-.dt-feature .dt-notice {font-size:11px;padding:12px 15px;background:#f3f6ee;border-left:3px solid #b1c6a7;color:#5b735f;margin-bottom:14px}
-.dt-feature .dt-error {padding:15px 18px;background:#fff0e9;color:#89442e;border:1px solid #e8c4b4;border-radius:7px;margin-bottom:20px;overflow-wrap:anywhere}
-.dt-feature .dt-status {padding:20px;color:#5b735f}
-.dt-feature summary {cursor:pointer;color:#3a6653;font-size:12px;font-weight:550;padding:8px 0}
+.dt-feature .dt-notice {font-size:11px;padding:12px 15px;background:var(--app-blue-soft);border-left:3px solid var(--app-blue-border);color:var(--app-blue);margin-bottom:14px}
+.dt-feature .dt-error {padding:15px 18px;background:var(--app-danger-soft);color:var(--app-danger);border:1px solid var(--app-danger-border);border-radius:7px;margin-bottom:20px;overflow-wrap:anywhere}
+.dt-feature .dt-status {padding:20px;color:var(--app-blue)}
+.dt-feature summary {cursor:pointer;color:var(--app-brand);font-size:12px;font-weight:550;padding:8px 0}
 .dt-feature details[open]>summary {margin-bottom:12px}
-.dt-feature .dt-source-list {padding-left:18px;color:#5a7160}
+.dt-feature .dt-source-list {padding-left:18px;color:var(--app-muted)}
 .dt-feature .dt-source-list li {padding:3px 0}
 .dt-feature .dt-browser {display:grid;grid-template-columns:minmax(220px,.85fr) minmax(0,1.15fr);gap:22px;align-items:start}
 .dt-feature .dt-nodes {max-height:650px;overflow:auto;padding:3px}
-.dt-feature .dt-node {width:100%;display:block;text-align:left;padding:11px 13px;border:1px solid #dfe7d9;background:#fff;border-radius:6px;margin-bottom:7px;color:#345846;cursor:pointer}
-.dt-feature .dt-node:hover {background:#f4f8f0;border-color:#b7cdae}
-.dt-feature .dt-node.selected {background:#edf5e7;border-color:#82ae8d;box-shadow:inset 3px 0 #4a9273}
+.dt-feature .dt-node {width:100%;display:block;text-align:left;padding:11px 13px;border:1px solid var(--app-border);background:var(--app-surface);border-radius:6px;margin-bottom:7px;color:var(--app-text);cursor:pointer}
+.dt-feature .dt-node:hover {background:var(--app-brand-soft);border-color:var(--app-brand-border)}
+.dt-feature .dt-node.selected {background:var(--app-brand-soft);border-color:var(--app-brand-border);box-shadow:inset 3px 0 var(--app-brand)}
 .dt-feature .dt-node span {display:block}
 .dt-feature .dt-node .dt-muted {font-size:10px;margin-top:4px}
 .dt-feature .dt-more {width:100%;margin-top:10px}
-.dt-feature .dt-node-detail {min-width:0;background:#f8faf4;border:1px solid #dce6d4;border-radius:7px;padding:18px;position:sticky;top:20px;max-height:680px;overflow:auto}
+.dt-feature .dt-node-detail {min-width:0;background:var(--app-surface-subtle);border:1px solid var(--app-border);border-radius:7px;padding:18px;position:sticky;top:20px;max-height:680px;overflow:auto}
 .dt-feature .dt-node-detail>h3 {font-size:14px;margin-top:0}
-.dt-feature .dt-labels {font-size:11px;color:#567460;margin-top:8px}
+.dt-feature .dt-labels {font-size:11px;color:var(--app-text);margin-top:8px}
 .dt-feature .dt-property {margin-top:17px}
 .dt-feature .dt-find-bindings {margin-top:14px}
 .dt-feature .dt-source-navigation {scroll-margin-top:20px}
 .dt-feature .dt-source-navigation>.dt-section-heading .dt-toolbar {margin:0}
 .dt-feature .dt-source-files {max-height:360px;overflow:auto}
-.dt-feature .dt-source-row {display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 0;border-bottom:1px solid #e4ebdf;min-width:0}
+.dt-feature .dt-source-row {display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 0;border-bottom:1px solid var(--app-border-subtle);min-width:0}
 .dt-feature .dt-source-row>.dt-button {flex-shrink:0}
 .dt-feature .dt-source-description {min-width:0}
 .dt-feature .dt-source-description>p {margin-top:4px}
 .dt-feature .dt-binding-note {margin:12px 0 18px}
-.dt-feature .dt-binding-card {border:1px solid #dce6d4;background:#f8faf4;border-radius:7px;padding:16px;margin-top:12px}
+.dt-feature .dt-binding-card {border:1px solid var(--app-border);background:var(--app-surface-subtle);border-radius:7px;padding:16px;margin-top:12px}
 .dt-feature .dt-binding-heading {display:flex;justify-content:space-between;gap:15px;align-items:center;margin-bottom:8px}
 .dt-feature .dt-binding-heading h3 {margin:0}
 .dt-feature .dt-binding-description {white-space:pre-line;margin:10px 0}
 .dt-feature .dt-binding-card>.dt-button {margin-top:12px}
-.dt-feature .dt-source-document {border-top:1px solid #dce6d4;margin-top:24px;padding-top:24px;scroll-margin-top:20px}
+.dt-feature .dt-source-document {border-top:1px solid var(--app-border);margin-top:24px;padding-top:24px;scroll-margin-top:20px}
 .dt-feature .dt-source-document>.dt-section-heading h3 {margin:0;font-size:17px}
 .dt-feature .dt-source-document>pre {max-height:520px;margin-top:12px;tab-size:4}
 .dt-feature .dt-include-row {margin:14px 0}
-.dt-feature .dt-binding-property {border-bottom:1px solid #e4ebdf;padding:12px 0;white-space:pre-line}
+.dt-feature .dt-binding-property {border-bottom:1px solid var(--app-border-subtle);padding:12px 0;white-space:pre-line}
 .dt-feature .dt-binding-property>p {margin-top:6px}
 .dt-feature .dt-property h4 {font-weight:650;margin-bottom:5px}
-.dt-feature pre {max-height:260px;overflow:auto;background:#173430;color:#d2e7d6;border-radius:5px;padding:12px;font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}
-.dt-feature .dt-property pre {background:#edf2e9;color:#315944;max-height:150px;padding:9px}
+.dt-feature pre {max-height:260px;overflow:auto;background:var(--app-code);color:var(--app-code-text);border-radius:5px;padding:12px;font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}
+.dt-feature .dt-property pre {background:var(--app-surface-muted);color:var(--app-text);max-height:150px;padding:9px}
 .dt-feature .dt-raw .dt-path {margin-bottom:12px}
-.dt-feature .dt-empty {text-align:center;border:1px dashed #d5dfd1;border-radius:10px;background:#fafcf7;padding:48px 25px}
-.dt-feature .dt-empty p {max-width:520px;margin:12px auto 20px;color:#708175}
+.dt-feature .dt-empty {text-align:center;border:1px dashed var(--app-border);border-radius:10px;background:var(--app-surface-subtle);padding:48px 25px}
+.dt-feature .dt-empty p {max-width:520px;margin:12px auto 20px;color:var(--app-muted)}
 .dt-feature [hidden] {display:none!important}
 @media(max-width:900px) {.dt-feature {padding:28px 22px}.dt-feature .dt-browser {grid-template-columns:1fr}.dt-feature .dt-node-detail {position:static;max-height:none}.dt-feature .dt-nodes {max-height:380px}}
 @media(max-width:650px) {.dt-feature {padding:25px 17px}.dt-feature .dt-heading,.dt-feature .dt-section-heading,.dt-feature .dt-source-row,.dt-feature .dt-binding-heading,.dt-feature .dt-application-form {flex-direction:column;align-items:flex-start}.dt-feature .dt-facts {grid-template-columns:1fr}.dt-feature label {width:100%}.dt-feature .dt-panel {padding:17px}}
 
 /* Build output inspection shares this feature, with its own scoped view. */
-.inspection-feature {max-width:1500px;margin:auto;padding:38px;color:#172c34;font-size:13px;line-height:1.55}
+.inspection-feature {max-width:1500px;margin:auto;padding:38px;color:var(--app-text);font-size:13px;line-height:1.55}
 .inspection-feature * {box-sizing:border-box}
 .inspection-feature h1,.inspection-feature h2,.inspection-feature h3,.inspection-feature p {margin:0}
 .inspection-feature h1 {font-size:clamp(28px,3vw,38px);letter-spacing:-1.2px;line-height:1.2;margin:9px 0 12px;font-weight:650}
@@ -85,50 +85,50 @@
 .inspection-feature h3 {font-size:14px;font-weight:620;margin:15px 0 8px}
 .inspection-feature button,.inspection-feature input,.inspection-feature textarea,.inspection-feature select {font:inherit}
 .inspection-feature button,.inspection-feature summary {cursor:pointer}
-.inspection-feature input,.inspection-feature textarea,.inspection-feature select {width:100%;min-width:0;background:#fff;border:1px solid #cbd9d0;border-radius:6px;padding:9px 10px;color:#213d36}
+.inspection-feature input,.inspection-feature textarea,.inspection-feature select {width:100%;min-width:0;background:var(--app-surface);border:1px solid var(--app-input-border);border-radius:6px;padding:9px 10px;color:var(--app-text)}
 .inspection-feature textarea {resize:vertical}
-.inspection-feature label {display:block;font-size:11px;font-weight:600;color:#4b6558}
+.inspection-feature label {display:block;font-size:11px;font-weight:600;color:var(--app-text)}
 .inspection-feature label input,.inspection-feature label textarea,.inspection-feature label select {display:block;font-size:12px;font-weight:400;margin-top:7px}
-.inspection-feature button:focus-visible,.inspection-feature input:focus-visible,.inspection-feature textarea:focus-visible,.inspection-feature select:focus-visible,.inspection-feature summary:focus-visible {outline:3px solid #2c9b87;outline-offset:3px}
+.inspection-feature button:focus-visible,.inspection-feature input:focus-visible,.inspection-feature textarea:focus-visible,.inspection-feature select:focus-visible,.inspection-feature summary:focus-visible {outline:3px solid var(--app-focus);outline-offset:3px}
 .inspection-feature button:disabled {opacity:.55;cursor:not-allowed}
-.inspection-feature summary {color:#3a6653;font-size:12px;font-weight:550;padding:10px 0}
+.inspection-feature summary {color:var(--app-brand);font-size:12px;font-weight:550;padding:10px 0}
 .inspection-feature details[open]>summary {margin-bottom:8px}
 .inspection-feature dl {margin:0}
 .inspection-feature dd {margin:4px 0 0;overflow-wrap:anywhere}
-.inspection-feature dt {font-size:10px;color:#708575}
+.inspection-feature dt {font-size:10px;color:var(--app-muted)}
 .inspection-feature .inspection-heading {display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:25px}
-.inspection-feature .inspection-heading p {color:#6a7d72;max-width:650px}
-.inspection-feature .inspection-eyebrow {display:block;color:#29745f;font-size:9px;font-weight:650;letter-spacing:1.2px;text-transform:uppercase}
-.inspection-feature .inspection-label {display:inline-block;flex-shrink:0;border:1px solid #cbded0;border-radius:5px;background:#eff5ec;color:#4c7759;font-size:10px;padding:5px 8px;line-height:1.3}
-.inspection-feature .inspection-label.warning {border-color:#e3d2aa;color:#795f2b;background:#fff9e8}
+.inspection-feature .inspection-heading p {color:var(--app-muted);max-width:650px}
+.inspection-feature .inspection-eyebrow {display:block;color:var(--app-brand);font-size:9px;font-weight:650;letter-spacing:1.2px;text-transform:uppercase}
+.inspection-feature .inspection-label {display:inline-block;flex-shrink:0;border:1px solid var(--app-brand-border);border-radius:5px;background:var(--app-brand-soft);color:var(--app-brand);font-size:10px;padding:5px 8px;line-height:1.3}
+.inspection-feature .inspection-label.warning {border-color:var(--app-warning-border);color:var(--app-warning);background:var(--app-warning-soft)}
 .inspection-feature .inspection-heading>.inspection-label {margin-top:8px}
-.inspection-feature .inspection-muted {color:#708175;font-size:11px}
+.inspection-feature .inspection-muted {color:var(--app-muted);font-size:11px}
 .inspection-feature .inspection-path {font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;overflow-wrap:anywhere;word-break:break-word}
-.inspection-feature .inspection-workspace {display:flex;align-items:center;justify-content:space-between;gap:20px;padding:20px 23px;border:1px solid #d4dfd0;border-radius:9px;background:#ecf1e9}
+.inspection-feature .inspection-workspace {display:flex;align-items:center;justify-content:space-between;gap:20px;padding:20px 23px;border:1px solid var(--app-border);border-radius:9px;background:var(--app-surface-subtle)}
 .inspection-feature .inspection-workspace-info {min-width:0}
-.inspection-feature .inspection-workspace-info>.inspection-path {margin:7px 0;color:#355a49;font-size:12px}
+.inspection-feature .inspection-workspace-info>.inspection-path {margin:7px 0;color:var(--app-text);font-size:12px}
 .inspection-feature .inspection-actions {display:flex;gap:8px;flex-shrink:0}
-.inspection-feature .inspection-button {display:inline-flex;align-items:center;justify-content:center;padding:10px 13px;border:1px solid #cbd9ce;border-radius:6px;color:#315944;background:#fff;font-size:11px;font-weight:600;white-space:nowrap;min-height:37px}
-.inspection-feature .inspection-button:hover {background:#edf4e9;border-color:#b1c7b7}
-.inspection-feature .inspection-button.primary {background:#167566;border-color:#167566;color:#fff}
-.inspection-feature .inspection-button.primary:hover {background:#105e53}
-.inspection-feature .inspection-scope {color:#7b887b;font-size:10px;line-height:1.7;margin:12px 2px 15px}
-.inspection-feature .inspection-error {padding:14px 17px;background:#fff0e9;border:1px solid #e8c4b4;color:#89442e;border-radius:7px;margin-bottom:20px;overflow-wrap:anywhere}
-.inspection-feature pre {max-height:240px;overflow:auto;background:#173430;color:#d2e7d6;border-radius:5px;padding:14px;font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}
-.inspection-feature .inspection-empty {padding:55px 25px 65px;text-align:center;border:1px dashed #d5dfd1;border-radius:10px;background:#fafcf7}
-.inspection-feature .inspection-empty p {max-width:450px;margin:10px auto 0;color:#7b887a;font-size:12px}
-.inspection-feature .inspection-banner {background:#edf3e9;color:#5b735f;border-left:3px solid #9dbb9c;font-size:11px;padding:11px 15px;margin:0 0 20px;border-radius:0 5px 5px 0}
-.inspection-feature .inspection-panel {background:#fff;border:1px solid #dce4d6;border-radius:9px;padding:22px;margin-bottom:21px;min-width:0}
+.inspection-feature .inspection-button {display:inline-flex;align-items:center;justify-content:center;padding:10px 13px;border:1px solid var(--app-border);border-radius:6px;color:var(--app-text);background:var(--app-surface);font-size:11px;font-weight:600;white-space:nowrap;min-height:37px}
+.inspection-feature .inspection-button:hover {background:var(--app-brand-soft);border-color:var(--app-brand-border)}
+.inspection-feature .inspection-button.primary {background:var(--app-brand);border-color:var(--app-brand);color:var(--app-surface)}
+.inspection-feature .inspection-button.primary:hover {background:var(--app-brand-hover)}
+.inspection-feature .inspection-scope {color:var(--app-muted);font-size:10px;line-height:1.7;margin:12px 2px 15px}
+.inspection-feature .inspection-error {padding:14px 17px;background:var(--app-danger-soft);border:1px solid var(--app-danger-border);color:var(--app-danger);border-radius:7px;margin-bottom:20px;overflow-wrap:anywhere}
+.inspection-feature pre {max-height:240px;overflow:auto;background:var(--app-code);color:var(--app-code-text);border-radius:5px;padding:14px;font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}
+.inspection-feature .inspection-empty {padding:55px 25px 65px;text-align:center;border:1px dashed var(--app-border);border-radius:10px;background:var(--app-surface-subtle)}
+.inspection-feature .inspection-empty p {max-width:450px;margin:10px auto 0;color:var(--app-muted);font-size:12px}
+.inspection-feature .inspection-banner {background:var(--app-blue-soft);color:var(--app-blue);border-left:3px solid var(--app-blue-border);font-size:11px;padding:11px 15px;margin:0 0 20px;border-radius:0 5px 5px 0}
+.inspection-feature .inspection-panel {background:var(--app-surface);border:1px solid var(--app-border);border-radius:9px;padding:22px;margin-bottom:21px;min-width:0}
 .inspection-feature .inspection-section-heading {display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:17px}
 .inspection-feature .inspection-identity {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 24px;margin-bottom:15px}
-.inspection-feature .inspection-source-list {padding-left:17px;margin:6px 0 14px;font-size:11px;color:#5a7160}
+.inspection-feature .inspection-source-list {padding-left:17px;margin:6px 0 14px;font-size:11px;color:var(--app-muted)}
 .inspection-feature .inspection-source-list li {padding-bottom:4px;overflow-wrap:anywhere}
 .inspection-feature [hidden] {display:none!important}
 .inspection-feature a.inspection-button {text-decoration:none}
 .inspection-feature .inspection-technical-details {margin:10px 0}
 .inspection-feature .inspection-apply-note {margin:17px 0}
 .inspection-feature .inspection-build-domain {max-width:440px;margin-bottom:18px}
-.inspection-feature .inspection-build-artifact {display:flex;align-items:flex-start;justify-content:space-between;gap:15px;padding:13px 0;border-top:1px solid #e2e9dc}
+.inspection-feature .inspection-build-artifact {display:flex;align-items:flex-start;justify-content:space-between;gap:15px;padding:13px 0;border-top:1px solid var(--app-border)}
 .inspection-feature .inspection-build-artifact>div {min-width:0}
 .inspection-feature .inspection-build-artifact strong {font-size:12px}
 .inspection-feature .inspection-build-artifact .inspection-path {margin-top:5px}

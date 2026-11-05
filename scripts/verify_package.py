@@ -29,7 +29,7 @@ metadata = importlib.metadata.distribution("zephyr-utilities")
 assert metadata.version == zephyr_utilities.__version__
 assert any(e.name == "zephyr-utils" and e.value == "zephyr_utilities.cli:main"
            for e in metadata.entry_points)
-for name in ("index.html", "shell.js", "shell.css", "shared/api.js", "shared/routes.js"):
+for name in ("index.html", "shell.js", "shell.css", "shared/api.js", "shared/routes.js", "shared/interaction.js"):
     assert (package / "web" / name).is_file(), f"Missing shell asset: {name}"
 for feature in validate_features(builtin_features()):
     if feature.frontend:

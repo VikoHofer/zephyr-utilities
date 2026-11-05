@@ -12,6 +12,7 @@ import yaml
 
 from .creation import open_directory, path_identity, validate_identity
 from .probing import check_cancel
+from .sample_adaptations import adapt_blinky
 
 
 MAX_FILES = 128
@@ -362,11 +363,39 @@ def sample_catalog(snapshot):
     return {"zephyr": zephyr, "samples": samples, "diagnostics": []}
 
 
-def preview_sample(snapshot, sample_id, recipe, *, cancel=None):
+def _adaptation_input(zephyr, relative):
+    """Read a fixed adapter input through the same bounded no-follow reader."""
+    path = Path(zephyr["path"]) / relative
+    identity = path_identity(path.parent)
+    descriptor = open_directory(path.parent, identity)
+    try:
+        content = _read(descriptor, path.name)
+    finally:
+        os.close(descriptor)
+    validate_identity(path.parent, identity)
+    return content, {"directory_identity": identity}
+
+
+def preview_sample(snapshot, sample_id, recipe, *, profile=None, cancel=None):
     """Return copied bytes and a standalone guide without running local tools."""
     contents, provenance = _capture(snapshot, sample_id, cancel)
+    contents, provenance = adapt_blinky(contents, provenance, profile,
+                                       lambda path: _adaptation_input(provenance["zephyr"], path), cancel=cancel)
+    adaptation = provenance.get("adaptation")
+    if adaptation:
+        _includes({path: content for path, content in contents.items() if not path.startswith("upstream/")},
+                  provenance["zephyr"])
+        provenance.pop("fingerprint")
+        provenance["fingerprint"] = _digest(provenance)
     contents["zephyr-sample.json"] = json.dumps(provenance, sort_keys=True, indent=2) + "\n"
     requirements = "\n".join(f"- {item}" for item in provenance["requirements"])
+    origin = (
+        "This application uses the explicit ESP32-C3 RGB Blinky adaptation described in\n"
+        "ADAPTATION.md. Generated root source/configuration are labeled; original Blinky\n"
+        "files remain unchanged under upstream/basic-blinky/, and additional LED strip\n"
+        "source evidence is retained under upstream/led-strip/.\n"
+        if adaptation else
+        "Upstream source files, README.rst, sample.yaml and board files are unchanged.\n")
     contents["ZEPHYR-SAMPLE.md"] = (
         f"# {provenance['title']} — local sample copy\n\n"
         f"Copied from `{provenance['path']}` in `{provenance['zephyr']['path']}`.\n"
@@ -374,7 +403,7 @@ def preview_sample(snapshot, sample_id, recipe, *, cancel=None):
         f"Observed revision: `{provenance['zephyr']['revision'] or 'unknown'}`.\n\n"
         "The checkout version/revision came from the saved environment observation. The manifest\n"
         "records the exact current copied file hashes; it does not claim the checkout was clean.\n"
-        "Upstream source files, README.rst, sample.yaml and board files are unchanged. LICENSE,\n"
+        f"{origin}LICENSE,\n"
         "REUSE.toml and any NOTICE retain the checkout's licensing evidence; REUSE paths refer\n"
         "to the original repository layout. See zephyr-sample.json for per-file attribution.\n\n"
         f"## Requirements\n\n{requirements}\n\n"
@@ -391,6 +420,8 @@ def preview_sample(snapshot, sample_id, recipe, *, cancel=None):
         raise ValueError("The complete sample copy exceeds the supported file or byte limit.")
     if any(len(value.encode()) > MAX_FILE_BYTES for value in contents.values()):
         raise ValueError("A generated sample document exceeds the supported per-file limit.")
+    if any(len(PurePosixPath(path).parts) > MAX_DEPTH for path in contents):
+        raise ValueError("The complete sample copy exceeds the supported path depth limit.")
     return {"files": [{"path": path, "content": content, "sha256": _hash(content.encode())}
                       for path, content in sorted(contents.items())], "provenance": provenance}
 
@@ -401,7 +432,10 @@ def validate_sample_plan(plan, cancel=None):
     provenance = plan.get("sample")
     if not isinstance(provenance, dict):
         raise ValueError("The local sample provenance is missing. Preview again.")
-    actual = preview_sample({"zephyr": plan["profile"]["zephyr"]}, provenance.get("id"), plan["recipe"], cancel=cancel)
+    if provenance.get("schema_version") not in {1, 2}:
+        raise ValueError("Unsupported local sample provenance schema. Preview again.")
+    actual = preview_sample({"zephyr": plan["profile"]["zephyr"]}, provenance.get("id"), plan["recipe"],
+                            profile=plan["profile"] if provenance["schema_version"] == 2 else None, cancel=cancel)
     if actual["provenance"] != provenance or actual["files"] != plan.get("files"):
         raise ValueError("The local sample changed after preview. Refresh the sample list and preview again.")
     return provenance

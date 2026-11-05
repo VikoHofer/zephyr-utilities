@@ -1,4 +1,10 @@
 /** Reconcile saved selections when snapshots are deleted locally or in another tab. */
+export function completedJobSnapshot(job, snapshots) {
+  if (job?.status !== "completed") return null;
+  const id = job.snapshot_id || job.result?.snapshot_id;
+  return id ? snapshots.find((snapshot) => snapshot.id === id) || null : null;
+}
+
 export function reconcileSnapshots(state, snapshots) {
   const available = new Set(snapshots.map((snapshot) => snapshot.id));
   state.snapshots = snapshots;

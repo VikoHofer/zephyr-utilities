@@ -2,10 +2,10 @@
 
 from concurrent.futures import CancelledError
 from copy import deepcopy
+from functools import wraps
 import hashlib
 import os
 from pathlib import Path
-import stat
 from threading import RLock
 import time
 import uuid
@@ -18,8 +18,19 @@ from .fragments import discover_fragment_files, profile_fragments, validate_frag
 from .metadata import read_regular
 from .probing import check_cancel
 from .records import ProjectStore, configuration_name, identifier, now
-from .samples import sample_catalog
+from .samples import preview_sample, sample_catalog
+from .sample_compatibility import check_sample, inspect_sample_requirements
+from .sample_check_identity import sample_input_guard
 from .templates import template_catalog
+
+
+def _locked(method):
+    """Serialize metadata removal with preview creation and job submission."""
+    @wraps(method)
+    def call(self, *args, **kwargs):
+        with self.lock:
+            return method(self, *args, **kwargs)
+    return call
 
 
 def source_inputs(source, *, cancel=None):
@@ -55,6 +66,7 @@ class CreatorService:
         self.environments = environment_store
         self.store = ProjectStore(context.feature_data("projects") / "creator")
         self.plans = {}
+        self.sample_checks = {}
         self.lock = RLock()
 
     def _workspace(self, body, fields):
@@ -85,27 +97,101 @@ class CreatorService:
                 raise ValueError("This preview belongs to another workspace.")
             return self.plans.pop(plan_id)
 
+    @_locked
     def current(self):
-        workspace = self.context.workspace.get()["path"]
+        return self._current(self.context.workspace.get()["path"])
+
+    def _current(self, workspace):
         jobs = [job for job in self.context.jobs.list("projects")
-                if job["metadata"].get("workspace") == workspace and job["metadata"].get("operation") != "analyze"]
+                if job["metadata"].get("workspace") == workspace and job["metadata"].get("operation") not in {"analyze", "sample-check"}]
         active = {job["metadata"].get("attempt_id") for job in jobs if job["status"] in {"queued", "running"}}
         stored_projects, diagnostics = self.store.list(workspace, active)
-        projects = []
+        projects, unavailable = [], []
+        live_paths = set()
         for project in stored_projects:
+            reason = None
             try:
-                if not stat.S_ISDIR(Path(project["path"]).stat().st_mode):
-                    continue
+                identity = path_identity(project["path"])
+                if identity != project.get("directory_identity") or project["path"] in live_paths:
+                    reason = ("replaced", "The saved application folder was replaced or recreated at this location.")
             except (FileNotFoundError, NotADirectoryError):
-                continue
+                reason = ("missing", "The saved application folder was deleted or moved from this location.")
+            except ValueError:
+                reason = ("replaced", "The saved application path no longer refers to its original directory.")
             except OSError as exc:
                 diagnostics.append(f"Cannot check application directory {project['path']}: {exc}")
-            projects.append(project)
+            if reason:
+                project.update(availability=reason[0], availability_reason=reason[1])
+                unavailable.append(project)
+            else:
+                live_paths.add(project["path"])
+                projects.append(project)
+        project_ids = {project["id"] for project in projects}
+        attempt_ids = {attempt["id"] for project in projects for attempt in project["attempts"]}
+
+        def visible_job(job):
+            if job["status"] in {"queued", "running"}:
+                return True
+            metadata = job["metadata"]
+            if metadata.get("attempt_id"):
+                return metadata["attempt_id"] in attempt_ids
+            if metadata.get("project_id"):
+                return metadata["project_id"] in project_ids
+            created = (job.get("result") or {}).get("project")
+            return not created or created.get("id") in project_ids
+
+        jobs = [job for job in jobs if visible_job(job)]
         snapshot = self.environments.latest(workspace)
         if snapshot:
             snapshot["freshness"] = "saved-observation"
-        return {"workspace": workspace, "snapshot": snapshot, "projects": projects, "jobs": jobs,
+        return {"workspace": workspace, "snapshot": snapshot, "projects": projects,
+                "unavailable_projects": unavailable, "jobs": jobs,
                 "diagnostics": diagnostics, "templates": template_catalog()}
+
+    def _require_idle(self, project, workspace):
+        for job in self.context.jobs.list("projects"):
+            metadata = job["metadata"]
+            if (job["status"] in {"queued", "running"} and metadata.get("workspace") == workspace and
+                    (metadata.get("project_id") == project["id"] or metadata.get("destination") == project["path"])):
+                raise ValueError("An operation is using this application. Wait for it to finish or cancel it before removing records.")
+
+    def _discard_previews(self, project_id, configuration_id=None):
+        self.plans = {key: value for key, value in self.plans.items()
+                      if value["plan"].get("project_id") != project_id or
+                      (configuration_id is not None and value["plan"].get("configuration", {}).get("id") != configuration_id)}
+
+    @_locked
+    def remove_project(self, body):
+        workspace = self._workspace(body, {"project_id"})
+        project = self.store.project(body.get("project_id"), workspace)
+        self._require_idle(project, workspace)
+        current = self._current(workspace)
+        if any(item["id"] == project["id"] for item in current["projects"]):
+            if any(item["path"] == project["path"] and item.get("directory_identity") == project.get("directory_identity")
+                   for item in current["unavailable_projects"]):
+                raise ValueError("Remove the older unavailable saved entries for this location first, so they cannot reappear as the current application.")
+        self.store.remove_project(project["id"], workspace)
+        self._discard_previews(project["id"])
+        return {"removed": project["id"]}
+
+    @_locked
+    def remove_configuration(self, body):
+        workspace = self._workspace(body, {"project_id", "configuration_id"})
+        project = self.store.project(body.get("project_id"), workspace)
+        configuration_id = identifier(body.get("configuration_id"))
+        self._require_idle(project, workspace)
+        self.store.remove_configuration(configuration_id, project["id"], workspace)
+        self._discard_previews(project["id"], configuration_id)
+        return {"removed": configuration_id}
+
+    @_locked
+    def remove_attempt(self, body):
+        workspace = self._workspace(body, {"project_id", "attempt_id"})
+        project = self.store.project(body.get("project_id"), workspace)
+        attempt_id = identifier(body.get("attempt_id"))
+        self._require_idle(project, workspace)
+        self.store.remove_attempt(attempt_id, project["id"], workspace)
+        return {"removed": attempt_id}
 
     def samples(self, body):
         workspace = self._workspace(body, set())
@@ -117,16 +203,105 @@ class CreatorService:
 
     def preview(self, body):
         workspace = self._workspace(body, {"name", "destination", "board_id", "target", "sdk_id", "template_id",
-                                           "sample_id", "sample_fingerprint"})
+                                           "sample_id", "sample_fingerprint", "sample_check_id"})
+        if "sample_check_id" in body and body.get("template_id") != "local-sample":
+            raise ValueError("Sample compatibility checks only apply to local samples.")
         snapshot = self.environments.latest(workspace)
         if snapshot is None:
             raise ValueError("Analyze this workspace before creating an application.")
         environment = dict(os.environ)
-        plan = preview_project(workspace, {key: value for key, value in body.items() if key != "workspace"}, snapshot,
+        plan = preview_project(workspace, {key: value for key, value in body.items() if key not in {"workspace", "sample_check_id"}}, snapshot,
                                recipe_factory=lambda profile, source, build: command_recipe(profile, source, build,
                                                                                            environ=environment))
         plan["profile"]["execution_fingerprint"] = execution_guard(snapshot, plan["profile"])
+        if "sample" in plan:
+            plan["sample_compatibility"] = self._sample_result(body, plan, snapshot)
         return self._remember("create", plan, environment)
+
+    @staticmethod
+    def _sample_selection(body, snapshot):
+        return {key: body[key] for key in ("workspace", "sample_id", "sample_fingerprint", "board_id", "target", "sdk_id")} | {
+            "environment_fingerprint": snapshot["fingerprint"]}
+
+    def _sample_result(self, body, plan, snapshot):
+        selection = self._sample_selection(body, snapshot)
+        check_id = body.get("sample_check_id")
+        if "sample_check_id" in body:
+            identifier(check_id)
+        with self.lock:
+            self.sample_checks = {key: value for key, value in self.sample_checks.items() if value["expires"] > time.monotonic()}
+            saved = self.sample_checks.get(check_id) if check_id else next((value for value in reversed(list(self.sample_checks.values()))
+                if value["selection"] == selection and value["sample_fingerprint"] == plan["sample"]["fingerprint"]
+                and value["guard"] == plan["profile"]["execution_fingerprint"]), None)
+            if check_id and (not saved or saved["selection"] != selection or
+                             saved["sample_fingerprint"] != plan["sample"]["fingerprint"] or
+                             saved["guard"] != plan["profile"]["execution_fingerprint"]):
+                raise ValueError("This sample compatibility check expired or its inputs changed. Check compatibility again.")
+            saved = deepcopy(saved)
+        if saved:
+            try:
+                current_inputs = sample_input_guard(plan["profile"])
+            except (OSError, ValueError):
+                current_inputs = None
+            if current_inputs != saved["input_guard"]:
+                if check_id:
+                    raise ValueError("This sample compatibility check expired or its inputs changed. Check compatibility again.")
+                saved = None
+            else:
+                plan["sample_input_fingerprint"] = current_inputs
+        result = deepcopy(saved["result"]) if saved else {
+            **selection, "status": "unknown", "message": "Board compatibility has not been checked.",
+            "details": ["Use Check compatibility to configure a temporary copy and inspect this board's resolved hardware requirements."]}
+        if result["status"] == "incompatible":
+            raise ValueError(result["message"])
+        if plan["sample"].get("adaptation"):
+            result["adaptation"] = deepcopy(plan["sample"]["adaptation"])
+        return result
+
+    def sample_check(self, body):
+        workspace = self._workspace(body, {"sample_id", "sample_fingerprint", "board_id", "target", "sdk_id"})
+        body = deepcopy(body)
+        snapshot = self.environments.latest(workspace)
+        profile = select_profile(workspace, body, snapshot)
+        environment = dict(os.environ)
+        profile["execution_fingerprint"] = execution_guard(snapshot, profile)
+        recipe = {"cwd": workspace, "display_configure": "", "display_build": ""}
+        sample = preview_sample(snapshot, body.get("sample_id"), recipe, profile=profile)
+        fingerprint = sample["provenance"].get("source_fingerprint", sample["provenance"]["fingerprint"])
+        if body.get("sample_fingerprint") != fingerprint:
+            raise ValueError("The local sample changed after selection. Refresh samples before checking compatibility.")
+        selection = self._sample_selection(body, snapshot)
+        check_id = uuid.uuid4().hex
+
+        def run(emit, cancel):
+            self._recheck(profile, environment, emit, cancel)
+            current = preview_sample(snapshot, body["sample_id"], recipe, profile=profile, cancel=cancel)
+            if current != sample:
+                raise ValueError("The local sample changed before the compatibility check. Refresh samples and check again.")
+            input_guard = sample_input_guard(profile, cancel=cancel)
+            result = check_sample(profile, sample["files"], body["sample_id"],
+                                  root=self.context.feature_data("projects") / "sample-checks",
+                                  environ=environment, emit=emit, cancel=cancel)
+            self._recheck(profile, environment, emit, cancel)
+            if preview_sample(snapshot, body["sample_id"], recipe, profile=profile, cancel=cancel) != sample:
+                raise ValueError("The local sample changed during the compatibility check. Refresh samples and check again.")
+            if sample_input_guard(profile, cancel=cancel) != input_guard:
+                raise ValueError("The board configuration inputs changed during the compatibility check. Check compatibility again.")
+            check_cancel(cancel)
+            result = {**result, **selection, "checked_at": now()}
+            if sample["provenance"].get("adaptation"):
+                result["adaptation"] = deepcopy(sample["provenance"]["adaptation"])
+            with self.lock:
+                self.sample_checks = {key: value for key, value in self.sample_checks.items() if value["expires"] > time.monotonic()}
+                if len(self.sample_checks) >= 32:
+                    del self.sample_checks[next(iter(self.sample_checks))]
+                self.sample_checks[check_id] = {"selection": selection, "result": deepcopy(result),
+                    "guard": profile["execution_fingerprint"], "sample_fingerprint": sample["provenance"]["fingerprint"],
+                    "input_guard": input_guard, "expires": time.monotonic() + 1800}
+            return {"check_id": check_id, "compatibility": result}
+
+        return self.context.jobs.submit("projects", run, resource_key=f"sample-check:{workspace}",
+            metadata={"workspace": workspace, "operation": "sample-check", "view": "create", "selection": selection})
 
     def _recheck(self, profile, environment, emit, cancel):
         emit("Rechecking the selected environment before this operation…")
@@ -137,6 +312,7 @@ class CreatorService:
             raise ValueError("The environment changed since selection. Analyze again and save a new build configuration, or preview a new application.")
         check_cancel(cancel)
 
+    @_locked
     def create(self, body):
         workspace = self._workspace(body, {"plan_id"})
         saved = self._consume("create", body.get("plan_id"), workspace)
@@ -144,6 +320,8 @@ class CreatorService:
 
         def run(emit, cancel):
             self._recheck(plan["profile"], environment, emit, cancel)
+            if plan.get("sample_input_fingerprint") and sample_input_guard(plan["profile"], cancel=cancel) != plan["sample_input_fingerprint"]:
+                raise ValueError("Sample compatibility inputs changed after preview. Check compatibility and preview again.")
             emit(f"Creating the reviewed application at {plan['destination']}…")
             project = apply_project(plan, cancel=cancel)
             try:
@@ -154,7 +332,8 @@ class CreatorService:
             return {"project": project}
 
         return self.context.jobs.submit("projects", run, resource_key=f"create:{plan['destination']}",
-                                        metadata={"workspace": workspace, "operation": "create", "view": "create", "plan_id": plan["id"]})
+                                        metadata={"workspace": workspace, "operation": "create", "view": "create",
+                                                  "destination": plan["destination"], "plan_id": plan["id"]})
 
     def configuration_files(self, body):
         workspace = self._workspace(body, {"project_id"})
@@ -164,6 +343,7 @@ class CreatorService:
         validate_identity(project["path"], project["directory_identity"])
         return {"workspace": workspace, "project_id": project["id"], **catalogue}
 
+    @_locked
     def save_configuration(self, body):
         workspace = self._workspace(body, {"project_id", "name", "board_id", "target", "sdk_id", "fragments"})
         name = configuration_name(body.get("name"))
@@ -182,6 +362,7 @@ class CreatorService:
         self.store.save_configuration(configuration)
         return {"configuration": deepcopy(configuration)}
 
+    @_locked
     def build_preview(self, body):
         workspace = self._workspace(body, {"project_id", "operation", "configuration_id"})
         operation = body.get("operation")
@@ -210,6 +391,13 @@ class CreatorService:
                 "operation": operation, "build_dir": str(output), "recipe": recipe, "sources": sources,
                 "parent_identity": parent_identity, "created_at": now(), "profile": profile,
                 "configuration": configuration}
+        if project.get("sample"):
+            adaptation = project["sample"].get("adaptation")
+            if adaptation and adaptation.get("target") != profile["target"]:
+                raise ValueError("This sample's RGB LED adaptation belongs to another board target. Create a new sample for the selected target.")
+            plan["sample_compatibility"] = {"status": "unknown",
+                "message": "Sample hardware requirements will be checked during Configure/Build.",
+                "details": ["The current application's resolved Device Tree is checked before compilation."]}
         return self._remember("build", plan, environment)
 
     def _prepare_output(self, project, plan, *, cancel=None):
@@ -232,6 +420,7 @@ class CreatorService:
             validate_identity(source, project["directory_identity"])
             path_identity(parent)
 
+    @_locked
     def build(self, body):
         workspace = self._workspace(body, {"build_plan_id"})
         saved = self._consume("build", body.get("build_plan_id"), workspace)
@@ -256,8 +445,24 @@ class CreatorService:
                 self._recheck(plan["profile"], environment, report, cancel)
                 self._prepare_output(project, plan, cancel=cancel)
                 check_cancel(cancel)
+                options = {}
+                if project.get("sample"):
+                    def inspect_sample(build_dir):
+                        source = Path(project["path"]) / "src/main.c"
+                        try:
+                            data = read_regular(source, 1024 * 1024)
+                        except (OSError, ValueError):
+                            data = None
+                        expected = next((item["sha256"] for item in project["files"] if item["path"] == "src/main.c"), None)
+                        if data is None or hashlib.sha256(data).hexdigest() != expected:
+                            return {"status": "unknown", "message": "The sample source has changed; its original hardware requirements cannot be applied automatically.",
+                                    "details": ["Review the current application source and configuration before using it on hardware."]}
+                        files = [{"path": "src/main.c", "content": data.decode("utf-8", errors="replace")}]
+                        return inspect_sample_requirements(plan["profile"], files, project["sample"]["id"],
+                                                           build_dir, source_dir=project["path"], emit=report, cancel=cancel)
+                    options["after_configure"] = inspect_sample
                 result = execute_build(plan["profile"], project["path"], plan["build_dir"], plan["operation"],
-                                       environ=environment, emit=report, cancel=cancel)
+                                       environ=environment, emit=report, cancel=cancel, **options)
                 attempt.update(result)
                 try:
                     changed = source_inputs(project["path"]) != plan["sources"]

@@ -1,6 +1,7 @@
 /** Memory feature. The application shell owns routing and shared services. */
-import {reconcileSnapshots} from "./snapshot-state.js";
+import {completedJobSnapshot, reconcileSnapshots} from "./snapshot-state.js";
 import {createMemoryHandoff} from "./handoff-state.js";
+import {createReportPoller} from "./job-state.js";
 
 export function mount(root, context) {
   root = root.querySelector("#memory-feature");
@@ -17,6 +18,8 @@ export function mount(root, context) {
   let deleting = false;
   let generating = false;
   let discoveryRequest = 0;
+  let navigationRevision = 0;
+  let importIntent = 0;
   // Detached generated rows need no external lifetime reference; removing a row
   // releases its listeners. Static controls are explicitly aborted on disposal.
   const listen = (node, type, action) => node.addEventListener(type, action, root.contains(node) ? {signal: lifetime.signal} : undefined);
@@ -35,7 +38,10 @@ export function mount(root, context) {
   state.inspection ||= {};
   const inspection = createMemoryHandoff({api: (path, options) => context.api(path, options), state: state.inspection,
     workspace: () => context.workspace.path, onChange: renderInspection});
-  const palette = ["#337f6c", "#72927a", "#ae7957", "#48717c", "#8b9560", "#648f9a", "#b29472", "#6c827d"];
+  const pollJob = createReportPoller({jobId: () => state.job,
+    read: (id) => api(`/api/jobs/${encodeURIComponent(id)}`), onUpdate: acceptJobUpdate,
+    onError: reportJobError, schedule: later, isDisposed: () => disposed});
+  const palette = ["#7929D2", "#0070C5", "#7DD2F7", "#9454DB", "#4C9BD6", "#AF7FE4", "#4C5155", "#6C7073"];
   const views = {overview: "Overview", explorer: "Memory Explorer", compare: "Compare", snapshots: "Snapshots"};
   const integer = new Intl.NumberFormat("en-US");
   const decimal = new Intl.NumberFormat("en-US", {maximumFractionDigits: 2});
@@ -67,7 +73,7 @@ export function mount(root, context) {
     for (const char of String(name)) hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0;
     return palette[Math.abs(hash) % palette.length];
   }
-  function notice(message, error = false) {
+  function notice(message, error = false, revealError = false) {
     if (disposed) return;
     clearTimeout(state.noticeTimer);
     $("notice-text").textContent = message;
@@ -75,16 +81,21 @@ export function mount(root, context) {
     $("notice").hidden = false;
     root.querySelectorAll(".dialog-error").forEach((node) => node.remove());
     const dialog = [...root.querySelectorAll("dialog[open]")].at(-1);
+    if (!dialog && context.notify) {
+      $("notice").hidden = true;
+      context.notify(message, error);
+    }
     if (error && dialog) {
       const alert = el("div", "warning-item dialog-error", message);
       alert.setAttribute("role", "alert");
       dialog.querySelector(".dialog-heading").after(alert);
+      if (revealError) context.reveal?.(alert);
     }
     if (!error) state.noticeTimer = later(() => { $("notice").hidden = true; }, 8000);
   }
-  async function run(action) {
+  async function run(action, explicit = true) {
     try { await action(); }
-    catch (error) { if (!disposed && error.name !== "AbortError") notice(error.message || String(error), true); }
+    catch (error) { if (!disposed && error.name !== "AbortError") notice(error.message || String(error), true, explicit); }
   }
   async function api(path, options = {}) {
     if (disposed) throw new DOMException("Feature closed", "AbortError");
@@ -92,7 +103,8 @@ export function mount(root, context) {
     if (disposed) throw new DOMException("Feature closed", "AbortError");
     return data;
   }
-  function showView(view, route = true) {
+  function showView(view, route = true, reveal = route) {
+    if (route) navigationRevision++;
     if (!views[view]) view = "overview";
     state.view = view;
     for (const name of Object.keys(views)) $("view-" + name).hidden = name !== view;
@@ -103,6 +115,7 @@ export function mount(root, context) {
     });
     $("view-label").textContent = views[view];
     if (route) context.navigate(`memory/${view}`);
+    if (reveal) context.reveal?.($("view-" + view));
     if (view === "explorer" && state.current) frame(renderTree);
   }
   function showWarnings(target, messages) {
@@ -172,14 +185,14 @@ export function mount(root, context) {
     if (!rep) { target.append(el("p", "muted", `No ${state.memory.toUpperCase()} report in this snapshot.`)); return; }
     const groups = rootChildren(rep), strip = el("div", "distribution-strip");
     for (const group of groups) {
-      const segment = button("", "distribution-segment", () => { showView("explorer"); selectNode(group); });
+      const segment = button("", "distribution-segment", () => { showView("explorer", true, false); selectNode(group); });
       segment.style.flex = `${group.size} 1 0%`; segment.style.background = color(group.name);
       segment.title = `${group.name}: ${fmt(group.size)}`; segment.setAttribute("aria-label", segment.title); strip.append(segment);
     }
     target.append(strip);
     for (const group of groups.slice(0, 7)) {
       const row = el("div", "distribution-row"), dot = el("span", "color-dot"); dot.style.background = color(group.name);
-      const name = button(group.name, "text-button label", () => { showView("explorer"); selectNode(group); });
+      const name = button(group.name, "text-button label", () => { showView("explorer", true, false); selectNode(group); });
       row.append(dot, name, el("span", "value", fmt(group.size)), el("span", "percent", pct(group.size, rep.total_size))); target.append(row);
     }
     if (!groups.length) target.append(el("p", "muted", "This report contains no allocated bytes."));
@@ -188,7 +201,7 @@ export function mount(root, context) {
     const target = $("largest-overview"); clear(target); $("largest-memory").textContent = state.memory.toUpperCase();
     const sorted = leaves().slice().sort((a, b) => b.size - a.size).slice(0, 5);
     for (const item of sorted) {
-      const wrapper = el("div", "consumer"), top = el("div", "consumer-top"), name = button(item.name, "text-button consumer-name", () => { showView("explorer"); selectNode(item); });
+      const wrapper = el("div", "consumer"), top = el("div", "consumer-top"), name = button(item.name, "text-button consumer-name", () => { showView("explorer", true, false); selectNode(item); });
       name.title = item.path; top.append(name, el("span", "consumer-value", fmt(item.size)));
       const track = el("div", "consumer-track"), fill = el("div", "consumer-fill"); fill.style.width = `${sorted[0].size ? item.size / sorted[0].size * 100 : 0}%`; track.append(fill); wrapper.append(top, track); target.append(wrapper);
     }
@@ -211,6 +224,7 @@ export function mount(root, context) {
     if (!chain) return;
     state.node = chain.at(-1); state.ancestors = chain;
     renderTree();
+    context.reveal?.($(node.children?.length ? "tree-breadcrumbs" : "selected-detail"));
   }
   function renderExplorer() {
     if (!state.current) return;
@@ -245,8 +259,13 @@ export function mount(root, context) {
     const width = target.clientWidth || 700, height = target.clientHeight || 320;
     for (const rect of rectangles(drawn, 0, 0, width, height)) {
       const item = rect.node;
-      const tile = button("", "treemap-tile", () => { if (!item.grouped) selectNode(item); else table.scrollIntoView({block: "nearest"}); });
-      tile.style.left = `${rect.x / width * 100}%`; tile.style.top = `${rect.y / height * 100}%`; tile.style.width = `${rect.width / width * 100}%`; tile.style.height = `${rect.height / height * 100}%`; tile.style.background = color(item.name);
+      const tile = button("", "treemap-tile", () => { if (!item.grouped) selectNode(item); else context.reveal?.(table, {block: "nearest"}); });
+      const fill = color(item.name);
+      const channels = [1, 3, 5].map((offset) => parseInt(fill.slice(offset, offset + 2), 16) / 255)
+        .map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+      const luminance = channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+      tile.style.left = `${rect.x / width * 100}%`; tile.style.top = `${rect.y / height * 100}%`; tile.style.width = `${rect.width / width * 100}%`; tile.style.height = `${rect.height / height * 100}%`; tile.style.background = fill;
+      tile.style.color = luminance > 0.18 ? "#0D1524" : "#FFFFFF";
       const title = `${item.name}: ${integer.format(item.size)} bytes (${pct(item.size, rep.total_size)} of report)`;
       tile.title = title; tile.setAttribute("aria-label", title);
       if (rect.width > 80 && rect.height > 40) tile.append(el("strong", "", item.name), el("small", "", fmt(item.size)));
@@ -285,13 +304,17 @@ export function mount(root, context) {
     if (snapshotOptionsReady) {
       for (const id of ["baseline-select", "candidate-select"]) state.ui[id] = $(id).value;
     }
+    const previous = state.current, comparison = state.comparison;
     reconcileSnapshots(state, snapshots);
     try {
       const remembered = localStorage.getItem("zme-last-snapshot");
       if (remembered && !snapshots.some((snapshot) => snapshot.id === remembered)) localStorage.removeItem("zme-last-snapshot");
     } catch (_) { /* Remembering a selection is optional. */ }
-    renderSnapshots(); renderSnapshotOptions(); renderOverview(); renderComparison();
+    renderSnapshots(); renderSnapshotOptions();
+    if (state.current !== previous) renderOverview();
+    if (state.comparison !== comparison) renderComparison();
     snapshotOptionsReady = true;
+    if (state.lastJob) renderJob(state.lastJob);
   }
   function renderSnapshotOptions() {
     for (const [id, placeholder] of [["baseline-select", "Choose a baseline"], ["candidate-select", "Choose a candidate"]]) {
@@ -319,16 +342,19 @@ export function mount(root, context) {
   }
   async function loadSnapshot(id, changeView = true) {
     const request = ++state.snapshotRequest;
+    const origin = navigationRevision, workspace = context.workspace.path;
     const selected = state.current?.id === id ? state.node?.id : null;
     const snapshot = await api(`/api/memory/snapshots/${encodeURIComponent(id)}`);
     if (request !== state.snapshotRequest || !state.snapshots.some((item) => item.id === id)) return;
+    if (changeView && (origin !== navigationRevision || workspace !== context.workspace.path)) return;
     state.current = snapshot;
     state.node = selected ? findPath(snapshot.reports?.[state.memory]?.tree, selected)?.at(-1) || null : null;
     state.ancestors = []; state.symbolLimit = 50;
     if (!snapshot.reports?.[state.memory]) state.memory = snapshot.reports?.ram ? "ram" : "rom";
     root.querySelectorAll("[data-memory]").forEach((node) => node.setAttribute("aria-pressed", String(node.dataset.memory === state.memory)));
     try { localStorage.setItem("zme-last-snapshot", id); } catch (_) { /* storage may be unavailable */ }
-    renderOverview(); if (changeView) showView("overview");
+    renderOverview();
+    if (changeView) { showView("overview", true, false); context.reveal?.($("overview-content")); }
   }
   function openDelete(snapshot) {
     pendingDelete = snapshot;
@@ -385,6 +411,7 @@ export function mount(root, context) {
       const comparison = await api(`/api/memory/compare?baseline=${encodeURIComponent(baseline)}&candidate=${encodeURIComponent(candidate)}`);
       if (request !== state.compareRequest || baseline !== $("baseline-select").value || candidate !== $("candidate-select").value) return;
       state.comparison = comparison; state.changeLimit = 60; renderComparison();
+      if (state.view === "compare") context.reveal?.($("compare-content"));
     }
     finally { $("run-compare").disabled = false; $("run-compare").textContent = "Compare"; }
   }
@@ -425,6 +452,7 @@ export function mount(root, context) {
   }
   function reconcileBuildWorkspace() {
     if (state.workspacePath !== context.workspace.path) {
+      navigationRevision++;
       $("project-path").value = context.workspace.path || "";
       state.workspacePath = context.workspace.path;
       state.ui ||= {};
@@ -443,7 +471,7 @@ export function mount(root, context) {
     inspection.clear();
     $("inspection-dialog").close();
     reconcileBuildWorkspace();
-    showView(state.view);
+    showView(state.view, true, false);
     if (!$("build-dialog").open) $("build-dialog").showModal();
     $("project-path").focus();
   }
@@ -469,6 +497,7 @@ export function mount(root, context) {
   }
   function navigate(view) {
     if (disposed) return;
+    navigationRevision++;
     reconcileBuildWorkspace();
     if (view === "inspect" || view?.startsWith("inspect/")) {
       discoveryRequest++;
@@ -482,19 +511,34 @@ export function mount(root, context) {
       $("build-dialog").close();
       $("inspection-details").open = false;
       showView("overview", false);
-      run(() => inspection.open(view));
+      run(() => inspection.open(view), false);
       if (!$("inspection-dialog").open) $("inspection-dialog").showModal();
     } else {
       inspection.clear();
       $("inspection-dialog").close();
-      showView(view || "overview", false);
+      const changed = state.view !== (view || "overview");
+      showView(view || "overview", false, changed);
     }
   }
   function rememberPath(path) {
     try { const recent = JSON.parse(localStorage.getItem("zme-recent-paths") || "[]"); localStorage.setItem("zme-recent-paths", JSON.stringify([path, ...recent.filter((item) => item !== path)].slice(0, 8))); renderRecentPaths(); } catch (_) { /* optional convenience */ }
   }
   function renderRecentPaths() {
-    try { clear($("recent-paths")); for (const path of JSON.parse(localStorage.getItem("zme-recent-paths") || "[]")) { const option = el("option"); option.value = path; $("recent-paths").append(option); } } catch (_) { /* optional convenience */ }
+    clear($("recent-paths"));
+    $("clear-recent-paths").disabled = true;
+    try {
+      const recent = JSON.parse(localStorage.getItem("zme-recent-paths") || "[]");
+      if (!Array.isArray(recent)) return;
+      for (const path of recent.filter((item) => typeof item === "string" && item.trim()).slice(0, 8)) {
+        const option = el("option"); option.value = path; $("recent-paths").append(option);
+      }
+      $("clear-recent-paths").disabled = !$("recent-paths").children.length;
+    } catch (_) { /* Remembering a search path is optional. */ }
+  }
+  function clearRecentPaths() {
+    localStorage.removeItem("zme-recent-paths");
+    renderRecentPaths();
+    $("project-path").focus();
   }
   async function discover() {
     const path = $("project-path").value.trim(); if (!path) throw new Error("Enter a project or build directory.");
@@ -511,12 +555,13 @@ export function mount(root, context) {
         const content = el("div", "build-card-content"); content.append(el("strong", "", `${tail(build.application || build.path)}${build.domain ? ` / ${build.domain}` : ""}`), el("span", "cell-sub code", build.path));
         const labels = el("div", "build-labels"); labels.append(el("span", "badge quiet", build.board || "Board unknown"), el("span", "badge quiet", build.ready ? "READY TO ANALYZE" : "UNAVAILABLE")); if (build.zephyr_version) labels.append(el("span", "badge quiet", `Zephyr ${build.zephyr_version}`)); content.append(labels);
         if (build.error) content.append(el("span", "cell-sub", build.error));
-        listen(radio, "change", () => { if (!current()) return; inspection.clear(); state.build = build; root.querySelectorAll(".build-card").forEach((node) => node.classList.remove("selected")); label.classList.add("selected"); $("build-selection").hidden = false; $("selected-build-hint").textContent = `Analyze ${build.domain || tail(build.path)} · no rebuild`; });
+        listen(radio, "change", () => { if (!current()) return; inspection.clear(); state.build = build; root.querySelectorAll(".build-card").forEach((node) => node.classList.remove("selected")); label.classList.add("selected"); $("build-selection").hidden = false; $("selected-build-hint").textContent = `Analyze ${build.domain || tail(build.path)} · no rebuild`; if ($("build-dialog").open) context.reveal?.($("build-selection")); });
         label.append(radio, content); $("build-results").append(label);
       }
       if (!response.builds?.length) $("build-results").append(el("p", "loader", "No Zephyr builds found. Select a directory containing a completed build with CMakeCache.txt and a final ELF."));
       if (response.builds?.filter((build) => build.ready).length === 1) { const radio = $("build-results").querySelector("input:not(:disabled)"); radio.checked = true; radio.dispatchEvent(new Event("change")); }
-    } catch (error) { if (current()) { clear($("build-results")); $("build-results").append(el("p", "warning-item", error.message)); } }
+      else if ($("build-dialog").open) context.reveal?.($("build-results"));
+    } catch (error) { if (current()) { clear($("build-results")); $("build-results").append(el("p", "warning-item", error.message)); if ($("build-dialog").open) context.reveal?.($("build-results")); } }
     finally { if (current()) { $("discover-button").disabled = false; $("discover-button").textContent = "Find builds"; } }
   }
   async function browse(path) {
@@ -537,47 +582,67 @@ export function mount(root, context) {
     if (state.job) throw new Error("Wait for the current report job or cancel it before starting another.");
     if (generating) return;
     generating = true;
+    const captured = navigationRevision, workspace = context.workspace.path, view = state.view;
+    const dialog = $("inspection-dialog").open ? $("inspection-dialog") : $("build-dialog").open ? $("build-dialog") : null;
     $("generate-button").disabled = true;
     renderInspection();
     try {
       const job = await api("/api/memory/jobs", {method: "POST", body});
-      state.job = job.id; state.lastJob = job; state.jobDismissed = false; $("build-dialog").close(); $("inspection-dialog").close(); $("job-panel").hidden = false; $("job-title").textContent = "Analyzing your build…"; $("job-message").textContent = "Reading the existing ELF and creating a durable snapshot."; $("job-activity").hidden = false; $("cancel-job").hidden = false; $("cancel-job").disabled = false; $("dismiss-job").hidden = true; $("job-log-open").hidden = true; $("job-log").textContent = "";
-      showView("overview"); pollJob(job.id);
+      state.job = job.id; state.lastJob = job; state.jobDismissed = false; renderJob(job);
+      if (!disposed && captured === navigationRevision && workspace === context.workspace.path && view === state.view && (!dialog || dialog.open)) {
+        dialog?.close(); showView("overview", true, false); context.reveal?.($("job-panel"));
+      }
+      pollJob(job.id);
     } finally { generating = false; if (!disposed) { $("generate-button").disabled = false; renderInspection(); } }
   }
-  async function pollJob(id) {
-    try {
-      const job = await api(`/api/jobs/${encodeURIComponent(id)}`);
-      state.lastJob = job;
-      renderJob(job);
-      if (job.status === "completed") {
-        state.job = null;
-        renderInspection();
-        $("job-activity").hidden = true; $("cancel-job").hidden = true; $("dismiss-job").hidden = false; $("job-title").textContent = "Reports generated & snapshot saved"; $("job-message").textContent = "Your captured reports are ready to explore and compare.";
+  async function acceptJobUpdate(job) {
+    state.lastJob = job;
+    renderJob(job);
+    if (job.status === "completed") {
+      state.job = null;
+      renderInspection();
+      try {
         await refreshSnapshots();
-        if (state.snapshots.some((snapshot) => snapshot.id === job.snapshot_id)) {
-          await loadSnapshot(job.snapshot_id);
-          notice("Snapshot saved. Your original build has not been rebuilt.");
-        } else {
-          $("job-title").textContent = "Report generation completed";
-          $("job-message").textContent = "This capture has been deleted from saved snapshots.";
+        if (completedJobSnapshot(job, state.snapshots)) notice(state.lastJob?.id === job.id
+          ? "Snapshot saved. Choose View snapshot to open the captured reports." : "Snapshot saved. Open Snapshots to view it.");
+      } catch (error) {
+        if (!disposed && error.name !== "AbortError" && state.lastJob?.id === job.id) {
+          $("job-message").textContent = "Capture completed. Refresh Snapshots to make its saved result available.";
+          notice("Report generation completed, but saved snapshots could not be refreshed. Refresh Snapshots to open the capture.", true);
         }
-      } else if (job.status === "failed" || job.status === "cancelled") {
-        state.job = null; $("job-activity").hidden = true; $("cancel-job").hidden = true; $("dismiss-job").hidden = false; $("job-title").textContent = job.status === "cancelled" ? "Report generation cancelled" : "Report generation failed"; $("job-message").textContent = job.error || "The job was cancelled.";
-        renderInspection();
-        if (job.status === "failed") notice(job.error || "Report generation failed. Check the generation log.", true);
-      } else if (state.job === id) later(() => pollJob(id), 700);
-    } catch (error) { if (disposed || error.name === "AbortError") return; $("job-activity").hidden = true; $("cancel-job").hidden = true; $("dismiss-job").hidden = false; $("job-title").textContent = "Could not retrieve job status"; $("job-message").textContent = "The analysis may still be running. Refresh snapshots to check for a completed capture."; notice(error.message, true); if (state.job === id) later(() => pollJob(id), 3000); }
+      }
+    } else if (job.status === "failed" || job.status === "cancelled") {
+      state.job = null; $("job-activity").hidden = true; $("cancel-job").hidden = true; $("dismiss-job").hidden = false; $("job-title").textContent = job.status === "cancelled" ? "Report generation cancelled" : "Report generation failed"; $("job-message").textContent = job.error || "The job was cancelled.";
+      renderInspection();
+      if (job.status === "failed") notice(job.error || "Report generation failed. Check the generation log.", true);
+    }
+  }
+  function reportJobError(error) {
+    $("job-activity").hidden = true; $("cancel-job").hidden = true; $("dismiss-job").hidden = false;
+    $("job-title").textContent = "Could not retrieve job status";
+    $("job-message").textContent = "The analysis may still be running. Refresh snapshots to check for a completed capture.";
+    notice(error.message, true);
   }
   async function importReports(event) {
     event.preventDefault();
+    const captured = navigationRevision, workspace = context.workspace.path, intent = importIntent;
+    const stillHere = () => !disposed && captured === navigationRevision && workspace === context.workspace.path && intent === importIntent;
     const ram = $("ram-file").files[0], rom = $("rom-file").files[0];
+    const name = $("import-name").value.trim();
     if (!ram && !rom) throw new Error("Choose at least one RAM or ROM JSON file.");
     $("import-submit").disabled = true; $("import-submit").textContent = "Importing…";
     try {
       const parse = async (file) => { if (!file) return null; if (file.size > 32 * 1024 * 1024) throw new Error(`${file.name} exceeds the 32 MiB report limit.`); try { return JSON.parse(await file.text()); } catch (_) { throw new Error(`${file.name} is not valid JSON.`); } };
-      const snap = await api("/api/memory/import", {method: "POST", body: {ram: await parse(ram), rom: await parse(rom), name: $("import-name").value.trim()}});
-      $("import-dialog").close(); $("import-form").reset(); await refreshSnapshots(); await loadSnapshot(snap.id); notice("Reports imported and saved as a snapshot.");
+      const snap = await api("/api/memory/import", {method: "POST", body: {ram: await parse(ram), rom: await parse(rom), name}});
+      const openResult = stillHere() && $("import-dialog").open;
+      if (openResult) { $("import-dialog").close(); $("import-form").reset(); }
+      try { await refreshSnapshots(); }
+      catch (error) {
+        if (!disposed && error.name !== "AbortError") notice("Reports were imported and saved. Refresh Snapshots to open the capture.", true);
+        return;
+      }
+      if (openResult && stillHere()) await loadSnapshot(snap.id);
+      notice("Reports imported and saved as a snapshot.");
     } finally { $("import-submit").disabled = false; $("import-submit").textContent = "Import & save snapshot"; }
   }
   async function saveSnapshot(event) {
@@ -603,10 +668,15 @@ export function mount(root, context) {
     root.querySelectorAll("[data-compare-memory]").forEach((node) => listen(node, "click", () => { state.compareMemory = node.dataset.compareMemory; root.querySelectorAll("[data-compare-memory]").forEach((item) => item.setAttribute("aria-pressed", String(item.dataset.compareMemory === state.compareMemory))); state.changeLimit = 60; renderChanges(); }));
     root.querySelectorAll("[data-export]").forEach((node) => listen(node, "click", () => run(() => exportSnapshot(node.dataset.export))));
     for (const id of ["build-open", "empty-build-open", "explorer-build-open", "snapshots-build-open"]) listen($(id), "click", openBuild);
-    for (const id of ["import-open", "empty-import-open"]) listen($(id), "click", () => $("import-dialog").showModal());
+    for (const id of ["import-open", "empty-import-open"]) listen($(id), "click", () => { importIntent++; $("import-dialog").showModal(); });
     listen($("notice-close"), "click", () => { $("notice").hidden = true; });
     listen($("discover-form"), "submit", (event) => { event.preventDefault(); run(discover); });
-    listen($("browse-open"), "click", () => run(async () => { await browse($("project-path").value.trim() || "/"); $("folder-dialog").showModal(); }));
+    listen($("clear-recent-paths"), "click", () => run(clearRecentPaths));
+    listen($("browse-open"), "click", () => run(async () => {
+      const captured = navigationRevision, workspace = context.workspace.path;
+      await browse($("project-path").value.trim() || "/");
+      if (!disposed && captured === navigationRevision && workspace === context.workspace.path && $("build-dialog").open) $("folder-dialog").showModal();
+    }));
     listen($("folder-form"), "submit", (event) => { event.preventDefault(); run(() => browse($("folder-path").value)); });
     listen($("folder-up"), "click", () => run(() => browse(state.folder.parent)));
     listen($("use-folder"), "click", () => { $("project-path").value = state.folder.path; $("folder-dialog").close(); });
@@ -615,8 +685,16 @@ export function mount(root, context) {
     listen($("inspection-refresh"), "click", () => run(() => inspection.refresh()));
     listen($("inspection-choose"), "click", openBuild);
     listen($("cancel-job"), "click", () => run(async () => { if (state.job) { $("cancel-job").disabled = true; try { await api(`/api/jobs/${encodeURIComponent(state.job)}/cancel`, {method: "POST", body: {}}); } catch (error) { $("cancel-job").disabled = false; throw error; } } }));
+    listen($("job-view-snapshot"), "click", () => run(async () => {
+      const captured = navigationRevision, workspace = context.workspace.path;
+      await refreshSnapshots();
+      if (captured !== navigationRevision || workspace !== context.workspace.path) return;
+      const snapshot = completedJobSnapshot(state.lastJob, state.snapshots);
+      if (!snapshot) throw new Error("This capture is no longer available in saved snapshots.");
+      await loadSnapshot(snapshot.id);
+    }));
     listen($("dismiss-job"), "click", () => { state.jobDismissed = true; $("job-panel").hidden = true; $("job-log-open").hidden = false; });
-    listen($("job-log-open"), "click", () => { state.jobDismissed = false; $("job-panel").hidden = false; $("job-log-open").hidden = true; $("job-panel").querySelector("details").open = true; $("job-panel").scrollIntoView({block: "start"}); });
+    listen($("job-log-open"), "click", () => { state.jobDismissed = false; $("job-panel").hidden = false; $("job-log-open").hidden = true; $("job-panel").querySelector("details").open = true; context.reveal?.($("job-panel")); });
     listen($("import-form"), "submit", (event) => { event.preventDefault(); run(() => importReports(event)); });
     listen($("edit-snapshot"), "click", () => { if (state.current) { $("snapshot-name").value = state.current.name; $("snapshot-notes").value = state.current.notes || ""; $("edit-dialog").showModal(); } });
     listen($("edit-form"), "submit", (event) => { event.preventDefault(); run(() => saveSnapshot(event)); });
@@ -640,6 +718,7 @@ export function mount(root, context) {
   }
   function renderJob(job) {
     const active = !["completed", "failed", "cancelled"].includes(job.status);
+    const snapshot = snapshotOptionsReady ? completedJobSnapshot(job, state.snapshots) : null;
     $("job-panel").hidden = Boolean(state.jobDismissed && !active);
     $("job-log-open").hidden = !state.jobDismissed || active;
     $("job-log").textContent = (job.logs || []).join("\n");
@@ -647,8 +726,14 @@ export function mount(root, context) {
     $("cancel-job").hidden = !active;
     $("cancel-job").disabled = false;
     $("dismiss-job").hidden = active;
-    $("job-title").textContent = active ? "Analyzing your build…" : job.status === "completed" ? "Reports generated & snapshot saved" : job.status === "cancelled" ? "Report generation cancelled" : "Report generation failed";
-    $("job-message").textContent = active ? "Report generation continues while you use another tool." : job.error || (job.status === "completed" ? "Your captured reports are ready to explore and compare." : "The job was cancelled.");
+    $("job-view-snapshot").hidden = !snapshot;
+    $("job-title").textContent = active ? "Analyzing your build…" : job.status === "completed"
+      ? snapshot ? "Reports generated & snapshot saved" : "Report generation completed"
+      : job.status === "cancelled" ? "Report generation cancelled" : "Report generation failed";
+    $("job-message").textContent = active ? "Report generation continues while you use another tool." : job.error || (job.status === "completed"
+      ? snapshot ? "Your captured reports are ready. Choose View snapshot to explore or compare them."
+        : snapshotOptionsReady && state.job !== job.id ? "This capture is no longer available in saved snapshots." : "Checking saved snapshots…"
+      : "The job was cancelled.");
     renderInspection();
   }
   const persistedInputs = ["baseline-select", "candidate-select", "symbol-search", "symbol-sort", "change-search", "show-unchanged", "project-path"];
@@ -679,7 +764,7 @@ export function mount(root, context) {
   }
   bind();
   showView(state.view, false);
-  run(init);
+  run(init, false);
   return {
     navigate,
     dispose() {

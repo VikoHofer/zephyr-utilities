@@ -1,8 +1,9 @@
 import {parseRoute, routeHash, featureAssets, activeJobRoute, navigationEntries, activeNavigationEntry} from "/assets/shell/shared/routes.js";
 import {createApi} from "/assets/shell/shared/api.js";
+import {revealResult} from "/assets/shell/shared/interaction.js";
 
 const $ = (id) => document.getElementById(id);
-const state = {session: null, workspace: {path: ""}, features: [], instances: new Map(), mounted: null, routeRevision: 0, folder: null, activeJobs: []};
+const state = {session: null, workspace: {path: ""}, features: [], instances: new Map(), mounted: null, routeRevision: 0, routePath: null, resultRoute: null, folder: null, activeJobs: []};
 const stylesheets = new Map();
 const icons = {memory: "▥", devicetree: "⑂", projects: "＋", inspector: "⌕", tinyml: "◈"};
 const toolDetails = {
@@ -171,21 +172,34 @@ function loadStylesheet(path) {
 async function renderRoute() {
   const revision = ++state.routeRevision;
   const route = parseRoute(location.hash);
+  const changedRoute = state.routePath !== route.path;
+  const requestedResult = state.resultRoute === route.path;
+  state.resultRoute = null;
+  state.routePath = route.path;
+  const revealDestination = () => {
+    if (!changedRoute || revision !== state.routeRevision) return;
+    // A feature may reveal a specific result immediately after navigate(), before
+    // hashchange runs, or while its navigate handler runs. Keep that destination.
+    if (requestedResult || state.resultRoute === route.path) { state.resultRoute = null; return; }
+    const root = $("app-main");
+    const heading = [...root.querySelectorAll("h1")].find((item) => item.getClientRects().length);
+    revealResult(heading || root);
+  };
   if (location.hash !== routeHash(route.path)) history.replaceState(null, "", routeHash(route.path));
   const feature = state.features.find((item) => item.id === route.feature);
   const selected = activeNavigationEntry(feature, route);
   const title = route.feature === "home" ? "Home" : feature ? [feature.title, selected?.label].filter(Boolean).join(" · ") : "Tool not found";
   $("app-title").textContent = title; document.title = `${title} · Zephyr Utilities`;
   updateNavigation(route, feature, selected);
-  if (state.mounted?.id === route.feature) { state.mounted.instance.navigate(route.view); return; }
+  if (state.mounted?.id === route.feature) { state.mounted.instance.navigate(route.view); revealDestination(); return; }
   state.mounted?.instance.dispose(); state.mounted = null;
   const root = $("app-main"); root.replaceChildren();
-  if (route.feature === "home") { renderHome(root); return; }
+  if (route.feature === "home") { renderHome(root); revealDestination(); return; }
   if (!feature) {
     const panel = node("section", "app-home"); panel.append(node("h1", "", "Tool not found"), node("p", "", "This tool is not registered in this installation."));
-    const back = node("a", "app-button", "Back to Home"); back.href = "#/home"; panel.append(back); root.append(panel); return;
+    const back = node("a", "app-button", "Back to Home"); back.href = "#/home"; panel.append(back); root.append(panel); revealDestination(); return;
   }
-  if (feature.status !== "available") { renderPlanned(root, feature); return; }
+  if (feature.status !== "available") { renderPlanned(root, feature); revealDestination(); return; }
   root.append(node("div", "app-loading", `Opening ${feature.title}…`));
   try {
     const assets = featureAssets(feature);
@@ -201,16 +215,24 @@ async function renderRoute() {
     host.innerHTML = template;
     root.replaceChildren(host);
     if (!state.instances.has(feature.id)) state.instances.set(feature.id, {});
-    const instance = await module.mount(host, {api, session: state.session, workspace: state.workspace, features: state.features, state: state.instances.get(feature.id), navigate, notify, refreshWorkspace});
+    const instance = await module.mount(host, {api, session: state.session, workspace: state.workspace, features: state.features, state: state.instances.get(feature.id), navigate, notify, refreshWorkspace,
+      reveal(element, options) {
+        const destination = parseRoute(location.hash);
+        const revealed = destination.feature === feature.id && host.contains(element) && revealResult(element, options);
+        if (revealed) state.resultRoute = destination.path;
+        return revealed;
+      }});
     if (!instance || typeof instance.navigate !== "function" || typeof instance.dispose !== "function") throw new Error("This tool does not implement the feature lifecycle.");
     if (revision !== state.routeRevision) { instance.dispose(); return; }
     state.mounted = {id: feature.id, instance};
     instance.navigate(route.view);
+    revealDestination();
   } catch (error) {
     if (revision !== state.routeRevision) return;
     root.replaceChildren();
     const panel = node("section", "app-home"); panel.append(node("h1", "", "Could not open this tool"), node("p", "", error.message));
     const retry = node("button", "app-button", "Try again"); retry.addEventListener("click", () => run(renderRoute)); panel.append(retry); root.append(panel);
+    revealDestination();
   }
 }
 
@@ -230,7 +252,7 @@ async function browseWorkspace(path) {
 }
 
 async function workspaceAction(action) {
-  try { await action(); } catch (error) { $("workspace-error").textContent = error.message; $("workspace-error").hidden = false; }
+  try { await action(); } catch (error) { $("workspace-error").textContent = error.message; $("workspace-error").hidden = false; revealResult($("workspace-error")); }
 }
 
 async function openWorkspace() {

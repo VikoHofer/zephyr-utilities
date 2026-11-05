@@ -92,6 +92,56 @@ class ProjectStore:
         with self.lock:
             self._write(self.root / "attempts" / f"{identifier(attempt['id'])}.json", attempt)
 
+    def attempt(self, attempt_id, project_id, workspace):
+        with self.lock:
+            data = self._read(self.root / "attempts" / f"{identifier(attempt_id)}.json")
+            if (data.get("workspace") != str(workspace) or data.get("project_id") != project_id or
+                    data.get("id") != attempt_id):
+                raise ValueError("The build attempt does not belong to this application and workspace.")
+            return data
+
+    def _validate_removal(self, data):
+        """Preserve records whose nested profile format this version cannot understand."""
+        profile = data.get("profile")
+        if profile is not None:
+            if not isinstance(profile, dict) or profile.get("schema_version") not in (1, 2):
+                raise ValueError("Unsupported saved profile. Existing data was preserved.")
+            profile_fragments(profile)
+
+    def remove_project(self, project_id, workspace):
+        with self.lock:
+            project = self.project(project_id, workspace)
+            configurations, errors = self._configurations()
+            attempts, more_errors = self._items("attempts", 2000)
+            if errors or more_errors:
+                raise ValueError("Saved application records could not be read completely. Existing data was preserved.")
+            records = [("projects", project)]
+            for kind, children in (("configurations", configurations), ("attempts", attempts)):
+                for child in children:
+                    if child.get("project_id") == project_id:
+                        if child.get("workspace") != str(workspace):
+                            raise ValueError("A saved child record belongs to another workspace. Existing data was preserved.")
+                        records.append((kind, child))
+            # Validate every candidate before removing any file. Source/output paths are never used.
+            for _, record in records:
+                self._validate_removal(record)
+            for kind, record in reversed(records):
+                (self.root / kind / f"{identifier(record['id'])}.json").unlink()
+
+    def remove_configuration(self, configuration_id, project_id, workspace):
+        with self.lock:
+            self.project(project_id, workspace)
+            configuration = self.configuration(configuration_id, project_id, workspace)
+            self._validate_removal(configuration)
+            (self.root / "configurations" / f"{configuration_id}.json").unlink()
+
+    def remove_attempt(self, attempt_id, project_id, workspace):
+        with self.lock:
+            self.project(project_id, workspace)
+            attempt = self.attempt(attempt_id, project_id, workspace)
+            self._validate_removal(attempt)
+            (self.root / "attempts" / f"{attempt_id}.json").unlink()
+
     def _validate_configuration(self, data):
         identifier(data.get("id"))
         identifier(data.get("project_id"))

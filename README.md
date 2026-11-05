@@ -156,6 +156,10 @@ a visual tool for overlays, hardware modules and pin assignment, after the creat
 Use **Create application** or `/#/projects/create` after analysis. Choose the name, new
 destination, C/C++ template or supported local sample, exact target and installed GNU SDK; inspect **Preview application**, then
 click **Create application**. Creation writes the reviewed files without starting a build.
+For local samples, use **Check compatibility** to configure a temporary copy and check
+the selected board's hardware requirements. Missing requirements block preview; unverified
+results show a warning. Blinky uses a reviewed RGB LED adaptation on the official
+ESP32-C3 DevKitC/M targets. Other boards retain the GPIO sample and are checked for `led0`.
 Open **Applications** in the Project Creator sidebar. Choose **Configure** or **Build**, review the exact command and
 new output path, then start that operation. Each attempt retains its outcome and bounded
 log; leaving the view does not cancel it.

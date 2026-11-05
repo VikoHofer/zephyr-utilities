@@ -258,9 +258,9 @@ def preview_project(workspace, body, snapshot, *, recipe_factory=None):
     provenance = None
     if sample:
         from .samples import preview_sample
-        selected_sample = preview_sample(snapshot, body["sample_id"], recipe)
+        selected_sample = preview_sample(snapshot, body["sample_id"], recipe, profile=profile)
         provenance = selected_sample["provenance"]
-        if provenance["fingerprint"] != body["sample_fingerprint"]:
+        if provenance.get("source_fingerprint", provenance["fingerprint"]) != body["sample_fingerprint"]:
             raise ValueError("The local sample changed after selection. Refresh the sample list and select it again.")
         files = selected_sample["files"]
     else:

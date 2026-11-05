@@ -1,4 +1,5 @@
 import {createSourceNavigation, filterSourceFiles} from "./navigation-state.js";
+import {createActionFeedback} from "./action-feedback.js";
 
 export function createSourceView(root, context) {
   const $ = (name) => root.querySelector(`[data-dt-${name}]`);
@@ -9,6 +10,12 @@ export function createSourceView(root, context) {
   let renderedFile;
   let session;
   let selection;
+  let selectedPath;
+  const feedback = createActionFeedback({workspace: context.workspace,
+    reveal: context.reveal, notify: context.notify, isDisposed: () => disposed});
+  const result = () => state.error ? $("source-error") : state.panel ? $("source-navigation") : null;
+  const browse = (refresh = false) => feedback.run(() => session.browse(refresh), result,
+    {pending: "Reading source files…", complete: () => state.error || "Source list ready."});
   function element(tag, className, text) {
     const result = document.createElement(tag);
     if (className) result.className = className;
@@ -133,33 +140,35 @@ export function createSourceView(root, context) {
     renderSources(); renderBindings(); renderFile();
   }
   const listen = (target, event, callback) => target.addEventListener(event, callback, {signal: lifetime.signal});
-  listen($("browse-sources"), "click", () => { session.browse(); $("source-navigation").scrollIntoView({block: "start"}); });
-  listen($("source-refresh"), "click", () => session.refresh());
-  listen($("source-close"), "click", () => session.close());
+  listen($("browse-sources"), "click", () => browse());
+  listen($("source-refresh"), "click", () => browse(true));
+  listen($("source-close"), "click", () => { feedback.invalidate(); session.close(); });
   listen($("source-search"), "input", () => session.search($("source-search").value));
   listen($("source-more"), "click", () => session.more());
   listen($("source-navigation"), "click", (event) => {
     const target = event.target.closest("[data-source-file-id]");
     if (target && root.contains(target)) {
       const id = target.dataset.sourceFileId;
-      session.openFile(id).then(() => {
-        if (!disposed && state.file?.file.id === id) {
-          $("source-file-text").focus({preventScroll: true});
-          $("source-document").scrollIntoView({block: "start"});
-        }
-      });
+      feedback.run(() => session.openFile(id), () => state.error ? $("source-error")
+        : state.file?.file.id === id ? $("source-document") : null,
+      {pending: "Reading the selected file…", complete: () => state.error || "Current file ready."});
     }
   });
   session = createSourceNavigation({api: context.api, state, workspace: context.workspace, onChange: render});
   render();
   return {
-    sync(data, path) {
+    sync(data, path, explicit = false) {
       const changed = data !== selection; selection = data;
+      if (changed || path !== selectedPath) feedback.invalidate();
+      selectedPath = path;
       session.sync(data, path); $("browse-sources").disabled = !data || data.mode === "application";
-      if (changed && data?.mode === "application") session.browse();
+      if (changed && data?.mode === "application") {
+        if (explicit) browse(); else session.browse();
+      }
       render();
     },
-    findBindings(path) { session.findBindings(path); $("source-navigation").scrollIntoView({block: "start"}); },
-    dispose() { disposed = true; lifetime.abort(); session.dispose(); },
+    findBindings(path) { return feedback.run(() => session.findBindings(path), result,
+      {pending: "Finding bindings for this node…", complete: () => state.error || "Binding lookup complete."}); },
+    dispose() { disposed = true; feedback.invalidate(); lifetime.abort(); session.dispose(); },
   };
 }

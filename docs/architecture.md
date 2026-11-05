@@ -131,6 +131,11 @@ attempt records retain reviewed commands, bounded logs, outcomes and live output
 Named configurations are additive immutable records; the original project profile
 remains available. Attempts capture the selected profile before execution. See
 [ADR 0010](decisions/0010-named-build-configurations.md).
+Explicit removal can delete a registration and its dependent records, a named
+configuration or an attempt history entry without deleting source/build files.
+Catalogue reads reconcile directory identity and retain unavailable registrations for
+review and cleanup. See [ADR 0013](decisions/0013-explicit-record-removal.md) and the
+[lifecycle audit](lifecycle.md).
 Profiles with ordered Kconfig/overlay selections use profile version 2 and a version-1
 fragment envelope. Legacy profiles stay version 1 with automatic discovery; no source
 or record migration runs on opening. Earlier readers reject version-2 profiles rather
@@ -153,7 +158,8 @@ stylesheet, imports its module, then calls `mount(root, context)`. The returned 
 object supplies `navigate(view)` and `dispose()`.
 
 The context supplies authenticated `api`, session metadata, shared workspace/catalog,
-shell `navigate`, `notify`, feature-local in-memory `state`, and `refreshWorkspace`.
+shell `navigate`, viewport-visible `notify`, one-time result `reveal`, feature-local
+in-memory `state`, and `refreshWorkspace`.
 Only the shell owns `window` hash navigation. Feature code controls its local views and
 scopes selectors/styles to its root. It removes listeners, timers and observers during
 dispose and can restore state when mounted again.
@@ -167,6 +173,8 @@ The canonical paths are `/#/home`, `/#/memory/overview`, `/#/projects/applicatio
 `projects/builds`, `devicetree/inspect` and `devicetree/application` deep links map to
 Inspector; bare `/#/devicetree` opens the planned visual editor's scope.
 All browser assets are bundled with the Python package and served by the same process.
+Shared Zephyr color tokens and action-feedback rules apply to every feature. See
+[UI guidelines](ui-guidelines.md) and [ADR 0014](decisions/0014-visible-action-feedback.md).
 
 ## Local access boundary
 

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {reconcileSnapshots} from "../../src/zephyr_utilities/features/memory/web/snapshot-state.js";
+import {completedJobSnapshot, reconcileSnapshots} from "../../src/zephyr_utilities/features/memory/web/snapshot-state.js";
 
 function selection() {
   return {
@@ -53,4 +53,29 @@ test("an empty history clears saved choices and stale comparison data after remo
   assert.equal(state.ui["candidate-select"], "");
   reconcileSnapshots(state, []);
   assert.equal(state.compareRequest, 5, "repeated refreshes should not invalidate again");
+});
+
+test("a completed report offers its saved snapshot without changing the report being read", () => {
+  const state = selection();
+  const before = {current: state.current, node: state.node, ancestors: state.ancestors, comparison: state.comparison};
+  const captured = {id: "new-report", name: "New capture"};
+  const job = {status: "completed", snapshot_id: captured.id};
+  reconcileSnapshots(state, [{id: "baseline"}, {id: "candidate"}, captured]);
+  assert.equal(completedJobSnapshot(job, state.snapshots), captured);
+  for (const [field, value] of Object.entries(before)) assert.equal(state[field], value);
+  assert.equal(state.snapshotRequest, 2);
+  assert.equal(state.compareRequest, 4);
+});
+
+test("report result availability follows snapshot deletion, refresh and restored job history", () => {
+  const captured = {id: "capture"};
+  const job = {status: "completed", result: {snapshot_id: captured.id}};
+  assert.equal(completedJobSnapshot(job, [captured]), captured);
+  assert.equal(completedJobSnapshot(job, []), null, "a deleted capture has no View snapshot destination");
+  assert.equal(completedJobSnapshot(JSON.parse(JSON.stringify(job)), [captured]), captured);
+  for (const status of ["queued", "running", "failed", "cancelled"]) {
+    assert.equal(completedJobSnapshot({...job, status}, [captured]), null);
+  }
+  assert.equal(completedJobSnapshot(null, [captured]), null);
+  assert.equal(completedJobSnapshot({status: "completed"}, [captured]), null);
 });

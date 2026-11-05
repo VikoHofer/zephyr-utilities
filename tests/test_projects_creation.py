@@ -172,7 +172,7 @@ class ProjectCreationTests(unittest.TestCase):
             self.assertEqual(plan["files"], fixture["files"])
             self.assertEqual(plan["sample"], fixture["sample"])
             self.assertEqual(plan["template"], {"id": "local-sample", "version": 1})
-            preview.assert_called_once_with(self.snapshot, "hello-world", plan["recipe"])
+            preview.assert_called_once_with(self.snapshot, "hello-world", plan["recipe"], profile=plan["profile"])
             with self.assertRaisesRegex(ValueError, "sample changed"):
                 self.preview(template_id="local-sample", sample_id="hello-world", sample_fingerprint="b" * 64)
         self.assertFalse((self.workspace / "applications").exists())

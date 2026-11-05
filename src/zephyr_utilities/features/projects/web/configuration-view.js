@@ -11,7 +11,7 @@ export function createConfigurationView({node, fact, choices}) {
     const control = root.ownerDocument.activeElement;
     const section = control?.closest("[data-configuration-project]");
     if (!section || !root.contains(section)) return null;
-    const attribute = ["data-configuration-select", "data-configuration-field", "data-configuration-add", "data-configuration-save", "data-configuration-close", "data-fragment-control"].find((name) => control.hasAttribute(name));
+    const attribute = ["data-configuration-select", "data-configuration-field", "data-configuration-add", "data-configuration-remove", "data-configuration-save", "data-configuration-close", "data-fragment-control"].find((name) => control.hasAttribute(name));
     if (!attribute) return null;
     return {project: section.dataset.configurationProject, attribute, value: control.getAttribute(attribute),
       start: control.selectionStart, end: control.selectionEnd, direction: control.selectionDirection};
@@ -34,7 +34,9 @@ export function createConfigurationView({node, fact, choices}) {
     const add = node("button", "projects-button", "Add configuration");
     add.type = "button"; add.dataset.configurationAdd = project.id;
     add.setAttribute("aria-controls", `configuration-form-${project.id}`);
-    row.append(label, add);
+    const remove = node("button", "projects-button", "Remove configuration");
+    remove.type = "button"; remove.dataset.configurationRemove = project.id;
+    row.append(label, add, remove);
     const facts = node("dl", "projects-identity"); facts.dataset.configurationFacts = "";
     const notice = node("p", "projects-banner"); notice.dataset.configurationNotice = "";
     notice.setAttribute("role", "status"); notice.setAttribute("aria-live", "polite");
@@ -79,6 +81,10 @@ export function createConfigurationView({node, fact, choices}) {
       choices(select, options.slice(1), "Original");
     }
     select.value = selected?.id || ""; select.disabled = busy;
+    const remove = section.querySelector("[data-configuration-remove]");
+    remove.hidden = !selected?.id;
+    remove.disabled = busy || !selected?.id;
+    remove.dataset.configurationId = selected?.id || "";
     const facts = section.querySelector("[data-configuration-facts]");
     const factsKey = JSON.stringify(selected?.profile);
     if (facts.dataset.value !== factsKey) {

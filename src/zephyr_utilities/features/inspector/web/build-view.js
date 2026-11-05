@@ -1,4 +1,5 @@
 import {buildTextKinds, canOpenDeviceTree, canOpenMemory, canReadBuildArtifact, createBuildSession, selectedBuildDomain} from "./build-state.js";
+import {createActionFeedback} from "./action-feedback.js";
 
 const array = (value) => Array.isArray(value) ? value : [];
 const labels = {"resolved-dts": "Resolved Device Tree", "preprocessed-dts": "Preprocessed Device Tree", kconfig: "Kconfig output", "cmake-cache": "CMake cache", "build-info": "Build information", elf: "ELF", map: "Linker map"};
@@ -12,6 +13,12 @@ export function mountBuilds(root, context) {
   let disposed = false;
   let detailKey;
   let fileKey;
+  let lastView;
+  const feedback = createActionFeedback({workspace: () => context.workspace.path,
+    reveal: context.reveal, notify: context.notify, isDisposed: () => disposed});
+  const result = () => state.error ? $("error") : state.observation ? $("results") : null;
+  const inspect = (action) => feedback.run(action, result, {pending: "Reading build files…",
+    complete: () => state.error || "Build inspection updated."});
   function node(tag, className, value) {
     const item = document.createElement(tag);
     if (className) item.className = className;
@@ -118,18 +125,31 @@ export function mountBuilds(root, context) {
     $("diagnostics").hidden = !diagnostics.childNodes.length;
   }
   const listen = (element, event, callback) => element.addEventListener(event, callback, {signal: lifetime.signal});
-  listen($("path"), "input", () => session.changePath($("path").value));
-  listen($("form"), "submit", (event) => { event.preventDefault(); session.open(); });
-  listen($("domain"), "change", () => session.selectDomain($("domain").value));
-  listen($("check"), "click", () => session.check());
-  listen($("reinspect"), "click", () => session.open());
+  listen($("path"), "input", () => { feedback.invalidate(); session.changePath($("path").value); });
+  listen($("form"), "submit", (event) => { event.preventDefault(); inspect(() => session.open()); });
+  listen($("domain"), "change", () => { feedback.invalidate(); session.selectDomain($("domain").value); });
+  listen($("check"), "click", () => inspect(() => session.check()));
+  listen($("reinspect"), "click", () => inspect(() => session.open()));
   listen($("tree"), "click", () => session.openDeviceTree());
   listen($("memory"), "click", () => session.openMemory());
   listen($("artifacts"), "click", (event) => {
     const button = event.target.closest("[data-build-file]");
-    if (button && root.contains(button)) session.readText(button.dataset.buildFile);
+    if (button && root.contains(button)) {
+      const kind = button.dataset.buildFile;
+      feedback.run(() => session.readText(kind), () => state.error ? $("error") : state.file?.kind === kind ? $("file-panel") : null,
+        {pending: `Reading ${labels[kind] || kind}…`, complete: () => state.error || "File preview ready."});
+    }
   });
   session = createBuildSession({api: context.api, state, workspace: () => context.workspace.path, onChange: render, navigate: context.navigate});
   render();
-  return {navigate(view) { return session.navigate(view); }, dispose() { disposed = true; lifetime.abort(); session.dispose(); }};
+  return {
+    navigate(view) {
+      const requested = view?.startsWith("builds/");
+      const explicit = (!state.workspace || state.workspace === context.workspace.path) && requested &&
+        (lastView !== undefined ? lastView !== view : !state.observation);
+      lastView = view; feedback.invalidate();
+      return explicit ? inspect(() => session.navigate(view)) : session.navigate(view);
+    },
+    dispose() { disposed = true; feedback.invalidate(); lifetime.abort(); session.dispose(); },
+  };
 }

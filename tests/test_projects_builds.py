@@ -159,6 +159,27 @@ class BuildExecutionTests(unittest.TestCase):
         self.assertIn("compile completed", logs)
         self.assertTrue((self.outputs / "attempt/CMakeCache.txt").exists())
 
+    def test_incompatible_sample_stops_after_configure_with_a_clear_reason(self):
+        logs = []
+        evidence = {"status": "incompatible", "message": "Blinky requires an enabled led0 GPIO LED.", "details": []}
+        result = execute_build(self.profile, self.source, self.outputs / "attempt", "build",
+                               environ=self.environment, emit=logs.append,
+                               after_configure=lambda output: evidence)
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["error"], evidence["message"])
+        self.assertEqual(result["sample_compatibility"], evidence)
+        self.assertTrue(result["context"]["configured"])
+        self.assertNotIn("compile completed", logs)
+        self.assertNotIn("elf", [item["kind"] for item in result["artifacts"]])
+
+    def test_unverified_sample_keeps_its_warning_and_can_compile(self):
+        evidence = {"status": "unknown", "message": "The input device requirement could not be verified.", "details": []}
+        result = execute_build(self.profile, self.source, self.outputs / "attempt", "build",
+                               environ=self.environment, after_configure=lambda output: evidence)
+        self.assertEqual(result["status"], "built")
+        self.assertEqual(result["sample_compatibility"], evidence)
+        self.assertIn("sample-unverified", [item["code"] for item in result["diagnostics"]])
+
     def test_existing_output_is_not_reused_or_removed(self):
         output = self.outputs / "attempt"
         output.mkdir()

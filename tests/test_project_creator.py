@@ -243,15 +243,9 @@ class CreatorServiceTests(unittest.TestCase):
     def test_application_check_errors_keep_entry_and_report_diagnostic(self):
         project = self.create()
         source = Path(project["path"])
-        original_stat = Path.stat
         for error in (PermissionError("Access denied."), OSError("Filesystem unavailable.")):
             with self.subTest(error=type(error).__name__):
-                def checked_stat(path, *args, **kwargs):
-                    if path == source:
-                        raise error
-                    return original_stat(path, *args, **kwargs)
-
-                with patch.object(Path, "stat", checked_stat):
+                with patch("zephyr_utilities.features.projects.creator.path_identity", side_effect=error):
                     data = self.call("GET", "creator").data
                 self.assertEqual([item["id"] for item in data["projects"]], [project["id"]])
                 self.assertTrue(any(str(source) in message and str(error) in message
@@ -401,14 +395,15 @@ class CreatorHttpTests(unittest.TestCase):
     request = existing_api.ProjectsHttpTests.request
 
     def test_creator_routes_use_shared_guards_and_need_explicit_inputs(self):
-        for endpoint in ("samples", "preview", "create", "configurations", "configuration-files", "build-preview", "build"):
+        for endpoint in ("samples", "sample-check", "preview", "create", "configurations", "configuration-files", "build-preview", "build",
+                         "remove", "configurations/remove", "attempts/remove"):
             with self.subTest(endpoint=endpoint), self.assertRaises(HTTPError) as error:
                 self.request("/api/projects/" + endpoint, method="POST", body={}, authorized=False)
             self.assertEqual(error.exception.code, 403)
             with self.assertRaises(HTTPError) as error:
                 self.request("/api/projects/" + endpoint, method="POST", body={})
             self.assertEqual(error.exception.code, 400)
-        for endpoint in ("samples", "configurations", "configuration-files"):
+        for endpoint in ("samples", "sample-check", "configurations", "configuration-files", "remove", "configurations/remove", "attempts/remove"):
             for values, expected in [({"method": "POST", "origin": "https://outside.invalid"}, 403),
                                      ({"method": "DELETE"}, 405)]:
                 with self.subTest(endpoint=endpoint, values=values), self.assertRaises(HTTPError) as error:

@@ -37,9 +37,12 @@ Advanced inspection is available separately under **Advanced → Build Inspector
    commands, environment and new output directory, then click **Run configure** or
    **Run build**.
 
-Source previews, commands, logs and technical evidence start collapsed. Open their
-dropdowns when you want to inspect them; operation status, errors and action buttons
-remain visible. Open attempt details stay open while job updates arrive.
+Application and build previews open in focused review dialogs with the destination,
+selected tools and next action visible. Source previews, commands, logs and technical
+evidence start collapsed; expand them when needed. Escape or Cancel closes a review
+and returns focus to its initiating control. Starting an operation reveals progress;
+completion offers an explicit action to open the result without interrupting the
+current view. Open attempt details stay open while job updates arrive.
 
 Configure generates a fresh build system and captures its resolved context. Build first
 configures another fresh output directory, then compiles. It does not reuse a preceding
@@ -48,10 +51,27 @@ view does not cancel the job, and switching workspace cannot redirect its captur
 inputs. Reopening reads saved projects and retained jobs without starting an operation.
 
 The workspace application list checks saved folder locations when opened, when the
-window regains focus, and when you choose **Refresh list**. Deleted or moved application
-folders are hidden from the list. Saved profiles and build history are retained, so
-restoring a folder to its original location makes its entry reappear. An unreadable
-location stays listed with a diagnostic rather than being treated as deleted.
+window regains focus, and when you choose **Refresh list**. It checks the saved directory
+identity as well as its location. Deleted, moved or replaced application folders appear
+under **Unavailable saved applications**, separate from current applications. Creating
+another application at the same path does not make the older registrations current.
+Saved profiles and build history are retained until explicitly removed. Restoring the
+original folder and its ancestry to the original location makes its entry reappear.
+An unreadable location stays listed with a diagnostic rather than being treated as deleted.
+
+**Remove saved application** removes that registration, its named configurations and its
+saved attempt history after confirmation. This also works for unavailable applications.
+It leaves application source files and build output on disk. Use the file manager to
+move or delete those folders, then refresh the list. Relocating a saved registration to
+another path and importing an existing application remain planned.
+If older registrations share the current folder's exact saved identity, remove those
+unavailable entries first. Utilities blocks removal of the current entry until then,
+so an older duplicate cannot reappear as the current application.
+
+Each saved attempt offers **Remove history entry**. Removing history leaves its build
+directory intact. Active operations must finish or be cancelled before related records
+can be removed. Removal invalidates pending command reviews; it does not run a build,
+cancel a job or change another workspace's records.
 
 A successful build establishes compilation for that attempt. It does not establish
 hardware operation, peripheral wiring, runtime memory limits or runner compatibility.
@@ -86,8 +106,11 @@ and SDK compatibility; an explicit configure/build provides that evidence.
 
 Names contain 1–64 characters without control characters and must be unique within
 the application, ignoring case. **Original** is reserved. Up to 32 additional
-configurations can be saved per application. Renaming/removing configurations and
-importing existing applications remain later work.
+configurations can be saved per application. **Remove configuration** removes the
+selected named configuration after confirmation. The selector returns to **Original**;
+review it before building. Existing attempts retain the configuration/profile captured
+for their run. Original belongs to the application registration and cannot be removed
+separately. Renaming configurations and importing existing applications remain later work.
 
 ## Select Kconfig and overlay fragments
 
@@ -191,7 +214,7 @@ anything or starting a build. Opening Applications and polling jobs do not scan 
 | Sample | Starting point and requirements |
 | --- | --- |
 | Hello World | Console output; no application-specific peripheral alias |
-| Blinky | GPIO LED with a `led0` alias |
+| Blinky | GPIO LED with a `led0` alias; reviewed GPIO8 RGB adaptation for official ESP32-C3-DevKitC/DevKitM targets |
 | Button | Button/input hardware; the local source determines whether it uses input KEY events or the older `sw0` GPIO interface |
 
 These are curated source paths, not bundled sample copies. Availability follows the
@@ -202,7 +225,7 @@ external source references, unsupported license metadata, symlinks, special/bina
 files, output directories and incomplete or oversized scans. An unsupported sample
 needs an explicit adapter extension, not a best-effort partial copy.
 
-The preview contains the complete supported sample tree, including upstream README,
+For an unadapted sample, the preview contains the complete supported sample tree, including upstream README,
 `sample.yaml`, configuration files and board overlays. Upstream contents and CMake
 project names are preserved. The chosen application name names its new directory and
 saved entry. Root `LICENSE` and `REUSE.toml`, and an applicable root `NOTICE` when
@@ -217,11 +240,35 @@ new preview. Publication uses a new destination and never replaces an existing a
 After creation, the copy is independent: reopening or building it does not require the
 original sample directory, and no updates flow back to upstream.
 
-Availability means the copy meets this adapter's requirements. It does not establish
-that the selected board supplies the required peripherals. Review the preserved local
-README and run Configure/Build explicitly; no board aliases or wiring are created for
-you. See upstream [Blinky](https://docs.zephyrproject.org/latest/samples/basic/blinky/README.html)
-and [Button](https://docs.zephyrproject.org/latest/samples/basic/button/README.html) requirements.
+Availability means the local source can be copied. Select the exact board target and SDK,
+then use **Check compatibility** to configure a temporary copy and inspect the resolved
+Device Tree. The result appears beside the selection and in the creation review:
+
+- **Compatible**: the checked hardware prerequisites are present. Compilation and physical
+  operation still require validation.
+- **Incompatible**: a required alias/device is missing or disabled. The message explains
+  the requirement, and preview is blocked for that checked combination.
+- **Unverified**: no check has run, configuration failed, or the available evidence cannot
+  establish the requirement. Preview remains possible with a visible warning.
+
+Checks run only on request, use the selected environment, support cancellation, and remove
+their temporary directories. They do not create an application at the chosen destination
+or flash hardware. Changes to the workspace, environment, sample, target or SDK invalidate
+the result; check tokens also expire after 30 minutes or a server restart. Standard
+Configure/Build repeats the hardware requirement check against the current application's
+resolved outputs before compilation, including older sample copies.
+
+For the exact official `esp32c3_devkitc/esp32c3` and `esp32c3_devkitm/esp32c3` targets,
+Blinky uses a reviewed addressable RGB LED adaptation on GPIO8. The review identifies
+the adaptation and all generated files. Original Blinky and LED-strip source evidence
+is retained under `upstream/`; `zephyr-sample.json` records schema-2 adaptation provenance.
+The adapter requires reviewed local board/driver inputs and does not guess pins for other
+boards or custom board definitions. Changing its target requires generating another
+application. Existing `my_app` files are not automatically rewritten.
+
+See upstream [Blinky](https://docs.zephyrproject.org/latest/samples/basic/blinky/README.html)
+and [Button](https://docs.zephyrproject.org/latest/samples/basic/button/README.html) requirements,
+and [ADR 0015](decisions/0015-board-aware-samples.md) for the evidence contract.
 Visual overlay editing, arbitrary sample paths, custom modules/blobs, scripts and
 multi-image sample composition remain future slices.
 `sample.yaml` stays available as upstream test metadata; cloning does not select or
@@ -302,14 +349,18 @@ not accepted back from an edited browser payload.
 
 | Method and path | Request | Result |
 | --- | --- | --- |
-| `GET /api/projects/creator` | None | `{workspace, snapshot, templates, projects, jobs, diagnostics}`; saved projects include their configurations and attempts; no execution |
+| `GET /api/projects/creator` | None | `{workspace, snapshot, templates, projects, unavailable_projects, jobs, diagnostics}`; saved projects include their configurations and attempts; unavailable records include `availability` and `availability_reason`; no execution |
 | `POST /api/projects/samples` | `{workspace}` | `{workspace, zephyr, samples, diagnostics}`; read-only source catalogue with availability, requirements and fingerprints |
-| `POST /api/projects/preview` | `{workspace, name, destination?, board_id, target, sdk_id, template_id?, sample_id?, sample_fingerprint?}` | `{plan}` with exact files, template identity, optional sample provenance, profile, recipe and destination identity |
+| `POST /api/projects/sample-check` | `{workspace, board_id, target, sdk_id, sample_id, sample_fingerprint}` | HTTP 202 shared temporary configuration job; completed result contains `{check_id, compatibility}` |
+| `POST /api/projects/preview` | `{workspace, name, destination?, board_id, target, sdk_id, template_id?, sample_id?, sample_fingerprint?, sample_check_id?}` | `{plan}` with exact files, template identity, optional sample provenance and compatibility, profile, recipe and destination identity |
 | `POST /api/projects/create` | `{workspace, plan_id}` | HTTP 202 shared create job; completed result contains `project` |
 | `POST /api/projects/configuration-files` | `{workspace, project_id}` | `{workspace, project_id, files: {kconfig, overlays}, diagnostics}`; bounded read-only relative-path catalogue |
 | `POST /api/projects/configurations` | `{workspace, project_id, name, board_id, target, sdk_id, fragments?}` | `{configuration}`; saves metadata only |
 | `POST /api/projects/build-preview` | `{workspace, project_id, operation, configuration_id?}` | `{plan}` with selected configuration/profile, operation, exact fresh `build_dir`, recipe and source identities |
 | `POST /api/projects/build` | `{workspace, build_plan_id}` | HTTP 202 shared job; successful result contains `attempt` |
+| `POST /api/projects/remove` | `{workspace, project_id}` | `{removed: project_id}`; removes registration, configurations and attempt records, preserving source/build files |
+| `POST /api/projects/configurations/remove` | `{workspace, project_id, configuration_id}` | `{removed: configuration_id}`; removes a named choice, preserving captured attempts |
+| `POST /api/projects/attempts/remove` | `{workspace, project_id, attempt_id}` | `{removed: attempt_id}`; removes history, preserving build output |
 | `GET /api/jobs/:id` | None | Shared progress, logs and outcome |
 | `POST /api/jobs/:id/cancel` | `{}` | Shared cancellation request; partial output is retained |
 
@@ -327,15 +378,31 @@ writing. The existing `{id, version}` template identity needs no persistent migr
 `local-sample` additionally requires a supported `sample_id` and its 64-character
 SHA-256 `sample_fingerprint` from the current catalogue. Other templates reject both
 sample fields. The catalogue returns `available`, `missing` or `unsupported` entries;
-only available entries have a usable fingerprint. The version-1 `sample` provenance
-envelope is retained in the plan/project and independently revalidated during creation.
+only available entries have a usable fingerprint. Unadapted copies retain version-1
+`sample` provenance; adapted copies use version 2 with original source identity,
+adapter identity, input evidence and generated file hashes. Both envelopes are retained
+in the plan/project and independently revalidated during creation.
 Copies are bounded to 128 files, 1 MiB per file, 4 MiB total and eight path components.
 Generated origin/build files and license copies count toward publication limits.
+
+Compatibility results contain `status` (`compatible`, `incompatible`, or `unknown`),
+`message`, `details`, the exact workspace/sample/board/target/SDK/environment selection,
+`checked_at`, and optional `adaptation`. `sample_check_id` is an optional opaque token
+for local samples only; it expires after 30 minutes or server restart. Preview rejects
+expired or mismatched supplied evidence. A matching cached incompatible result blocks
+preview even when its token is omitted; absent evidence produces a visible unknown
+warning. Temporary checks are shared jobs, but do not become application build attempts.
 
 An omitted, null or empty `configuration_id` selects the original project profile,
 preserving earlier clients. A supplied configuration must belong to this application
 and workspace. The server captures its complete profile in the build plan and attempt;
 execution uses that captured profile. Saved configurations are immutable.
+
+Explicit record removal uses the same workspace checks. IDs must belong to the stated
+application and workspace. Removal rejects related queued/running work and unreadable,
+unsupported or redirected storage instead of following paths into application files.
+See [record lifecycle](decisions/0013-explicit-record-removal.md) and the
+[application-wide lifecycle audit](lifecycle.md).
 
 `fragments`, when supplied, has `schema_version: 1`, plus `kconfig` and `overlays`
 objects containing `mode` (`auto`, `append`, or `replace`) and ordered `files` arrays.
@@ -401,6 +468,24 @@ P2 does not import another feature's private implementation or introduce a share
 `BuildContext` API. See [ADR 0004](decisions/0004-reviewed-project-creation.md).
 
 ## Validation scope
+
+The Zephyr palette and action-feedback update was checked at desktop and 600-pixel
+widths using synthetic applications, build observations and report captures. Browser
+checks covered review dialogs and keyboard focus restoration, configure progress,
+cross-view result navigation, board selection, Inspector file/node previews, Memory
+build discovery and errors, comparison, report import, explicit capture opening, and
+leaving/reopening features. A completed report preserved the active comparison and its
+input focus; report tracking also survived a workspace switch.
+The browser fixture did not compile firmware or exercise hardware.
+
+The record-lifecycle update passed quick checks and the full suite (386 Python tests
+and 168 frontend tests). Regression coverage includes three creations at the same path,
+missing/restored/replaced folders, metadata cascades, preserved source/output files,
+active jobs, stale previews/responses and workspace isolation. Browser inspection showed
+one current application and two unavailable registrations with the new removal controls.
+The native confirmation dialog stalled that browser run, so confirmation completion
+remains unverified. The later UI pass verified Memory path clearing and feature
+leave/reopen behavior.
 
 The local-sample slice passed 373 Python tests and 158 frontend tests, quick checks
 and installed-wheel verification. Browser checks covered available/unsupported/missing

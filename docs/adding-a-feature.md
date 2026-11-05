@@ -81,6 +81,14 @@ for navigation, `context.notify` for shared notices, and `context.state` for sta
 should survive leaving and re-entering the feature. Clear timers and disconnect observers
 on dispose. Server jobs continue while a feature is not mounted.
 
+Plan the visible response to each action before adding its button. Keep small results
+beside their trigger; put reviewed writes in a focused dialog with the next action
+visible. For a result in another part of the view, call `context.reveal(resultElement)`
+once from the explicit action after confirming the request still belongs to this view
+and workspace. Loading, empty and error outcomes also need visible feedback. Background
+polling must not scroll, focus, open dialogs or switch the user's view.
+Use shared `--app-*` design tokens and the [UI guidelines](ui-guidelines.md).
+
 Render imported text through `textContent` or equivalent safe DOM construction. Bundle
 all runtime assets; do not add CDN scripts or require another web server. Preserve keyboard
 access, useful empty states, actionable errors and clear progress/cancellation feedback.
@@ -128,6 +136,8 @@ the new assets are included in the installed package with
 `python scripts/verify_package.py`. Manually switch from Home to the
 feature, away, and back; ensure the UI restores correctly and does not duplicate listeners
 or abandon job status.
+Test from the bottom of a long page and at a 600-pixel viewport: a button's result,
+progress and next action must be discoverable without guessing where to scroll.
 
 Update the README's delivered scope, this feature's scope/documentation and the roadmap.
 Add an ADR only when changing a shared architecture or persistence decision. A generated

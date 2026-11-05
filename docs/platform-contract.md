@@ -86,7 +86,9 @@ Context provides:
 - `api(path, options)` authenticated JSON requests, matching existing options/body behavior;
 - `session` (existing session data), `workspace` (`{path}`), `features` (descriptors);
 - `navigate(path)` where path is `memory/overview` or `home` (without `#`);
-- `notify(message, error=false)` for shared notices;
+- `notify(message, error=false)` for viewport-visible shared notices;
+- `reveal(element, {focus=true, block="start"}={})` to reveal a requested result once,
+  limited to the mounted feature root; hidden/disconnected elements are ignored;
 - `state`: a persistent plain object belonging to this feature, retained across mounts;
 - `refreshWorkspace()` to read and publish the latest shared workspace.
 
@@ -115,6 +117,10 @@ observation ID and domain to Inspector's read-only Device Tree reader and Memory
 report review (`memory/inspect/<id>/<encoded-domain>`). See the
 [build inspection contract](build-inspection.md).
 UI remains English and offline. No runtime CDN or hosted service dependency.
+Use shared `--app-*` color tokens and follow the [UI guidelines](ui-guidelines.md).
+Explicit actions reveal their result or review without a manual hunt down the page;
+passive refreshes preserve focus and scroll. The shell reveals the destination heading
+when the route changes, but not for same-route workspace notifications.
 
 Sidebar subnavigation comes from feature descriptors. The optional Advanced group opens
 when navigating to Inspector; primary project work does not require it. Legacy

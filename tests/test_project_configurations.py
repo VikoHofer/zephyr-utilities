@@ -145,7 +145,8 @@ class BuildConfigurationTests(unittest.TestCase):
                 self.selected_plan(project, {"id": identity})
         with self.assertRaisesRegex(ValueError, "does not belong"):
             self.creator.store.configuration(saved["id"], project["id"], "/another-workspace")
-        listed = self.creator.current()["projects"]
+        current = self.creator.current()
+        listed = current["projects"] + current["unavailable_projects"]
         self.assertEqual([len(item["configurations"]) for item in listed], [1, 1])
 
     def test_stale_or_unresolved_environment_cannot_save_configuration(self):

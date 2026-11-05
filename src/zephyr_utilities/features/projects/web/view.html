@@ -21,7 +21,7 @@
   </details>
   <div class="projects-error" role="alert" data-error hidden></div>
   <section class="projects-job" data-job hidden aria-label="Analysis progress">
-    <div class="projects-section-heading"><div><h2 data-job-title>Analyzing workspace</h2><p data-job-status role="status" aria-live="polite"></p></div><button type="button" class="projects-button" data-cancel>Cancel scan</button></div>
+    <div class="projects-section-heading"><div><h2 data-job-title>Analyzing workspace</h2><p data-job-status role="status" aria-live="polite"></p></div><div class="projects-actions"><button type="button" class="projects-button primary" data-view-results hidden>View results</button><button type="button" class="projects-button" data-cancel>Cancel scan</button></div></div>
     <details><summary>Scan log</summary><pre data-logs></pre></details>
   </section>
   <div data-empty class="projects-empty"><span class="projects-empty-symbol" aria-hidden="true">⌕</span><h2>Your environment, discovered locally.</h2><p>Analyze this workspace to browse boards and chips, inspect installed SDKs, and identify missing tools.</p></div>
@@ -46,6 +46,7 @@
     <section class="projects-workspace" aria-label="Creator workspace"><div class="projects-workspace-info"><span class="projects-eyebrow">SELECTED WORKSPACE</span><p class="projects-path" data-creator-workspace></p><p class="projects-muted" data-creator-environment></p></div><a class="projects-button" href="#/projects/environment">Review environment</a></section>
     <p class="projects-scope" data-creator-scope>Configure and Build each use a new output directory and a separate command review. Neither action flashes hardware.</p>
     <div class="projects-error" role="alert" data-creator-error hidden></div>
+    <p class="projects-banner" role="status" aria-live="polite" data-creator-removal-notice hidden></p>
     <div class="projects-banner" data-creator-requirement hidden>Analyze this workspace in Environment before choosing a board and SDK.</div>
     <form data-creator-form class="projects-panel" aria-label="New application">
       <div class="projects-section-heading"><div><span class="projects-eyebrow">1 · APPLICATION</span><h2>Choose a template, destination and target.</h2></div></div>
@@ -56,6 +57,7 @@
           <p class="projects-muted">Copies supported samples from your selected Zephyr checkout, including their supporting files and licenses. Configure and build check compatibility with your target.</p>
           <p class="projects-muted" data-samples-status role="status" aria-live="polite"></p>
           <label>Sample<select data-create-field="sample_id"><option value="">Choose a local sample</option></select></label>
+          <p class="projects-compatibility-summary" data-sample-compatibility-summary></p>
           <p data-sample-description></p>
           <ul class="projects-sample-requirements" data-sample-requirements></ul>
           <div data-sample-diagnostics></div>
@@ -66,22 +68,36 @@
         <label>Board<select data-create-field="board_id" required><option value="">Choose a board</option></select></label>
         <label>Exact target<select data-create-field="target" required><option value="">Choose a target</option></select></label>
         <label class="projects-full-width">Installed GNU SDK<select data-create-field="sdk_id" required><option value="">Choose an SDK installation</option></select></label>
+        <section class="projects-compatibility projects-full-width" data-sample-compatibility hidden aria-label="Sample and target compatibility">
+          <div class="projects-sample-heading"><h3>Sample and target compatibility</h3><span class="projects-label" data-sample-check-status></span></div>
+          <p data-sample-check-message role="status" aria-live="polite"></p>
+          <ul class="projects-source-list" data-sample-check-details></ul>
+          <div data-sample-check-adaptation hidden></div>
+          <p class="projects-muted">Runs a temporary Configure with the selected tools. It does not write the application destination or flash hardware.</p>
+          <div class="projects-actions"><button type="button" class="projects-button" data-sample-check>Check compatibility</button><button type="button" class="projects-button" data-sample-check-cancel hidden>Cancel check</button></div>
+          <details data-sample-check-progress hidden><summary>Compatibility check log</summary><pre data-sample-check-logs></pre></details>
+        </section>
       </div>
       <p class="projects-muted" data-creator-target-note>Choose the full target, including any SoC, CPU, variant and revision. Metadata discovery does not establish build compatibility.</p>
       <div class="projects-actions"><button class="projects-button primary" data-preview-submit type="submit">Preview application</button></div>
     </form>
-    <section class="projects-panel" data-creator-preview hidden aria-label="Application preview">
-      <div class="projects-section-heading"><div><span class="projects-eyebrow">2 · REVIEW</span><h2>Files to create</h2><p class="projects-path" data-preview-destination></p></div><span class="projects-label" data-preview-count></span></div>
+    <dialog class="projects-review-dialog" data-creator-preview aria-labelledby="projects-create-review-title">
+      <div class="projects-review-heading"><div><span class="projects-eyebrow">REVIEW APPLICATION</span><h2 id="projects-create-review-title" tabindex="-1" autofocus>Ready to create your application?</h2></div><button type="button" class="projects-button" data-review-close="create">Close review</button></div>
+      <div class="projects-review-body">
+      <div class="projects-review-summary"><p class="projects-path" data-preview-destination></p><p class="projects-label" data-preview-count></p></div>
+      <div class="projects-compatibility" data-preview-compatibility hidden></div>
+      <div class="projects-compatibility" data-preview-adaptation hidden></div>
       <div data-preview-profile class="projects-identity"></div>
-      <div data-preview-sample hidden></div>
-      <div data-preview-files></div>
+      <details data-preview-sample hidden></details>
+      <details><summary>Review files to create</summary><div data-preview-files></div></details>
       <details class="projects-recipe"><summary>Configure and build commands</summary><div data-preview-recipe></div></details>
       <p class="projects-muted projects-apply-note">Create applies only these files in a new directory. It does not configure or compile the application.</p>
-      <button type="button" class="projects-button primary" data-create-submit>Create application</button>
-    </section>
-    <section class="projects-job" data-creator-job hidden aria-label="Project operation progress"><div class="projects-section-heading"><div><h2 data-creator-job-title></h2><p role="status" aria-live="polite" data-creator-job-status></p></div><button type="button" class="projects-button" data-creator-cancel>Cancel operation</button></div><details><summary>Operation log</summary><pre data-creator-logs></pre></details><a class="projects-button" data-creator-job-applications href="#/projects/applications" hidden>View applications</a></section>
+      </div>
+      <div class="projects-review-actions"><button type="button" class="projects-button" data-review-close="create">Cancel review</button><button type="button" class="projects-button primary" data-create-submit>Create application</button></div>
+    </dialog>
+    <section class="projects-job" data-creator-job hidden aria-label="Project operation progress"><div class="projects-section-heading"><div><h2 data-creator-job-title></h2><p role="status" aria-live="polite" data-creator-job-status></p></div><button type="button" class="projects-button" data-creator-cancel>Cancel operation</button></div><details><summary>Operation log</summary><pre data-creator-logs></pre></details><a class="projects-button primary" data-creator-job-applications href="#/projects/applications" hidden>View applications</a><button class="projects-button primary" data-creator-job-result type="button" hidden>View build result</button></section>
     <section class="projects-panel" data-creator-applications aria-label="Workspace applications"><div class="projects-section-heading"><div><h2>Applications</h2><p class="projects-muted">Each attempt uses a new output directory. A successful build does not establish hardware operation.</p></div><button type="button" class="projects-button" data-creator-refresh>Refresh list</button></div><div data-created-projects></div></section>
-    <section class="projects-panel" data-build-preview hidden aria-label="Build preview"><div class="projects-section-heading"><div><span class="projects-eyebrow">REVIEW COMMAND</span><h2 data-build-preview-title></h2></div></div><div data-build-preview-recipe></div><p class="projects-muted projects-apply-note">This runs the selected local application and Zephyr CMake code. Existing build directories are preserved.</p><button type="button" class="projects-button primary" data-build-start>Start operation</button></section>
+    <dialog class="projects-review-dialog" data-build-preview aria-labelledby="projects-build-review-title"><div class="projects-review-heading"><div><span class="projects-eyebrow">REVIEW OPERATION</span><h2 id="projects-build-review-title" data-build-preview-title tabindex="-1" autofocus></h2></div><button type="button" class="projects-button" data-review-close="build">Close review</button></div><div class="projects-review-body"><div class="projects-review-summary" data-build-preview-summary></div><details><summary>Review commands and environment</summary><div data-build-preview-recipe></div></details><p class="projects-muted projects-apply-note">This runs the selected local application and Zephyr CMake code. Existing build directories are preserved.</p></div><div class="projects-review-actions"><button type="button" class="projects-button" data-review-close="build">Cancel review</button><button type="button" class="projects-button primary" data-build-start>Start operation</button></div></dialog>
     <div data-creator-diagnostics></div>
   </div>
 

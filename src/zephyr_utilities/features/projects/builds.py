@@ -285,7 +285,8 @@ def capture_context(profile, source_dir, build_dir, *, configured=False):
     return context, artifacts, diagnostics
 
 
-def execute_build(profile, source_dir, build_dir, operation, *, environ=None, emit=None, cancel=None):
+def execute_build(profile, source_dir, build_dir, operation, *, environ=None, emit=None, cancel=None,
+                  after_configure=None):
     """Reserve a fresh output and configure, optionally compile; preserve failed attempt evidence."""
     if os.name != "posix":
         raise ValueError("Project build execution is currently supported on Linux/POSIX hosts only.")
@@ -310,6 +311,14 @@ def execute_build(profile, source_dir, build_dir, operation, *, environ=None, em
             if step == "configure":
                 configured = True
                 result["status"] = "configured"
+                if after_configure is not None:
+                    compatibility = after_configure(Path(build_dir))
+                    result["sample_compatibility"] = compatibility
+                    emit(compatibility["message"])
+                    if compatibility["status"] == "incompatible":
+                        raise ValueError(compatibility["message"])
+                    if compatibility["status"] == "unknown":
+                        result["diagnostics"].append(_diagnostic("sample-unverified", compatibility["message"]))
             else:
                 result["status"] = "built"
         check_cancel(cancel)
@@ -321,8 +330,9 @@ def execute_build(profile, source_dir, build_dir, operation, *, environ=None, em
     try:
         if _directory_identity(build_dir) != identities[str(build_dir)]:
             raise ValueError("Build output directory changed; its artifacts were not attributed to this attempt.")
-        result["context"], result["artifacts"], result["diagnostics"] = capture_context(
+        result["context"], result["artifacts"], diagnostics = capture_context(
             profile, source_dir, build_dir, configured=configured)
+        result["diagnostics"].extend(diagnostics)
     except (OSError, ValueError, RuntimeError) as exc:
         result["diagnostics"].append(_diagnostic("build-context-unavailable", exc))
         result["status"] = "failed" if result["status"] != "cancelled" else "cancelled"

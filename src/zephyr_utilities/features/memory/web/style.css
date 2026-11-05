@@ -2,17 +2,17 @@
   box-sizing:border-box
 }
 #memory-feature {
-  --ink:#172c34;
-  --muted:#667779;
-  --teal:#167566;
-  --teal-light:#e5f1eb;
-  --copper:#aa653f;
-  --line:#dfe5e1;
-  --paper:#f5f7f3;
-  --nav:#142c34;
-  --danger:#a84632;
-  --success:#176d56;
-  --shadow:0 12px 38px #17342d0c;
+  --ink:var(--app-text);
+  --muted:var(--app-muted);
+  --accent:var(--app-brand);
+  --accent-light:var(--app-brand-soft);
+  --secondary:var(--app-blue);
+  --line:var(--app-border);
+  --paper:var(--app-surface-subtle);
+  --nav:var(--app-nav);
+  --danger:var(--app-danger);
+  --success:var(--app-success);
+  --shadow:0 12px 38px var(--app-shadow-color);
   font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   color:var(--ink);
   background:var(--paper);
@@ -45,13 +45,13 @@
 #memory-feature select:focus-visible,
 #memory-feature textarea:focus-visible,
 #memory-feature summary:focus-visible {
-  outline:3px solid #2c9b87
+  outline:3px solid var(--app-focus)
 }
 #memory-feature button {
   transition:background .15s,color .15s,box-shadow .15s
 }
 #memory-feature a {
-  color:var(--teal)
+  color:var(--accent)
 }
 #memory-feature [hidden] {
   display:none!important
@@ -86,17 +86,17 @@
   font-size:10px;
   letter-spacing:1.6px;
   font-weight:700;
-  color:var(--teal);
+  color:var(--accent);
   margin-bottom:8px
 }
 #memory-feature .badge {
   display:inline-flex;
   align-items:center;
   white-space:nowrap;
-  border:1px solid #cddfd5;
+  border:1px solid var(--app-brand-border);
   border-radius:6px;
-  background:#ecf3ed;
-  color:#47735c;
+  background:var(--app-brand-soft);
+  color:var(--app-brand);
   font-size:10px;
   letter-spacing:1.1px;
   font-weight:650;
@@ -112,7 +112,7 @@
   justify-content:center;
   align-items:center;
   gap:9px;
-  background:#fff;
+  background:var(--app-surface);
   border:1px solid var(--line);
   color:var(--ink);
   border-radius:8px;
@@ -123,32 +123,32 @@
   white-space:nowrap
 }
 #memory-feature .button:hover:not(:disabled) {
-  background:#eef3ee;
-  border-color:#bbcfc3
+  background:var(--app-brand-soft);
+  border-color:var(--app-brand-border)
 }
 #memory-feature .button.primary {
-  color:white;
-  background:var(--teal);
-  border-color:var(--teal)
+  color:var(--app-surface);
+  background:var(--accent);
+  border-color:var(--accent)
 }
 #memory-feature .button.primary:hover:not(:disabled) {
-  background:#0f5f53
+  background:var(--app-brand-hover)
 }
 #memory-feature .button.danger {
   color:var(--danger);
-  border-color:#e6c8c0
+  border-color:var(--app-danger-border)
 }
 #memory-feature .button.danger:hover:not(:disabled) {
-  background:#fff0eb;
+  background:var(--app-danger-soft);
   border-color:var(--danger)
 }
 #memory-feature .button.danger.solid {
   background:var(--danger);
   border-color:var(--danger);
-  color:white
+  color:var(--app-surface)
 }
 #memory-feature .button.danger.solid:hover:not(:disabled) {
-  background:#893827
+  background:var(--app-danger-hover)
 }
 #memory-feature .delete-name {
   overflow-wrap:anywhere
@@ -170,7 +170,7 @@
 #memory-feature .text-button {
   background:none;
   border:0;
-  color:var(--teal);
+  color:var(--accent);
   padding:8px 0;
   font-size:12px;
   font-weight:600
@@ -180,7 +180,7 @@
 }
 #memory-feature .icon-button {
   border:0;
-  background:#f0f3ef;
+  background:var(--app-surface-subtle);
   width:32px;
   height:32px;
   border-radius:7px;
@@ -191,7 +191,7 @@
   margin-left:auto;
   font-size:10px;
   border-radius:5px;
-  background:#18363b;
+  background:var(--app-nav-surface);
   padding:2px 5px
 }
 #memory-feature .top-actions {
@@ -218,7 +218,7 @@
 }
 #memory-feature .panel {
   padding:24px;
-  background:#fff;
+  background:var(--app-surface);
   border:1px solid var(--line);
   border-radius:12px;
   box-shadow:var(--shadow);
@@ -267,7 +267,7 @@
 }
 #memory-feature .metric {
   position:relative;
-  background:white;
+  background:var(--app-surface);
   border:1px solid var(--line);
   border-radius:12px;
   padding:23px 26px;
@@ -279,10 +279,10 @@
   position:absolute;
   inset:0 auto 0 0;
   width:4px;
-  background:var(--teal)
+  background:var(--accent)
 }
 #memory-feature .metric.rom:before {
-  background:var(--copper)
+  background:var(--secondary)
 }
 #memory-feature .metric-header {
   display:flex;
@@ -292,11 +292,11 @@
   font-weight:600
 }
 #memory-feature .metric-symbol {
-  color:var(--teal);
+  color:var(--accent);
   font-size:17px
 }
 #memory-feature .rom .metric-symbol {
-  color:var(--copper)
+  color:var(--secondary)
 }
 #memory-feature .metric-value {
   display:flex;
@@ -332,7 +332,7 @@
 }
 #memory-feature .measurement-note>span:first-child {
   font-size:14px;
-  color:#4c7563
+  color:var(--app-brand)
 }
 #memory-feature .overview-grid {
   display:grid;
@@ -357,9 +357,9 @@
   border-radius:4px
 }
 #memory-feature .segmented button[aria-pressed=true] {
-  background:white;
-  color:var(--teal);
-  box-shadow:0 1px 5px #17342d19
+  background:var(--app-surface);
+  color:var(--accent);
+  box-shadow:0 1px 5px var(--app-shadow-control)
 }
 #memory-feature .distribution-strip {
   display:flex;
@@ -435,13 +435,13 @@
 }
 #memory-feature .consumer-track {
   height:5px;
-  background:#edf2ed;
+  background:var(--app-surface-muted);
   border-radius:3px;
   overflow:hidden
 }
 #memory-feature .consumer-fill {
   height:100%;
-  background:#5b9d88;
+  background:var(--app-blue);
   border-radius:3px
 }
 #memory-feature .provenance summary,
@@ -469,8 +469,8 @@
 #memory-feature .empty-state {
   padding:60px 25px;
   text-align:center;
-  background:#fff;
-  border:1px dashed #cbd7ce;
+  background:var(--app-surface);
+  border:1px dashed var(--app-border);
   border-radius:12px;
   max-width:100%;
   margin-bottom:24px
@@ -502,21 +502,21 @@
   transform:rotate(-5deg)
 }
 #memory-feature .empty-illustration i {
-  background:#b7d6c2;
+  background:var(--app-brand-tint);
   border-radius:4px
 }
 #memory-feature .empty-illustration i:first-child {
   grid-row:span 2;
-  background:#6ba08c
+  background:var(--app-blue-tint)
 }
 #memory-feature .empty-illustration i:nth-child(2) {
-  background:#d5b79e
+  background:var(--app-light-blue)
 }
 #memory-feature .empty-illustration i:nth-child(3) {
-  background:#97b5ab
+  background:var(--app-brand-tint)
 }
 #memory-feature .empty-illustration i:last-child {
-  background:#d7e5d8
+  background:var(--app-surface-muted)
 }
 #memory-feature .warning-list:empty {
   display:none
@@ -528,17 +528,17 @@
   font-size:12px;
   line-height:1.6;
   padding:10px 13px;
-  border-left:3px solid #c69559;
-  background:#fbf4e9;
+  border-left:3px solid var(--app-warning-border);
+  background:var(--app-warning-soft);
   margin:5px 0;
   border-radius:0 5px 5px 0;
-  color:#735b38;
+  color:var(--app-warning);
   overflow-wrap:anywhere
 }
 #memory-feature .notice {
   padding:12px 16px;
-  border:1px solid #c7dbcb;
-  background:#eaf3e9;
+  border:1px solid var(--app-blue-border);
+  background:var(--app-blue-soft);
   border-radius:9px;
   display:flex;
   justify-content:space-between;
@@ -549,9 +549,9 @@
   overflow-wrap:anywhere
 }
 #memory-feature .notice.error {
-  background:#fff0eb;
-  border-color:#e6bbac;
-  color:#8d3e2f
+  background:var(--app-danger-soft);
+  border-color:var(--app-danger-border);
+  color:var(--app-danger)
 }
 #memory-feature .notice>button {
   background:none;
@@ -569,8 +569,8 @@
 }
 #memory-feature .tree-breadcrumbs button {
   border:0;
-  background:#edf3ef;
-  color:#426e5f;
+  background:var(--app-brand-soft);
+  color:var(--app-brand);
   padding:5px 9px;
   border-radius:5px;
   max-width:260px;
@@ -579,16 +579,16 @@
   white-space:nowrap
 }
 #memory-feature .tree-breadcrumbs button:last-child {
-  background:var(--teal);
-  color:white
+  background:var(--accent);
+  color:var(--app-surface)
 }
 #memory-feature .tree-breadcrumbs>span {
-  color:#9bada2
+  color:var(--app-muted)
 }
 #memory-feature .treemap {
   position:relative;
   height:320px;
-  background:#eff3ed;
+  background:var(--app-surface-subtle);
   border-radius:7px;
   overflow:hidden
 }
@@ -600,7 +600,7 @@
   justify-content:flex-start;
   gap:4px;
   text-align:left;
-  color:white;
+  color:var(--app-surface);
   border:2px solid white;
   overflow:hidden;
   padding:12px;
@@ -651,20 +651,20 @@
   text-align:left
 }
 #memory-feature th {
-  color:#75827a;
+  color:var(--app-muted);
   font-size:10px;
   font-weight:600;
   text-transform:uppercase;
   letter-spacing:.6px;
   padding:11px 12px;
-  background:#f7f9f5;
-  border-top:1px solid #edf0eb;
-  border-bottom:1px solid #e5ebe3;
+  background:var(--app-surface-subtle);
+  border-top:1px solid var(--app-border-subtle);
+  border-bottom:1px solid var(--app-border-subtle);
   white-space:nowrap
 }
 #memory-feature td {
   padding:13px 12px;
-  border-bottom:1px solid #edf0eb;
+  border-bottom:1px solid var(--app-border-subtle);
   vertical-align:top
 }
 #memory-feature tbody tr:last-child td {
@@ -745,7 +745,7 @@
   font-size:11px;
   margin-top:15px;
   padding:11px;
-  background:#f0f5ed;
+  background:var(--app-brand-soft);
   border-radius:5px;
   overflow-wrap:anywhere;
   font-family:ui-monospace,monospace
@@ -770,7 +770,7 @@
 #memory-feature .comparison-picker>span {
   align-self:center;
   margin-top:20px;
-  color:#9bb0a3;
+  color:var(--app-muted);
   font-size:23px
 }
 #memory-feature .checkbox-label {
@@ -803,7 +803,7 @@
 #memory-feature .delta-track {
   height:18px;
   position:relative;
-  background:linear-gradient(to right,transparent 49.7%,#c9d4c9 49.7%,#c9d4c9 50.3%,transparent 50.3%)
+  background:linear-gradient(to right,transparent 49.7%,var(--app-border) 49.7%,var(--app-border) 50.3%,transparent 50.3%)
 }
 #memory-feature .delta-bar {
   height:10px;
@@ -812,11 +812,11 @@
   border-radius:3px
 }
 #memory-feature .delta-bar.increase {
-  background:#bd785b;
+  background:var(--app-danger);
   left:50%
 }
 #memory-feature .delta-bar.decrease {
-  background:#5c9b81;
+  background:var(--app-success);
   right:50%
 }
 #memory-feature .increase-text {
@@ -829,23 +829,23 @@
   font-size:9px;
   padding:4px 6px;
   border-radius:4px;
-  background:#eef3ed;
-  color:#5b725f;
+  background:var(--app-brand-soft);
+  color:var(--app-muted);
   text-transform:uppercase;
   letter-spacing:.3px;
   white-space:nowrap
 }
 #memory-feature .status-tag.added {
-  background:#fcf0e7;
-  color:#975331
+  background:var(--app-danger-soft);
+  color:var(--app-danger)
 }
 #memory-feature .status-tag.removed {
-  background:#e8f4e9;
-  color:#33704f
+  background:var(--app-success-soft);
+  color:var(--app-success)
 }
 #memory-feature .status-tag.ambiguous {
-  background:#fff2d8;
-  color:#8c6a26;
+  background:var(--app-warning-soft);
+  color:var(--app-warning);
   margin-left:5px
 }
 #memory-feature .snapshot-actions {
@@ -858,8 +858,8 @@
   overflow-wrap:anywhere
 }
 #memory-feature .job-panel {
-  border:1px solid #b9d6c6;
-  background:#f0f7ef;
+  border:1px solid var(--app-blue-border);
+  background:var(--app-blue-soft);
   border-radius:11px;
   padding:20px;
   margin-bottom:26px
@@ -872,7 +872,7 @@
 }
 #memory-feature .activity-track {
   height:3px;
-  background:#d9e8db;
+  background:var(--app-blue-border);
   overflow:hidden;
   border-radius:4px;
   margin-bottom:12px
@@ -881,7 +881,7 @@
   display:block;
   width:35%;
   height:100%;
-  background:var(--teal);
+  background:var(--accent);
   animation:memory-activity 1.7s infinite ease-in-out
 }
 #memory-feature .job-panel details {
@@ -890,14 +890,14 @@
 }
 #memory-feature .job-panel summary {
   cursor:pointer;
-  color:var(--teal)
+  color:var(--accent)
 }
 #memory-feature pre {
   overflow:auto;
   white-space:pre-wrap;
   overflow-wrap:anywhere;
-  background:#183039;
-  color:#d3e7db;
+  background:var(--app-code);
+  color:var(--app-code-text);
   padding:15px;
   border-radius:7px;
   max-height:240px;
@@ -908,7 +908,7 @@
   display:flex;
   justify-content:space-between;
   gap:20px;
-  color:#89978c;
+  color:var(--app-muted);
   font-size:10px;
   margin-top:40px;
   padding:21px 0 24px;
@@ -919,14 +919,14 @@
   width:min(560px,calc(100vw - 30px));
   border:1px solid var(--line);
   border-radius:14px;
-  background:white;
+  background:var(--app-surface);
   color:var(--ink);
-  box-shadow:0 30px 110px #071a2866;
+  box-shadow:0 30px 110px var(--app-modal-shadow);
   max-height:90vh;
   overflow:auto
 }
 #memory-feature dialog::backdrop {
-  background:#102c3c66;
+  background:var(--app-backdrop);
   backdrop-filter:blur(3px)
 }
 #memory-feature dialog.wide-dialog {
@@ -955,9 +955,9 @@
 #memory-feature input,
 #memory-feature select,
 #memory-feature textarea {
-  border:1px solid #d4dfd5;
+  border:1px solid var(--app-input-border);
   border-radius:7px;
-  background:#fcfdfb;
+  background:var(--app-surface);
   color:var(--ink);
   padding:10px 11px;
   width:100%;
@@ -966,14 +966,14 @@
 }
 #memory-feature input::placeholder,
 #memory-feature textarea::placeholder {
-  color:#9aa69b
+  color:var(--app-muted)
 }
 #memory-feature input[type=file] {
-  background:#f4f7f1;
+  background:var(--app-surface-subtle);
   font-size:11px
 }
 #memory-feature input[type=checkbox] {
-  accent-color:var(--teal)
+  accent-color:var(--accent)
 }
 #memory-feature textarea {
   resize:vertical
@@ -1039,18 +1039,18 @@
   cursor:pointer
 }
 #memory-feature .build-card.selected {
-  border-color:#5b9e80;
-  background:#eff6ee
+  border-color:var(--app-brand);
+  background:var(--app-brand-soft)
 }
 #memory-feature .build-card.unready {
-  background:#f6f6f2;
+  background:var(--app-surface-subtle);
   cursor:not-allowed;
   opacity:.75
 }
 #memory-feature .build-card input {
   width:auto;
   margin-top:4px;
-  accent-color:var(--teal)
+  accent-color:var(--accent)
 }
 #memory-feature .build-card-content {
   min-width:0;
@@ -1095,11 +1095,11 @@
   overflow-wrap:anywhere
 }
 #memory-feature .folder-list button:hover {
-  background:#edf4ea
+  background:var(--app-brand-soft)
 }
 #memory-feature .folder-list button:before {
   content:"▱";
-  color:var(--teal);
+  color:var(--accent);
   font-size:18px;
   margin-right:12px
 }
@@ -1358,11 +1358,11 @@
   }
 }
 
-#memory-feature .memory-toolbar {display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:16px 34px;background:#fcfdfa;border-bottom:1px solid var(--line)}
+#memory-feature .memory-toolbar {display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:16px 34px;background:var(--app-surface);border-bottom:1px solid var(--line)}
 #memory-feature .memory-nav {display:flex;gap:5px;flex-wrap:wrap}
 #memory-feature .memory-nav button {display:flex;gap:7px;align-items:center;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:12px;padding:10px 12px;font-weight:600}
-#memory-feature .memory-nav button:hover {background:#edf3ed;color:var(--ink)}
-#memory-feature .memory-nav button.active {background:#e4eee7;color:#176d56}
-#memory-feature .nav-count {background:#d7e6db;color:#416751;margin:0;min-width:19px;text-align:center}
+#memory-feature .memory-nav button:hover {background:var(--app-brand-soft);color:var(--ink)}
+#memory-feature .memory-nav button.active {background:var(--app-brand-soft);color:var(--app-brand)}
+#memory-feature .nav-count {background:var(--app-brand-soft);color:var(--app-brand);margin:0;min-width:19px;text-align:center}
 #memory-feature .sr-only {position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @media(max-width:700px) {#memory-feature .memory-toolbar {padding:12px 16px;gap:9px} #memory-feature .top-actions {margin-left:0;flex-wrap:wrap} #memory-feature .memory-nav button {padding:9px 10px}}

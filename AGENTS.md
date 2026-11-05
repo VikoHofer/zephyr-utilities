@@ -55,6 +55,20 @@ Visual editing and TinyML experiment analysis remain planned.
 - Keep planned features labeled as planned. A manifest or generated skeleton is not
   an implemented editor, project creator, or training tool.
 
+## UI and interaction rules
+
+- Use the shared Zephyr purple/blue palette and semantic `--app-*` tokens. See
+  [UI guidelines](docs/ui-guidelines.md); do not introduce a separate feature theme.
+- Every explicit action needs visible feedback: a busy label, nearby result, focused
+  review dialog or visible notice. Do not append essential results or next steps below
+  the viewport and leave the user to discover them by scrolling.
+- Use `context.reveal(element, options)` once for a requested result that cannot stay
+  near its trigger. Never move focus or scroll on background polling or passive refresh.
+- Keep the decision and primary next action visible in review dialogs; collapse optional
+  technical details. Support Escape, keyboard focus, cancellation and return to the trigger.
+- Verify actions from a scrolled page and at narrow widths, including error/empty states,
+  leaving/reopening a feature and late responses after navigation or workspace changes.
+
 ## Data and process rules
 
 - Treat imported files, symbols, paths and logs as data. Use text-safe DOM APIs and

@@ -1,7 +1,7 @@
 /** Creation and build requests stay bound to the workspace and reviewed inputs. */
 import {activeJob, filterBoards} from "./environment-state.js";
 import {copyFragments, fragmentFormatError, fragmentKinds, fragmentModes, fragmentSelectionError, needsFragmentFiles, profileFragments} from "./fragment-state.js";
-import {isLocalSample, validateSampleCatalogue, readySample, sampleSelectionError, sampleLabel} from "./sample-state.js";
+import {isLocalSample, validateSampleCatalogue, readySample, sampleSelectionError, sampleLabel, sampleCheckSelection, sameSampleSelection, validateSampleCheckResult, currentSampleCompatibility} from "./sample-state.js";
 
 const defaults = () => ({name: "my_app", destination: "", search: "", board_id: "", target: "", sdk_id: "", template_id: "minimal-c", sample_id: ""});
 const configurationDefaults = () => ({name: "", search: "", board_id: "", target: "", sdk_id: ""});
@@ -23,10 +23,10 @@ export function creatorTemplateLabel(template, templates, sample) {
 }
 export const creatorBoards = (snapshot, query = "") => filterBoards(array(snapshot?.boards).filter((board) => board.status === "discovered" && array(board.targets).length), array(snapshot?.socs), {query});
 export const creatorSdks = (snapshot) => array(snapshot?.sdks).filter((sdk) => sdk.status === "discovered" && array(sdk.toolchains).some((toolchain) => toolchain.family === "GNU" && toolchain.compiler));
-export function creatorBody(form, sample) {
+export function creatorBody(form, sample, checkId) {
   return {...Object.fromEntries(["name", "destination", "board_id", "target", "sdk_id"].map((key) => [key, String(form[key] || "").trim()])),
     ...(creatorTemplateId(form) === "minimal-c" ? {} : {template_id: form.template_id}),
-    ...(isLocalSample(form) ? {sample_id: form.sample_id, sample_fingerprint: sample?.fingerprint} : {})};
+    ...(isLocalSample(form) ? {sample_id: form.sample_id, sample_fingerprint: sample?.fingerprint, ...(checkId ? {sample_check_id: checkId} : {})} : {})};
 }
 export function configurationBody(form) {
   return {...Object.fromEntries(["name", "board_id", "target", "sdk_id"].map((key) => [key, String(form[key] || "").trim()])),
@@ -51,7 +51,7 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
   let readSequence = 0;
   let fileSequence = 0;
   let sampleSequence = 0;
-  Object.assign(state, {loading: false, busy: "", error: "", cancelling: false});
+  Object.assign(state, {loading: false, busy: "", error: "", cancelling: false, removalNotice: ""});
   // Review plans are server-session capabilities; fetch new ones after remount.
   state.plan = null;
   state.buildPlan = null;
@@ -62,6 +62,8 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
   state.configurationNotice = null;
   state.configurationFiles = {};
   state.sampleCatalogue = null;
+  state.sampleCheck = state.sampleCheck?.job?.id ? {...state.sampleCheck, compatibility: null, checkId: null, verified: false,
+    submitting: false, cancelling: false, polling: false, needsVerify: true} : null;
   const publish = () => { if (!disposed) onChange(); };
   const current = (path, captured) => !disposed && workspace() === path && state.workspace === path && epoch === captured;
   const request = (path, options = {}) => api(path, {...options, signal: lifetime.signal});
@@ -73,7 +75,7 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
       state.formsByWorkspace[state.workspace] = {...state.form};
     }
     epoch++; formRevision++; buildRevision++; configurationRevision++; fileSequence++; sampleSequence++;
-    Object.assign(state, {workspace: path, snapshot: null, templates: [], projects: [], jobs: [], diagnostics: [], jobId: null, plan: null, buildPlan: null, error: "", loading: false, busy: "", cancelling: false, form: {...defaults(), ...state.formsByWorkspace?.[path]}, configurationSelections: {}, configurationDrafts: {}, configurationEditor: "", configurationNotice: null, configurationFiles: {}, sampleCatalogue: null});
+    Object.assign(state, {workspace: path, snapshot: null, templates: [], projects: [], unavailableProjects: [], jobs: [], diagnostics: [], jobId: null, plan: null, buildPlan: null, error: "", removalNotice: "", loading: false, busy: "", cancelling: false, form: {...defaults(), ...state.formsByWorkspace?.[path]}, configurationSelections: {}, configurationDrafts: {}, configurationEditor: "", configurationNotice: null, configurationFiles: {}, sampleCatalogue: null, sampleCheck: null});
     return true;
   }
   function choosePending() {
@@ -84,6 +86,7 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
     if (state.form.board_id !== board.id) {
       state.form.board_id = board.id; state.form.target = ""; state.form.search = "";
       state.plan = null; formRevision++;
+      invalidateSampleCheck();
     }
   }
   function acceptData(data) {
@@ -95,10 +98,12 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
     if (snapshot?.fingerprint !== state.snapshot?.fingerprint || snapshot?.zephyr?.path !== state.snapshot?.zephyr?.path) {
       state.plan = null; state.buildPlan = null; formRevision++; buildRevision++; configurationRevision++;
       sampleSequence++; state.sampleCatalogue = null;
+      invalidateSampleCheck();
     }
     const previousProjects = array(state.projects);
     state.snapshot = snapshot;
     state.projects = array(data.projects).filter((project) => project.workspace === state.workspace);
+    state.unavailableProjects = array(data.unavailable_projects).filter((project) => project.workspace === state.workspace);
     if (state.buildPlan && !state.projects.some((project) => project.id === state.buildPlan.project_id)) state.buildPlan = null;
     for (const previous of previousProjects) {
       const project = state.projects.find((item) => item.id === previous.id);
@@ -117,7 +122,7 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
         state.configurationNotice = {project_id: projectId, message: "The selected configuration is no longer available. Original is selected; review it before building."};
       }
     }
-    state.jobs = array(data.jobs).filter((job) => !job.metadata?.workspace || job.metadata.workspace === state.workspace);
+    state.jobs = array(data.jobs).filter((job) => job.metadata?.operation !== "sample-check" && (!job.metadata?.workspace || job.metadata.workspace === state.workspace));
     state.diagnostics = array(data.diagnostics);
     state.needsReload = false;
     choosePending();
@@ -127,6 +132,7 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
       else if (!array(board.targets).includes(form.target)) form.target = "";
       if (!creatorSdks(snapshot).some((sdk) => sdk.id === form.sdk_id)) form.sdk_id = "";
     }
+    if (state.sampleCheck && ["sample_id", "board_id", "target", "sdk_id"].some((key) => state.sampleCheck.selection?.[key] !== state.form[key])) invalidateSampleCheck();
     const editor = state.configurationEditor;
     if (editor && needsFragmentFiles(copyFragments(state.configurationDrafts[editor]?.fragments)) && !state.configurationFiles[editor]) loadConfigurationFiles(editor);
   }
@@ -149,7 +155,7 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
     }
     if (!background && current(path, captured) && sequence === readSequence) await ensureSamples();
   }
-  async function loadSamples() {
+  async function loadSamples({restore = false} = {}) {
     if (disposed) return;
     followWorkspace();
     if (!isLocalSample(state.form) || !selectedCreatorTemplate(state) || !state.snapshot || state.snapshot.status === "stale") return;
@@ -157,6 +163,7 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
     const captured = epoch;
     const sequence = ++sampleSequence;
     const catalogue = {loading: true, ready: false, error: "", samples: [], diagnostics: []};
+    if (!restore) invalidateSampleCheck();
     state.sampleCatalogue = catalogue;
     formRevision++; state.plan = null;
     publish();
@@ -169,8 +176,12 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
     } finally {
       if (current(path, captured) && sequence === sampleSequence) { catalogue.loading = false; publish(); }
     }
+    if (current(path, captured) && sequence === sampleSequence && catalogue.ready) {
+      if (state.sampleCheck && !sameSampleSelection(state.sampleCheck.selection, sampleCheckSelection(state))) invalidateSampleCheck();
+      await pollSampleCheck();
+    }
   }
-  const ensureSamples = () => isCreating() && isLocalSample(state.form) && !state.sampleCatalogue ? loadSamples() : Promise.resolve();
+  const ensureSamples = () => isCreating() && isLocalSample(state.form) && !state.sampleCatalogue ? loadSamples({restore: true}) : Promise.resolve();
   function changeField(key, value) {
     if (disposed) return;
     followWorkspace();
@@ -178,9 +189,89 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
     if (state.form[key] === value) return;
     state.form[key] = value;
     if (key === "board_id") state.form.target = "";
+    if (["template_id", "sample_id", "board_id", "target", "sdk_id"].includes(key)) invalidateSampleCheck();
     formRevision++; state.plan = null; state.error = "";
     publish();
     if (key === "template_id") ensureSamples();
+  }
+  function invalidateSampleCheck() {
+    if (!state.sampleCheck) return;
+    Object.assign(state.sampleCheck, {stale: true, verified: false, compatibility: null, checkId: null, needsVerify: false});
+  }
+  function acceptSampleCheckJob(check, job) {
+    if (!job || typeof job.id !== "string" || !["queued", "running", "completed", "failed", "cancelled"].includes(job.status)
+      || check.job?.id && job.id !== check.job.id) throw new Error("The compatibility job could not be verified. Check compatibility again.");
+    check.job = job;
+    check.needsVerify = false;
+    check.error = "";
+    if (job.status === "failed") check.error = `${job.error || "Compatibility check failed."} Check compatibility again after resolving the problem.`;
+    if (job.status === "cancelled") check.error = "Compatibility check cancelled. You can check again or preview with compatibility unknown.";
+    if (job.status === "completed" && !check.stale && sameSampleSelection(check.selection, sampleCheckSelection(state))) {
+      check.compatibility = validateSampleCheckResult(job.result, check.selection);
+      check.checkId = job.result.check_id;
+      check.verified = true;
+      formRevision++; state.plan = null;
+    }
+  }
+  async function checkSample() {
+    if (disposed) return;
+    if (followWorkspace()) { publish(); await load(); return; }
+    const selection = sampleCheckSelection(state);
+    if (!selection || state.busy || state.loading || state.sampleCheck?.submitting || activeJob(state.sampleCheck?.job)) return;
+    const path = state.workspace;
+    const captured = epoch;
+    const check = {selection, job: null, submitting: true, cancelling: false, polling: false, needsVerify: false,
+      verified: false, stale: false, compatibility: null, checkId: null, error: ""};
+    state.sampleCheck = check;
+    formRevision++; state.plan = null;
+    publish();
+    try {
+      const {environment_fingerprint: _fingerprint, ...body} = selection;
+      const job = await request("/api/projects/sample-check", {method: "POST", body});
+      if (current(path, captured) && state.sampleCheck === check) acceptSampleCheckJob(check, job);
+    } catch (error) {
+      if (current(path, captured) && state.sampleCheck === check && error.name !== "AbortError") check.error = error.message || String(error);
+    } finally {
+      if (current(path, captured) && state.sampleCheck === check) { check.submitting = false; publish(); }
+    }
+  }
+  async function pollSampleCheck() {
+    const check = state.sampleCheck;
+    if (disposed || !check?.job?.id || check.polling || check.submitting || (!check.needsVerify && !activeJob(check.job))) return;
+    if (check.needsVerify && !check.stale && !sampleCheckSelection(state)) return;
+    const path = state.workspace;
+    const captured = epoch;
+    check.polling = true;
+    const sequence = check.requestRevision = (check.requestRevision || 0) + 1;
+    try {
+      const job = await request(`/api/jobs/${encodeURIComponent(check.job.id)}`);
+      if (current(path, captured) && state.sampleCheck === check && check.requestRevision === sequence) acceptSampleCheckJob(check, job);
+    } catch (error) {
+      if (current(path, captured) && state.sampleCheck === check && check.requestRevision === sequence && error.name !== "AbortError") {
+        check.error = `${error.message || String(error)} Use Check compatibility to try again.`;
+        check.needsVerify = false; check.verified = false; check.checkId = null; check.compatibility = null;
+        check.job = {...check.job, status: "failed"};
+      }
+    } finally {
+      check.polling = false;
+      if (current(path, captured) && state.sampleCheck === check) publish();
+    }
+  }
+  async function cancelSampleCheck() {
+    const check = state.sampleCheck;
+    if (disposed || !activeJob(check?.job) || check.cancelling) return;
+    const path = state.workspace;
+    const captured = epoch;
+    const sequence = check.requestRevision = (check.requestRevision || 0) + 1;
+    check.cancelling = true; publish();
+    try {
+      const job = await request(`/api/jobs/${encodeURIComponent(check.job.id)}/cancel`, {method: "POST", body: {}});
+      if (current(path, captured) && state.sampleCheck === check && check.requestRevision === sequence) acceptSampleCheckJob(check, job);
+    } catch (error) {
+      if (current(path, captured) && state.sampleCheck === check && check.requestRevision === sequence && error.name !== "AbortError") check.error = error.message || String(error);
+    } finally {
+      if (current(path, captured) && state.sampleCheck === check) { check.cancelling = false; publish(); }
+    }
   }
   function selectConfiguration(projectId, configurationId) {
     if (disposed) return;
@@ -289,16 +380,23 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
     const path = state.workspace;
     const captured = epoch;
     const reviewed = review?.();
+    let submitted = false;
     state.busy = kind; state.error = "";
     if (kind === "preview") state.plan = null;
     if (kind === "build-preview") state.buildPlan = null;
     publish();
     try {
       const payload = typeof body === "function" ? body() : body;
+      submitted = true;
       const data = await request(endpoint, {method: "POST", body: {...payload, workspace: path}});
       if (current(path, captured) && (!review || reviewed === review())) accept(data);
     } catch (error) {
-      if (current(path, captured) && error.name !== "AbortError") { state.error = error.message || String(error); state.plan = null; state.buildPlan = null; }
+      if (current(path, captured) && error.name !== "AbortError") {
+        state.error = error.message || String(error); state.plan = null; state.buildPlan = null;
+        if (submitted && kind === "preview" && isLocalSample(state.form) && state.sampleCheck?.checkId) {
+          invalidateSampleCheck(); state.error += " Check compatibility again to refresh the saved result.";
+        }
+      }
     } finally {
       if (current(path, captured)) { state.busy = ""; publish(); }
     }
@@ -312,7 +410,7 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
     if (!selectedCreatorTemplate(state)) throw new Error("Choose an available application template before previewing. Refresh the list if no templates are available.");
     const sampleError = sampleSelectionError(state);
     if (sampleError) throw new Error(sampleError);
-    return creatorBody(state.form, readySample(state));
+    return creatorBody(state.form, readySample(state), currentSampleCompatibility(state) ? state.sampleCheck.checkId : null);
   }, (data) => {
     if (data.plan?.workspace === state.workspace) state.plan = data.plan;
   }, {review: () => formRevision});
@@ -356,6 +454,67 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
     if (!state.buildPlan) return Promise.resolve();
     return action("build", "/api/projects/build", () => ({build_plan_id: state.buildPlan.id}), acceptJob);
   };
+  function dismissReview(kind) {
+    if (disposed) return;
+    if (kind === "create") { state.plan = null; formRevision++; }
+    else if (kind === "build") { state.buildPlan = null; buildRevision++; }
+    else return;
+    publish();
+  }
+  const allProjects = () => [...array(state.projects), ...array(state.unavailableProjects)];
+  function clearConfigurationDraft(projectId) {
+    delete state.configurationDrafts[projectId]; delete state.configurationFiles[projectId];
+    if (state.configurationEditor === projectId) state.configurationEditor = "";
+    configurationRevision++; fileSequence++;
+  }
+  async function removeRecord(endpoint, body, id, accept) {
+    let removed = false;
+    await action("remove", endpoint, body, (data) => {
+      if (data.removed !== id) throw new Error("Removal could not be verified. Refresh the application list.");
+      readSequence++; buildRevision++;
+      if (state.buildPlan?.project_id === body.project_id) state.buildPlan = null;
+      accept();
+      state.needsReload = true;
+      removed = true;
+    });
+    return removed;
+  }
+  function removeProject(projectId) {
+    const project = allProjects().find((item) => item.id === projectId);
+    if (!project) return Promise.resolve(false);
+    return removeRecord("/api/projects/remove", {project_id: projectId}, projectId, () => {
+      state.projects = array(state.projects).filter((item) => item.id !== projectId);
+      state.unavailableProjects = array(state.unavailableProjects).filter((item) => item.id !== projectId);
+      delete state.configurationSelections[projectId]; clearConfigurationDraft(projectId);
+      if (state.configurationNotice?.project_id === projectId) state.configurationNotice = null;
+      state.jobs = array(state.jobs).filter((job) => job.metadata?.project_id !== projectId && job.result?.project?.id !== projectId && job.project?.id !== projectId);
+      state.removalNotice = `Saved application “${project.name}”, its configurations and build history removed. Application and build files remain on disk.`;
+    });
+  }
+  function removeConfiguration(projectId, configurationId) {
+    const project = array(state.projects).find((item) => item.id === projectId);
+    const configuration = array(project?.configurations).find((item) => item.id === configurationId);
+    if (!configurationId || !configuration) return Promise.resolve(false);
+    return removeRecord("/api/projects/configurations/remove", {project_id: projectId, configuration_id: configurationId}, configurationId, () => {
+      const currentProject = array(state.projects).find((item) => item.id === projectId);
+      if (currentProject) currentProject.configurations = array(currentProject.configurations).filter((item) => item.id !== configurationId);
+      if (state.configurationSelections[projectId] === configurationId) state.configurationSelections[projectId] = "";
+      clearConfigurationDraft(projectId);
+      state.configurationNotice = {project_id: projectId, message: `Configuration “${configuration.name}” removed. Review the selected configuration before building.`};
+      state.removalNotice = "Build history and application files were preserved.";
+    });
+  }
+  function removeAttempt(projectId, attemptId) {
+    const project = allProjects().find((item) => item.id === projectId);
+    const attempt = array(project?.attempts).find((item) => item.id === attemptId);
+    if (!attempt || activeJob(attempt)) return Promise.resolve(false);
+    return removeRecord("/api/projects/attempts/remove", {project_id: projectId, attempt_id: attemptId}, attemptId, () => {
+      const currentProject = allProjects().find((item) => item.id === projectId);
+      if (currentProject) currentProject.attempts = array(currentProject.attempts).filter((item) => item.id !== attemptId);
+      state.jobs = array(state.jobs).filter((job) => job.metadata?.attempt_id !== attemptId && job.result?.attempt?.id !== attemptId && job.attempt?.id !== attemptId);
+      state.removalNotice = "Build history entry removed. Its output files remain on disk.";
+    });
+  }
   async function cancel() {
     if (disposed) return;
     if (followWorkspace()) { publish(); await load(); return; }
@@ -371,7 +530,7 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
       if (current(path, captured) && error.name !== "AbortError") { state.error = error.message || String(error); state.plan = null; state.buildPlan = null; }
     } finally { if (current(path, captured)) { state.cancelling = false; publish(); } }
   }
-  async function tick({force = false} = {}) {
+  async function tickCreator({force = false} = {}) {
     if (disposed || reading) return;
     const switched = followWorkspace();
     if (switched) publish();
@@ -379,9 +538,11 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
     reading = true;
     try { await load({background: !switched && !force}); } finally { reading = false; }
   }
+  const tick = (options) => Promise.all([tickCreator(options), pollSampleCheck()]);
   function queue() { timer = schedule(async () => { await tick(); if (!disposed) queue(); }, 1200); }
   followWorkspace(); queue();
   return {load, loadSamples, ensureSamples, refresh: () => tick({force: true}), preview, create, previewBuild, build, cancel, changeField,
+    removeProject, removeConfiguration, removeAttempt, dismissReview, checkSample, cancelSampleCheck,
     selectConfiguration, editConfiguration, closeConfiguration, changeConfigurationField, saveConfiguration, loadConfigurationFiles, changeFragment,
     tick, dispose() { disposed = true; epoch++; lifetime.abort(); if (timer !== undefined) unschedule(timer); }};
 }

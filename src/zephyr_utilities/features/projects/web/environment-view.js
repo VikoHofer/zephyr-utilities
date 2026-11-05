@@ -12,6 +12,7 @@ export function mountEnvironment(root, context) {
   let renderedWorkspace;
   let disposed = false;
   let session;
+  let watchedJob;
   const number = (value) => new Intl.NumberFormat("en-US").format(value);
   const text = (value, fallback = "Unknown") => value === null || value === undefined || value === "" ? fallback : String(value);
   const array = (value) => Array.isArray(value) ? value : [];
@@ -177,16 +178,17 @@ export function mountEnvironment(root, context) {
     }
     const busy = state.loading || state.submitting || activeJob(state.job);
     $("analyze").disabled = busy; $("rescan").disabled = busy;
-    $("analyze").textContent = state.submitting ? "Starting analysis…" : state.loading ? "Loading environment…" : state.snapshot ? "Analyze again" : "Analyze workspace";
+    $("analyze").textContent = state.submitting ? "Starting analysis…" : state.loading ? "Loading environment…" : activeJob(state.job) ? "Analyzing workspace…" : state.snapshot ? "Analyze again" : "Analyze workspace";
     $("error").hidden = !state.error; $("error").textContent = state.error || "";
     const job = state.job;
-    $("job").hidden = !job;
-    if (job) {
-      $("job-title").textContent = {queued: "Analysis queued", running: "Analyzing workspace", completed: "Analysis complete", cancelled: "Analysis cancelled", failed: "Analysis failed"}[job.status] || "Analysis";
-      $("job-status").textContent = activeJob(job) ? "Discovery runs locally. You can leave this view while the scan continues." : job.status === "cancelled" ? "The last successful observation is retained." : text(job.error, "Source files and installed tools were not changed.");
-      $("logs").textContent = array(job.logs).join("\n") || "No log messages yet.";
-      $("cancel").hidden = !activeJob(job); $("cancel").disabled = state.cancelling; $("cancel").textContent = state.cancelling ? "Cancelling…" : "Cancel scan";
+    $("job").hidden = !job && !state.submitting;
+    if (job || state.submitting) {
+      $("job-title").textContent = state.submitting ? "Starting analysis…" : {queued: "Analysis queued", running: "Analyzing workspace", completed: "Analysis complete", cancelled: "Analysis cancelled", failed: "Analysis failed"}[job.status] || "Analysis";
+      $("job-status").textContent = state.submitting ? "Submitting this workspace for local discovery…" : activeJob(job) ? "Discovery runs locally. You can leave this view while the scan continues." : job.status === "cancelled" ? "The last successful observation is retained." : text(job.error, "Discovery is ready. View the results to explore boards, chips and SDKs.");
+      $("logs").textContent = state.submitting ? "Waiting for the scan to start…" : array(job.logs).join("\n") || "No log messages yet.";
+      $("cancel").hidden = state.submitting || !activeJob(job); $("cancel").disabled = state.cancelling; $("cancel").textContent = state.cancelling ? "Cancelling…" : "Cancel scan";
     }
+    $("view-results").hidden = state.submitting || !state.snapshot || job?.status !== "completed";
     $("results").hidden = !state.snapshot; $("empty").hidden = Boolean(state.snapshot) || state.loading;
     if (state.snapshot !== renderedSnapshot) {
       renderedSnapshot = state.snapshot;
@@ -199,6 +201,13 @@ export function mountEnvironment(root, context) {
         select.value = state.filters.vendor; renderCatalogue();
       }
     }
+    announceCompletion();
+  }
+  function announceCompletion() {
+    if (!watchedJob || watchedJob.workspace !== state.workspace || state.workspace !== context.workspace.path || state.job?.id !== watchedJob.id || activeJob(state.job)) return;
+    watchedJob = null;
+    context.notify?.(state.job.status === "completed" ? "Environment analysis complete. Choose View results to explore it."
+      : state.job.error || (state.job.status === "cancelled" ? "Analysis cancelled. The previous observation is retained." : "Analysis failed. Open the scan log."), state.job.status === "failed");
   }
   function readOptions(force) {
     const options = {force};
@@ -215,12 +224,28 @@ export function mountEnvironment(root, context) {
     $(name).value = state.filters[name] || "";
     listen($(name), name === "vendor" ? "change" : "input", () => { state.filters[name] = $(name).value; state.boardLimit = 40; state.chipLimit = 40; renderCatalogue(); });
   }
-  listen($("analyze"), "click", () => session.start(() => readOptions(false)));
-  listen($("rescan"), "click", () => session.start(() => readOptions(true)));
-  listen($("cancel"), "click", () => session.cancel());
+  async function startAnalysis(force) {
+    const workspace = context.workspace.path;
+    const pending = session.start(() => readOptions(force));
+    if (state.submitting) context.reveal?.($("job"));
+    await pending;
+    if (disposed || context.workspace.path !== workspace || state.workspace !== workspace) return;
+    if (state.error) { context.notify?.(state.error, true); context.reveal?.($("error")); }
+    else if (state.job) { watchedJob = {id: state.job.id, workspace}; announceCompletion(); }
+  }
+  listen($("analyze"), "click", () => startAnalysis(false));
+  listen($("rescan"), "click", () => startAnalysis(true));
+  listen($("view-results"), "click", () => context.reveal?.($("results")));
+  listen($("cancel"), "click", async () => {
+    const workspace = context.workspace.path;
+    await session.cancel();
+    if (disposed || state.workspace !== workspace || context.workspace.path !== workspace) return;
+    context.notify?.(state.error || "Scan cancellation requested.", Boolean(state.error));
+    if (state.error) context.reveal?.($("error"));
+  });
   listen($("more"), "click", () => { state.boardLimit += 40; renderCatalogue(); });
   listen($("more-chips"), "click", () => { state.chipLimit += 40; renderCatalogue(); });
-  listen($("boards"), "click", (event) => { const button = event.target.closest("[data-board]"); if (button && root.contains(button)) { state.selectedBoard = button.dataset.board; renderCatalogue(); } });
+  listen($("boards"), "click", (event) => { const button = event.target.closest("[data-board]"); if (button && root.contains(button)) { state.selectedBoard = button.dataset.board; renderCatalogue(); context.reveal?.($("detail"), {block: "nearest"}); } });
   listen($("detail"), "click", (event) => {
     const button = event.target.closest("[data-use-board]");
     if (!button || !root.contains(button)) return;
