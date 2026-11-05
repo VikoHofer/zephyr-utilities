@@ -334,6 +334,17 @@ class EditorContextApiTests(unittest.TestCase):
             self.call("context", self.selection(first))
         self.assertEqual(self.call("context", self.selection(second))["id"], second["id"])
 
+    def test_replaced_workspace_changes_fingerprint_even_when_application_inode_is_retained(self):
+        original = self.open()
+        moved = self.root / "previous-workspace"
+        self.workspace.rename(moved)
+        self.workspace.mkdir()
+        (moved / self.source.name).rename(self.source)
+        reopened = self.open()
+        self.assertEqual(original["application"]["path"], reopened["application"]["path"])
+        self.assertNotEqual(original["workspace_identity"], reopened["workspace_identity"])
+        self.assertNotEqual(original["fingerprint"], reopened["fingerprint"])
+
 
 class RegisteredEditorContextTests(unittest.TestCase):
     def setUp(self):
@@ -458,5 +469,42 @@ class EditorContextHttpTests(unittest.TestCase):
         with self.request(PREFIX + "document", method="POST", body=selection) as response:
             document = json.load(response)["document"]
         self.assertEqual(document["text"].encode(), Path(document["path"]).read_bytes())
+        self.assertEqual(source_bytes(self.source), before)
+        self.assertEqual(self.server.app.context.jobs.list(), [])
+
+    def test_draft_routes_share_authentication_and_synchronize_without_writing(self):
+        for operation in ("open", "get", "source", "command", "undo", "redo"):
+            for authorized, expected in ((False, 403), (True, 400)):
+                with self.subTest(operation=operation, authorized=authorized), self.assertRaises(HTTPError) as error:
+                    self.request(PREFIX + "drafts/" + operation, method="POST", body={}, authorized=authorized)
+                self.assertEqual(error.exception.code, expected)
+                error.exception.close()
+
+        def post(operation, body):
+            with self.request(PREFIX + operation, method="POST", body=body) as response:
+                return json.load(response)
+
+        before = source_bytes(self.source)
+        context = post("open", {"workspace": str(self.root), "application_path": str(self.source)})
+        selection = {"workspace": str(self.root), "context_id": context["id"], "expected_revision": context["revision"]}
+        draft = post("drafts/open", {**selection, "document_id": context["documents"][0]["id"]})
+
+        def mutation(value):
+            return {**selection, "draft_id": value["id"], "expected_draft_revision": value["revision"],
+                    "expected_draft_sha256": value["sha256"]}
+
+        edited = post("drafts/command", {**mutation(draft), "command": {
+            "kind": "set_status", "node_id": draft["nodes"][0]["id"], "status": "disabled"}})
+        self.assertIn('status = "disabled"', edited["text"])
+        self.assertTrue(edited["dirty"])
+        self.assertFalse(edited["capabilities"]["save"])
+        invalid = post("drafts/source", {**mutation(edited), "text": '&uart0 { status = "'})
+        self.assertEqual(invalid["nodes"], [])
+        self.assertEqual(invalid["text"], '&uart0 { status = "')
+        restored = post("drafts/undo", mutation(invalid))
+        self.assertEqual(restored["text"], edited["text"])
+        original = post("drafts/undo", mutation(restored))
+        self.assertEqual(original["text"], draft["text"])
+        self.assertFalse(original["dirty"])
         self.assertEqual(source_bytes(self.source), before)
         self.assertEqual(self.server.app.context.jobs.list(), [])

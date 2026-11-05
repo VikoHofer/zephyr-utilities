@@ -1,15 +1,15 @@
 # Device Tree Editor foundation contract
 
-Status: D0 design baseline, D1 read-only context and D2 in-memory source operations,
-2026-11-05. Final D2 verification is tracked in its handoff.
+Status: D0 design baseline, D1 context, D2 source operations and D3 session drafts,
+2026-11-05. Final D3 verification is tracked in its handoff.
 D1 supplies an explicitly injected development/test preview; the built-in editor stays
-planned. Draft editing, persistence and source-write contracts below remain future work.
+planned. Persistent recovery and source writes remain future work.
 The D0 executable evidence is a bounded in-memory source prototype under
 `scripts/prototypes/`, outside the installed application. See the
 [master plan](device-tree-editor-masterplan.md) and
 [ADR 0019](decisions/0019-device-tree-editor-foundation.md). Verification is recorded in
 the [D1 handoff](device-tree-editor-d1-handoff.md) and
-[D2 handoff](device-tree-editor-d2-handoff.md).
+[D2 handoff](device-tree-editor-d2-handoff.md) and [D3 handoff](device-tree-editor-d3-handoff.md).
 
 ## Ownership and compatibility
 
@@ -264,14 +264,77 @@ UTF-8 BOMs, conditionals, physical line splicing outside recognized directives a
 unknown structural constructs remain preserved but block transformations. Expressions,
 phandle values, string lists, byte arrays and unsupported literal encodings are not
 converted into invented typed values. Supported source occurrences beside opaque
-expressions remain editable when their structure is unambiguous. D3 must bind these
-pure operations to a revalidated D1 context and handle UTF-8/UTF-16 position conversion.
+expressions remain editable when their structure is unambiguous. D3 binds these
+pure operations to a revalidated D1 context and handles UTF-8/UTF-16 position conversion.
 
-## Draft and change plan proposal for D3/D4
+## D3 canonical session drafts
+
+`DraftService` owns one canonical source revision and one undo/redo history for each
+context/overlay binding. It uses the existing editor context service and D2 engine.
+Its key includes workspace path/identity, context fingerprint, document identity/path
+and base hash. The D1 fingerprint also includes workspace identity for unregistered
+applications. A reopened equivalent context can recover its draft; a different target,
+configuration, source baseline or workspace cannot reuse it.
+
+All draft routes are authenticated POST requests below `/api/devicetree/editor/drafts/`.
+Every body includes `workspace`, `context_id` and `expected_revision` for the D1 context.
+Unknown request/command fields and invalid types are rejected.
+
+| Route | Additional fields | Behavior |
+| --- | --- | --- |
+| `open` | `document_id` | Open or recover the equivalent bound draft |
+| `get` | `draft_id` | Revalidate and read its current canonical revision |
+| `source` | Mutation guard plus `text` | Retain bounded UTF-8 source, including incomplete syntax |
+| `command` | Mutation guard plus `command` | Apply `set_status`, `set_property` or `remove_property` through D2 |
+| `undo`, `redo` | Mutation guard | Restore prior source bytes under a new revision |
+
+The mutation guard is `draft_id`, `expected_draft_revision` and
+`expected_draft_sha256`. A no-op retains its revision; accepted changes advance it.
+Supported command shapes are:
+
+```json
+{"kind": "set_status", "node_id": "...", "status": "okay"}
+{"kind": "set_property", "node_id": "...", "name": "current-speed", "value": {"kind": "cells", "value": [115200]}}
+{"kind": "remove_property", "property_id": "..."}
+```
+
+`set_status` accepts `okay` or `disabled`. `set_property` accepts an optional
+`property_id` to identify a specific occurrence; typed values are `boolean` with null,
+`string` with a string, or `cells` with unsigned 32-bit integers. IDs belong to the
+current revision. Node creation/removal and deletion directives remain source-only in
+the D3 UI, even where the D2 engine has corresponding operations.
+
+The service revalidates the D1 context again immediately before publishing a mutation.
+Responses contain the draft identity/binding, source/base hashes, text, revision,
+dirty/history flags, syntax diagnostics, source occurrence spans, literal property
+values and a bounded diff. `capabilities.save` remains false. `SourceDocument` exposes
+public `property_value` and `can_edit_node` projections; unknown values remain unknown.
+
+Session retention is bounded to 16 drafts and 8 MiB of retained base/current/history
+bytes. Dirty drafts and drafts with history are not evicted to admit another draft.
+Undo/redo retain at most 32 recent entries and report `history_truncated` when older
+undo entries are dropped. A capacity failure retains the existing server draft; the
+browser retains the user's pending text. Closing the application loses session drafts.
+There is no recovery journal or persistent schema migration in D3.
+
+Each source remains limited to 256 KiB, valid UTF-8 without NUL. Incomplete input and
+parser token/depth-limit failures remain recoverable text with visual controls withheld.
+Visual projection is limited to 512 nodes and 4,096 properties. A projection overflow
+withholds the visual model while source editing/undo remain available. The diff is a
+linear-time single-hunk preview capped at 400 lines/64 KiB, with visible truncation.
+
+The browser serializes mutations, retains pending text per binding and reconciles
+uncertain results before retrying. A current visual projection is shown only after the
+corresponding source has been acknowledged. Source linking converts UTF-8 byte spans
+to textarea UTF-16 positions explicitly, preserving the original line-ending bytes
+outside the changed range. D4 must add publication/recovery without treating this
+session state as durable evidence.
+
+## Persistent drafts and change plan proposal for D4
 
 Source bytes are authoritative; the hardware graph is derived. Byte offsets belong to
-the server's UTF-8 source representation, not JavaScript UTF-16 indices. D3 must convert
-editor positions explicitly and test non-ASCII comments before using text selections.
+the server's UTF-8 source representation, not JavaScript UTF-16 indices. D3 converts
+editor positions explicitly and tests non-ASCII comments before using text selections.
 
 | Record | Minimum version-1 contents |
 | --- | --- |

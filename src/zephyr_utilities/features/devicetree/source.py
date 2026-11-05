@@ -4,7 +4,9 @@ Targets identify declarations, not effective hardware. No includes are loaded, n
 macros are evaluated, and no filesystem or tool execution is performed here.
 """
 
+from bisect import bisect_left
 from dataclasses import dataclass
+from functools import cached_property
 import hashlib
 import re
 import uuid
@@ -186,8 +188,20 @@ class SourceDocument:
     def sha256(self):
         return self.syntax.sha256
 
+    @cached_property
+    def _node_index(self):
+        return {node.id: node for node in self.syntax.nodes}
+
+    @cached_property
+    def _property_index(self):
+        return {prop.id: (node, prop) for node in self.syntax.nodes for prop in node.properties}
+
+    @cached_property
+    def _token_starts(self):
+        return tuple(token.start for token in self.syntax.tokens)
+
     def node(self, node_id):
-        found = next((node for node in self.syntax.nodes if node.id == node_id), None)
+        found = self._node_index.get(node_id) if isinstance(node_id, str) else None
         if found is None:
             raise SourceError("The source node identity is stale or unknown.")
         return found
@@ -214,11 +228,31 @@ class SourceDocument:
         return properties[0]
 
     def _property(self, property_id):
-        for node in self.syntax.nodes:
-            for prop in node.properties:
-                if prop.id == property_id:
-                    return node, prop
+        found = self._property_index.get(property_id) if isinstance(property_id, str) else None
+        if found is not None:
+            return found
         raise SourceError("The source property identity is stale or unknown.")
+
+    def property_value(self, property_id):
+        """Return a safely decoded literal for visual controls, or None if opaque."""
+        _, prop = self._property(property_id)
+        try:
+            value, _ = self._literal(prop)
+            if isinstance(value, tuple):
+                return PropertyValue.string(value[1]) if value[1] is not None else None
+        except SourceError:
+            return None
+        return value
+
+    def can_edit_node(self, node_id):
+        """Whether the current source occurrence permits literal visual edits."""
+        node = self.node(node_id)
+        try:
+            self._editable()
+            self._node_editable(node)
+        except SourceError:
+            return False
+        return True
 
     def _editable(self):
         if self.syntax.blocked or self.syntax.state == "incomplete":
@@ -257,7 +291,9 @@ class SourceDocument:
                             syntax.sha256, edits, operation, tuple(diagnostics))
 
     def _tokens(self, start, end):
-        return [token for token in self.syntax.tokens if start <= token.start and token.end <= end]
+        first = bisect_left(self._token_starts, start)
+        last = bisect_left(self._token_starts, end)
+        return [token for token in self.syntax.tokens[first:last] if token.end <= end]
 
     def _literal(self, prop):
         if prop.kind != "property":

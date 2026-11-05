@@ -251,7 +251,7 @@ tool execution. Unregistered directories remain partial source-only contexts.
 The preview retains at most 16 contexts for 30 minutes, rechecks source/context identity
 before follow-up reads, and selects an application overlay without changing it. It
 does not attach a build/image, create persistent editor data or import the D0 prototype
-into the runtime. Browser editing and saving remain later stages.
+into the runtime. File saving remains D4.
 
 D2's feature-owned `source_syntax.py` indexes source occurrences and byte spans;
 `source.py` plans and applies immutable, reversible source changes in memory. Neither
@@ -261,6 +261,16 @@ into effective hardware. Document identity, monotonic revision, full source hash
 exact ranges guard patch application and inverse operations. The D0 prototype remains
 separate; production code does not import it. See the
 [D2 handoff](device-tree-editor-d2-handoff.md) for supported operations and limits.
+
+D3 composes a feature-owned `DraftService` as `devicetree_drafts`. Its authenticated
+`/api/devicetree/editor/drafts/` routes retain canonical source and bounded undo/redo
+history in session memory. Every access revalidates its D1 context and base document;
+workspace identity, configuration/source fingerprint and overlay identity separate
+drafts. Source and visual edits share monotonic revision/hash preconditions. Incomplete
+typing remains source data while stale visual controls are withheld. The browser retains
+pending text separately across feature navigation and reconciles uncertain requests.
+There are no draft files, Save endpoints, configure/build jobs or new processes. See the
+[D3 handoff](device-tree-editor-d3-handoff.md).
 See the [foundation contract](device-tree-editor-contract.md) and
 [ADR 0019](decisions/0019-device-tree-editor-foundation.md) for the adopted staged design.
 

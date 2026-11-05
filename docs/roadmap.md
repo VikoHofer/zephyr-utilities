@@ -76,7 +76,10 @@ existing application. The built-in editor remains planned. See the
 [D0 handoff](device-tree-editor-d0-handoff.md) and [D1 handoff](device-tree-editor-d1-handoff.md)
 for evidence and remaining limits. D2 now implements production in-memory source
 operations, with verification and measured limits recorded in the [D2 handoff](device-tree-editor-d2-handoff.md).
-D3 next connects those operations to visual/source drafts; saving remains D4.
+D3 connects those operations to visual/source session drafts, shared undo/redo and
+context-bound navigation retention. See the [D3 handoff](device-tree-editor-d3-handoff.md)
+for verification and measured service latency. Guarded saving and durable recovery are
+the next stage, D4; the built-in editor remains planned until then.
 
 The [Project Creator and environment analyser master plan](project-creator-masterplan.md)
 provides the earlier shared-context proposal; the editor master plan now defines its

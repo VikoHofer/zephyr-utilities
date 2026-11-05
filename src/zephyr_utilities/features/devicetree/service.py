@@ -197,7 +197,9 @@ class EditorService:
                                                  if doc["relative_path"] == default.get("path")
                                                  and doc["availability"] == "available"
                                                  and doc["usage"] == "predicted"), None)
-        payload["fingerprint"] = _fingerprint({"workspace": workspace, "application": str(application),
+        payload["fingerprint"] = _fingerprint({"workspace": workspace,
+                                               "workspace_identity": payload["workspace_identity"],
+                                               "application": str(application),
                                                "selection": selection, "sources": source_guard,
                                                "documents": payload["documents"]})
         if registered:

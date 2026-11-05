@@ -1,5 +1,6 @@
-"""Read-only editor-preview routes through the shared authenticated router."""
+"""Editor context and in-memory draft routes through the authenticated router."""
 
+from .drafts import DraftService
 from .service import EditorService
 
 
@@ -11,3 +12,8 @@ def register(router, context):
                            ("document", service.document)):
         router.add("POST", f"/api/devicetree/editor/{suffix}",
                    lambda request, operation=method: operation(request.body))
+    drafts = DraftService(service)
+    context.services["devicetree_drafts"] = drafts
+    for suffix in ("open", "get", "source", "command", "undo", "redo"):
+        router.add("POST", f"/api/devicetree/editor/drafts/{suffix}",
+                   lambda request, operation=getattr(drafts, suffix): operation(request.body))

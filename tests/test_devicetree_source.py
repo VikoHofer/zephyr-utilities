@@ -375,3 +375,16 @@ class DevicetreeSourceTests(unittest.TestCase):
                 patch.object(Path, "write_text", side_effect=AssertionError("No source file writes")):
             edited = self.apply_reversible(document, document.plan_set_status(document.find_node("&uart0").id, "okay"))
         self.assertIn(b'"okay"', edited.source)
+
+    def test_visual_literal_projection_preserves_unknown_and_unsupported_values(self):
+        document = self.document(b'&uart0 { flag; rate = <1 2>; label = "ready"; opaque = <MACRO(1)>; escape = "\\a"; };')
+        node = document.find_node("&uart0")
+        values = {prop.name: document.property_value(prop.id) for prop in node.properties}
+        self.assertEqual(values["flag"], PropertyValue.boolean())
+        self.assertEqual(values["rate"], PropertyValue.cells((1, 2)))
+        self.assertEqual(values["label"], PropertyValue.string("ready"))
+        self.assertIsNone(values["opaque"])
+        self.assertIsNone(values["escape"])
+        self.assertTrue(document.can_edit_node(node.id))
+        deleted = self.document(b'&uart0 { status = "okay"; }; /delete-node/ &uart0;')
+        self.assertFalse(deleted.can_edit_node(deleted.find_node("&uart0").id))
