@@ -1,12 +1,12 @@
 # Device Tree Editor master plan
 
-Status: limited overlay editor available; D0–D4 complete within their staged scopes on
+Status: limited overlay editor available; D0–D5 complete within their staged scopes on
 2026-11-05, with verification and measured limits recorded in their handoffs. The next product
 priority is the visual Device Tree Editor
 following the delivered everyday Project Creator workflow. This plan does not imply
 that every advanced item in the Project Creator roadmap is complete. The editor's
-runtime now exposes existing-overlay editing, reviewed Save and recovery. Module placement,
-pins and semantic validation remain later stages.
+runtime now exposes existing-overlay editing, reviewed Save/recovery and explicit
+saved-source Configure. Module placement, pins and binding-aware editing remain later stages.
 
 Build an offline visual hardware editor inside the existing `zephyr-utils` application.
 Users open a project, select its exact configuration, place hardware modules, connect
@@ -25,7 +25,8 @@ evidence. The [D1 handoff](device-tree-editor-d1-handoff.md) describes the injec
 read-only workspace. The [D2 handoff](device-tree-editor-d2-handoff.md) records the
 source engine, verification and measured limits. The [D3 handoff](device-tree-editor-d3-handoff.md)
 records synchronized session drafts and unified undo. The [D4 handoff](device-tree-editor-d4-handoff.md)
-records guarded existing-overlay Save and recovery. D5 is next.
+records guarded existing-overlay Save and recovery. The [D5 handoff](device-tree-editor-d5-handoff.md)
+records explicit saved-source Configure and Projects handoff. D6 is next.
 
 ## Product experience
 
@@ -119,8 +120,8 @@ selected Zephyr environment. Bundle runtime assets for offline use.
 | `features/inspector/` | Owns advanced read-only inspection; its resolved-tree parser and binding navigator are not source-editing or full schema engines |
 
 D1 exposes a narrow read-only selection handoff through `core/project_context.py`,
-implemented by a Projects-owned provider and composed explicitly. Execution handoff
-remains D5 work. Do not import
+implemented by a Projects-owned provider and composed explicitly. D5 adds a public
+saved-source Configure provider in `core/project_validation.py`. Do not import
 Projects' private service classes or write its records from the editor. Extract other
 shared behavior only when two implemented consumers need it.
 
@@ -134,8 +135,9 @@ The D0/D1 namespace decision preserves Inspector's existing routes:
 
 The context/selection portion is implemented in D1's read-only preview. D2 adds an
 in-memory source document and reversible source changes. D3 adds context-bound browser
-drafts and unified history. D4 adds reviewed Save and durable recovery. Validation, pin and
-recipe handoff interfaces remain planned. Concrete delivered
+drafts and unified history. D4 adds reviewed Save and durable recovery. D5 adds explicit
+saved-source configuration validation and Projects handoff. Pin interfaces remain
+planned. Concrete delivered
 fields and limits are recorded in the foundation contract.
 
 | Contract | Required information |
@@ -323,7 +325,9 @@ read-only preview scope. D2 is **complete** within its in-memory source-engine s
 its handoff records verification and the initial latency limitation. D3 is **complete**
 within its session-draft preview scope; its handoff records synchronization checks and
 the source lookup optimization. D4 is **complete** for existing-overlay Save, conflict
-comparison and durable recovery. D5–D15 are **not started**.
+comparison and durable recovery. D5 is **complete** for explicit saved-source Configure,
+candidate/input evidence and Projects handoff; unsaved staging remains unsupported.
+D6–D15 are **not started**.
 The default order is sequential; shared contracts
 and source safety precede richer visuals. Split a stage further if its exit gate cannot
 be delivered and tested in a reviewable change. Complete the selected slice without
@@ -341,7 +345,7 @@ until D4. This uses the same application/server, not a separate feature launcher
 | D2 | Source-preserving overlay patch engine | Complete in-memory operations; verification and limits in D2 handoff |
 | D3 | Synchronized visual/source draft and undo | Complete session-draft preview; see D3 handoff |
 | D4 | Guarded Save, reload and recovery | Complete existing-overlay editor; see D4 handoff |
-| D5 | Explicit validation and build handoff | Verified editing loop |
+| D5 | Explicit validation and build handoff | Complete Save-then-Configure workflow; see D5 handoff |
 | D6 | Binding-aware properties and references | General structured editing |
 | D7 | Peripheral and bus configuration | Common hardware topology |
 | D8 | Nordic pin assignment and pinctrl states | First complete pin workflow |
@@ -459,7 +463,7 @@ Status: complete for one existing overlay at a time. Missing destinations remain
 recoverable/exportable; new overlay creation is not exposed. See the
 [D4 handoff](device-tree-editor-d4-handoff.md) and
 [ADR 0020](decisions/0020-guarded-overlay-save-and-recovery.md) for publication limits,
-recovery schema and verification. D5 is the next stage.
+recovery schema and verification. D5 adds explicit configuration after this stage.
 
 Scope: implement single-overlay Review and Save, identity/hash checks, participating
 writer locks, conflict comparison, reload/discard and versioned draft recovery. Define
@@ -483,6 +487,11 @@ first usable editor with truthful capability labels and retain all legacy routes
 ```
 
 ### D5 Validation and Projects handoff
+
+Status: complete for the explicit **Save then Configure** fallback. No faithful unsaved
+staging adapter is claimed. Partial input coverage remains unknown freshness; compilation
+is a separate Projects action. See the [D5 handoff](device-tree-editor-d5-handoff.md) and
+[ADR 0021](decisions/0021-editor-configuration-validation.md).
 
 Scope: introduce the public validation/build handoff, candidate fingerprinting,
 capability-checked selected-tool adapters and diagnostic source links. Support staged

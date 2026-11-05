@@ -10,6 +10,27 @@ import {createReviewDialog} from "./review-dialog.js";
 
 export {createReviewDialog} from "./review-dialog.js";
 
+export function applicationHandoff(view) {
+  const match = /^applications\/([a-f0-9]{32})\/(original|[a-f0-9]{32})(?:\/([a-f0-9]{32}))?$/.exec(view);
+  return match ? {project_id: match[1], configuration_id: match[2] === "original" ? null : match[2], attempt_id: match[3] || null} : null;
+}
+
+export async function resolveApplicationHandoff({session, state, handoff, current}) {
+  // An explicit load has its own awaited response. A polling refresh can return
+  // immediately while the initial mount is still loading its application list.
+  const loaded = await session.load();
+  if (!current()) return null;
+  if (!loaded) throw new Error(state.error || "The application list could not be refreshed. Open the Projects destination again.");
+  const project = (state.projects || []).find((item) => item.id === handoff.project_id);
+  if (!project || handoff.configuration_id && !(project.configurations || []).some((item) => item.id === handoff.configuration_id)) {
+    throw new Error("The requested application or configuration is no longer available. Choose a current configuration before building.");
+  }
+  session.selectConfiguration(handoff.project_id, handoff.configuration_id || "");
+  const attempt = handoff.attempt_id && (project.attempts || []).find((item) => item.id === handoff.attempt_id
+    && (item.configuration?.id || null) === handoff.configuration_id);
+  return {project, attempt};
+}
+
 /** Bound a requested result reveal to its navigation and one refresh. */
 export function createResultNavigation({workspace, view, disposed, find, reveal, refresh, error, notify}) {
   let pending;
@@ -55,6 +76,7 @@ export function mountCreator(root, context) {
   let renderedBuildPlan;
   let watchedJob;
   let navigationRevision = 0;
+  let route = "applications";
   let view = "applications";
   const creationReview = createReviewDialog($("creator-preview"));
   const buildReview = createReviewDialog($("build-preview"));
@@ -674,11 +696,27 @@ export function mountCreator(root, context) {
   render(); session.load();
   return {
     navigate(next = "applications") {
-      const changed = view !== next;
+      const changed = route !== next;
+      route = next;
       view = next === "create" ? "create" : "applications";
       if (changed) navigationRevision++;
       resultNavigation.navigate(view);
       render();
+      const handoff = applicationHandoff(next);
+      if (handoff) {
+        const revision = navigationRevision; const workspace = context.workspace.path;
+        const current = () => !disposed && revision === navigationRevision && context.workspace.path === workspace && state.workspace === workspace;
+        return resolveApplicationHandoff({session, state, handoff, current}).then((resolved) => {
+          if (!resolved) return;
+          const {project, attempt} = resolved;
+          const target = attempt
+            ? [...root.querySelectorAll("[data-disclosure]")].find((item) => item.dataset.disclosure === `attempt:${attempt.id}`)
+            : [...root.querySelectorAll("[data-saved-project]")].find((item) => item.dataset.savedProject === project.id);
+          if (target) { if (target.tagName === "DETAILS") target.open = true; context.reveal?.(target); }
+          context.notify?.(attempt ? "Configuration attempt opened. Build remains a separate reviewed action."
+            : "Application and configuration selected. The requested attempt is unavailable; review a new Build when ready.");
+        }).catch((error) => { if (current()) context.notify?.(error.message || String(error), true); });
+      }
       if (changed && view === "applications") {
         if (resultNavigation.hasPending()) resultNavigation.refresh();
         else session.refresh();

@@ -148,10 +148,11 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
     const path = state.workspace;
     const captured = epoch;
     const sequence = ++readSequence;
+    let accepted = false;
     if (!background) { state.loading = true; publish(); }
     try {
       const data = await request("/api/projects/creator");
-      if (current(path, captured) && sequence === readSequence) acceptData(data);
+      if (current(path, captured) && sequence === readSequence) { acceptData(data); accepted = data.workspace === path; }
     } catch (error) {
       if (current(path, captured) && sequence === readSequence && error.name !== "AbortError") {
         state.error = error.message || String(error); state.plan = null; state.buildPlan = null;
@@ -160,6 +161,7 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
       if (current(path, captured) && sequence === readSequence) { state.loading = false; publish(); }
     }
     if (!background && current(path, captured) && sequence === readSequence) await ensureSamples();
+    return accepted && current(path, captured) && sequence === readSequence;
   }
   async function loadSamples({restore = false} = {}) {
     if (disposed) return;

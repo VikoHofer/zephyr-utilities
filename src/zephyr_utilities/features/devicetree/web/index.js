@@ -2,6 +2,7 @@ import {createEditorSession} from "./state.js";
 import {createDraftSession, editorText, nodeSelection, propertySelection, restoreNodeSelection,
   restorePropertySelection, sourceOffset, sourceSelection} from "./drafts.js";
 import {createSaveSession} from "./saving.js";
+import {createValidationSession, diagnosticSelection} from "./validation.js";
 
 const array = (value) => Array.isArray(value) ? value : [];
 const text = (value, fallback = "Unknown") => value == null || value === "" ? fallback : String(value);
@@ -21,8 +22,12 @@ export function mount(host, context) {
   let session;
   let drafts;
   let saving;
+  let validation;
   let shownReview;
   let reviewTrigger;
+  let shownConfigure;
+  let configureTrigger;
+  let renderedValidation;
   const downloadUrls = new Set();
 
   function node(tag, className, value) {
@@ -408,9 +413,97 @@ export function mount(host, context) {
       if (!$("review").open) $("review").showModal();
     }
   }
+  function closeConfigure({restoreFocus = true} = {}) {
+    const dialog = $("configure-review"); const open = dialog.open;
+    if (!open && !shownConfigure) return;
+    if (open) dialog.close();
+    shownConfigure = null;
+    const trigger = configureTrigger; configureTrigger = null;
+    if (open && restoreFocus && !disposed && trigger?.isConnected && !trigger.disabled) trigger.focus({preventScroll: true});
+  }
+  function renderValidation() {
+    const view = state.validationView;
+    if (!view) return;
+    const entry = draftEntry(); const run = view.run; const result = run?.result;
+    const active = ["queued", "running"].includes(result?.job?.status) || run?.pending;
+    $("validate").disabled = !state.draftView?.ready || view.busy || Boolean(entry?.externalOperation || entry?.flight || active);
+    $("validate").textContent = view.action === "review" ? "Preparing Configure…" : "Review Configure";
+    $("validation-status").textContent = view.message || (run ? view.stale
+      ? "This result belongs to an earlier draft or changed inputs. Save the current source and review Configure again."
+      : run.uncertain ? "The start reply was lost. Refresh status to reconcile this reviewed operation before starting another."
+        : active ? `${result?.job?.status === "queued" ? "Configure queued" : "Configure running"}. Leaving this view does not cancel it. Later source changes can make this result stale.`
+          : result?.status === "ready" && !result.job ? "Configuration has not started. Review Configure again when ready."
+          : result?.message || `Configuration status: ${result?.status || "awaiting result"}.`
+      : "Save the overlay before reviewing configuration. Opening and saving never run project tools.");
+    $("validation-error").hidden = !view.error; $("validation-error").textContent = view.error;
+    $("validation-actions").hidden = !run;
+    $("validation-refresh").disabled = view.busy || view.refreshing;
+    $("validation-refresh").textContent = view.refreshing ? "Refreshing…" : "Refresh status";
+    $("validation-cancel").hidden = !active;
+    $("validation-cancel").disabled = view.busy;
+    $("validation-cancel").textContent = view.busy && active ? "Requesting cancellation…" : "Cancel Configure";
+    $("validation-projects").disabled = view.busy || active || !result?.handoff;
+    $("validation-projects").textContent = view.action === "handoff" ? "Opening Projects…" : "Open in Projects";
+    $("validation-evidence").hidden = !run;
+    const signature = JSON.stringify([run?.plan.id, result, view.stale]);
+    if (signature !== renderedValidation) {
+      renderedValidation = signature;
+      const facts = $("validation-facts"); facts.replaceChildren();
+      if (run) {
+        fact(facts, "Candidate SHA-256", run.plan.candidate.sha256, true);
+        fact(facts, "Input fingerprint", result?.input_fingerprint || run.plan.input_fingerprint, true);
+        fact(facts, "Dependency coverage", typeof result?.coverage === "object" ? JSON.stringify(result.coverage) : result?.coverage || "Not established");
+        fact(facts, "Overlay use", result?.overlay_used === true ? "Observed" : "Not established");
+        fact(facts, "Output directory", run.plan.build_dir, true);
+        fact(facts, "Freshness", view.stale ? "Stale" : typeof result?.freshness === "string" ? result.freshness : "See configuration result");
+      }
+      $("validation-log").textContent = array(result?.job?.logs).join("\n") || "No configuration log received.";
+      const diagnostics = $("validation-diagnostics"); diagnostics.replaceChildren();
+      for (const item of array(result?.diagnostics)) {
+        const group = node("div", "dte-validation-diagnostic");
+        group.append(node("p", "dte-muted", `${item.severity ? item.severity + ": " : ""}${item.message || "Configuration diagnostic"}`));
+        if (item.path) group.append(node("p", "dte-path", `${item.path}${item.line ? ":" + item.line : ""}`));
+        if (!view.stale && item.path === run?.plan.candidate.path && item.sha256 === entry?.server?.sha256
+            && (item.source_span || diagnosticSelection(entry.text, item))) {
+          const button = node("button", "", `Show source${item.line ? " line " + item.line : ""}`); button.type = "button";
+          listen(button, "click", () => {
+            if (state.validationView.stale || drafts.pending() || item.sha256 !== draftEntry()?.server?.sha256) return;
+            const range = item.source_span ? sourceSelection(draftEntry().text, item.source_span.start, item.source_span.end)
+              : diagnosticSelection(draftEntry().text, item);
+            if (!range) return;
+            context.reveal?.($("source")); $("source").setSelectionRange(...range);
+          });
+          group.append(button);
+        }
+        diagnostics.append(group);
+      }
+    }
+    const reviewed = view.review;
+    if (!reviewed) { closeConfigure(); return; }
+    $("configure-error").hidden = !view.error; $("configure-error").textContent = view.error;
+    $("configure-confirm").disabled = $("configure-close").disabled = $("configure-dismiss").disabled = view.busy;
+    $("configure-confirm").textContent = view.busy ? "Starting Configure…" : "Run Configure";
+    if (shownConfigure !== reviewed) {
+      shownConfigure = reviewed;
+      const plan = reviewed.plan; const facts = $("configure-facts"); facts.replaceChildren();
+      fact(facts, "Overlay", plan.candidate.path, true);
+      fact(facts, "Configuration", plan.configuration?.name);
+      fact(facts, "Target", typeof plan.target === "string" ? plan.target : plan.target?.requested, true);
+      fact(facts, "Output directory", plan.build_dir, true);
+      fact(facts, "Candidate SHA-256", plan.candidate.sha256, true);
+      fact(facts, "Environment", plan.environment?.zephyr?.path || plan.environment?.id || plan.recipe?.environment?.ZEPHYR_BASE, true);
+      const limitations = $("configure-limitations"); limitations.replaceChildren();
+      for (const item of array(plan.limitations)) notice(limitations, typeof item === "string" ? item : item.message);
+      $("configure-command").textContent = plan.recipe?.display_configure || JSON.stringify(plan.recipe, null, 2);
+      $("configure-source").textContent = plan.candidate.text;
+      for (const details of $("configure-review").querySelectorAll("details")) details.open = false;
+      if (!$("configure-review").open) $("configure-review").showModal();
+    }
+  }
   function render() {
     if (disposed) return;
     saving?.sync();
+    validation?.sync();
     if (renderedWorkspace !== state.workspace) {
       renderedWorkspace = state.workspace; renderedCatalog = undefined; renderedData = undefined;
       if (state.selection?.kind === "project") {
@@ -431,6 +524,7 @@ export function mount(host, context) {
     $("select-overlay").textContent = state.documentLoading ? "Reading…" : "Open overlay draft";
     renderDraft();
     renderSaving();
+    renderValidation();
   }
   async function action(operation, destination) {
     const captured = ++actionGeneration;
@@ -567,16 +661,33 @@ export function mount(host, context) {
       : review.captured.entry.text, review.data.path || review.data.record?.path);
   });
   listen($("review-delete"), "click", () => { saving.reviewRecoveryDiscard(); });
+  async function validationAction(operation, {review = false} = {}) {
+    const captured = ++actionGeneration; const workspace = context.workspace.path;
+    if (review) configureTrigger = $("validate");
+    await operation();
+    if (disposed || captured !== actionGeneration || workspace !== context.workspace.path || state.validationView.review) return;
+    context.reveal?.($(state.validationView.error ? "validation-error" : "validation-status"));
+  }
+  listen($("validate"), "click", () => { void validationAction(() => validation.review(), {review: true}); });
+  listen($("configure-confirm"), "click", () => { void validationAction(() => validation.submit()); });
+  for (const name of ["configure-close", "configure-dismiss"]) listen($(name), "click", () => validation.closeReview());
+  listen($("configure-review"), "cancel", (event) => { event.preventDefault(); if (!state.validationView.busy) validation.closeReview(); });
+  listen($("validation-refresh"), "click", () => { void validationAction(() => validation.refresh({explicit: true})); });
+  listen($("validation-cancel"), "click", () => { void validationAction(() => validation.cancel()); });
+  listen($("validation-projects"), "click", () => {
+    void validationAction(async () => { const route = await validation.handoff(); if (route && !disposed) context.navigate(route); });
+  });
   drafts = createDraftSession({api: context.api, state, workspace: () => context.workspace.path, onChange: render});
   session = createEditorSession({api: context.api, state, workspace: () => context.workspace.path, onChange: render});
   saving = createSaveSession({api: context.api, state, workspace: () => context.workspace.path, drafts,
     adopt: (data, document) => session.adopt(data, document), onChange: render});
+  validation = createValidationSession({api: context.api, state, workspace: () => context.workspace.path, drafts, onChange: render});
   render();
   return {
-    navigate(view) { actionGeneration++; saving.cancel(); return session.navigate(view); },
+    navigate(view) { actionGeneration++; saving.cancel(); validation.closeReview(); validation.resume(); return session.navigate(view); },
     dispose() {
       disposed = true; actionGeneration++; lifetime.abort(); saving.dispose(); closeReview({restoreFocus: false});
-      session.dispose(); drafts.dispose();
+      validation.dispose(); closeConfigure({restoreFocus: false}); session.dispose(); drafts.dispose();
       for (const url of downloadUrls) URL.revokeObjectURL(url);
     },
   };

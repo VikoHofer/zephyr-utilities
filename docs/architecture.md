@@ -94,6 +94,7 @@ removing them requires a documented migration and regression coverage.
 | `feature_data(feature_id)` | Stable persistent storage namespace |
 | `builds.inspect/get/read_text/select_artifact` | Shared read-only observations, verified text and detached artifact selections |
 | `project_context.catalog/capture/revalidate` | Optional public read-only project-selection provider, supplied after Projects registration |
+| `project_validation.review/submit/result/cancel/handoff` | Optional Projects-owned saved-source Configure and navigation handoff; compilation stays separate |
 
 A task receives `(emit, cancel)` and returns a result mapping. Progress goes through
 `emit`; long-running work checks the cancellation event and releases subprocesses and
@@ -284,6 +285,19 @@ jobs are introduced. See [ADR 0020](decisions/0020-guarded-overlay-save-and-reco
 and the [D4 handoff](device-tree-editor-d4-handoff.md) for limits and failure semantics.
 See the [foundation contract](device-tree-editor-contract.md) and
 [ADR 0019](decisions/0019-device-tree-editor-foundation.md) for the adopted staged design.
+
+D5 composes `ProjectsValidationProvider` through the public
+`core/project_validation.py` protocol. Editor `ValidationService` binds reviews to the
+canonical saved candidate and delegates execution to the existing Projects workflow.
+Only explicit submission runs Configure; Save and opening remain tool-free. The adapter
+uses the original source layout and fresh managed outputs, preserving removals and
+relative includes. Unsaved staging is unsupported. Bounded application/source-tree/tool
+fingerprints, observed overlay participation and diagnostic links retain their evidence
+limits; partial coverage never becomes a complete freshness claim. Jobs survive feature
+navigation and retain the submitted workspace. Historical attempt additions do not
+invalidate unchanged project/source selections. See
+[ADR 0021](decisions/0021-editor-configuration-validation.md) and the
+[D5 handoff](device-tree-editor-d5-handoff.md).
 
 ## Measurement boundary
 

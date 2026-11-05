@@ -1,15 +1,16 @@
 # Device Tree Editor foundation contract
 
-Status: D0–D4 contracts, 2026-11-05. D4 adds reviewed existing-overlay Save and durable
-draft recovery, exposing the limited editor in the default application. Hardware modules,
-pins and semantic validation remain planned. Verification is tracked in the stage handoffs.
+Status: D0–D5 contracts, 2026-11-05. D4 adds reviewed existing-overlay Save and durable
+draft recovery; D5 adds explicit saved-source Configure through Projects. Hardware modules,
+pins and binding-aware editing remain planned. Verification is tracked in the stage handoffs.
 The D0 executable evidence is a bounded in-memory source prototype under
 `scripts/prototypes/`, outside the installed application. See the
 [master plan](device-tree-editor-masterplan.md) and
 [ADR 0019](decisions/0019-device-tree-editor-foundation.md). Verification is recorded in
 the [D1 handoff](device-tree-editor-d1-handoff.md) and
 [D2 handoff](device-tree-editor-d2-handoff.md), [D3 handoff](device-tree-editor-d3-handoff.md)
-and [D4 handoff](device-tree-editor-d4-handoff.md).
+and [D4 handoff](device-tree-editor-d4-handoff.md), followed by the
+[D5 handoff](device-tree-editor-d5-handoff.md).
 
 ## Ownership and compatibility
 
@@ -526,6 +527,42 @@ descriptors or write during/after exchange; transient candidate visibility and l
 external changes cannot be excluded. Retain recoverable evidence and describe this
 limit rather than promising perfect isolation. Multi-file transactions remain D12.
 
+## D5 configuration validation
+
+`context.project_validation` implements the optional public
+`core/project_validation.py::ProjectValidationProvider` contract. Projects owns the
+implementation and command execution; the editor supplies a captured project selection
+and exact `{path, text, sha256}` candidate. This first adapter accepts saved sources
+only and configures a fresh managed output through the existing reviewed Projects job.
+There is no staging, live temporary patch, implicit compile, or automatic activation of
+an unused overlay. Directory-only contexts require registration and a saved configuration.
+
+Authenticated POST routes under `/api/devicetree/editor/drafts/validation/` are:
+
+| Route | Request | Result |
+| --- | --- | --- |
+| `review` | D3 context and draft mutation guards | `ready` with immutable plan, or `blocked` with an explanation |
+| `submit` | Same guards plus `plan_id` | Captured shared Configure job; acknowledged duplicates reuse it |
+| `status` | `workspace`, `plan_id` | Job, candidate/input identity, outcome, coverage, diagnostics and captured artifacts |
+| `cancel` | `workspace`, `plan_id` | Cancellation request for that job only |
+| `handoff` | `workspace`, `plan_id` | Projects application/configuration/attempt route, without executing Build |
+
+Plans show exact source, command/environment, target, output directory and limitations.
+Application content hashes, selected source-tree observations, tool identity/hash and
+configuration identity are checked around execution. The bounded source-tree scan
+includes DTS, bindings, Kconfig, CMake, Python and headers; large files/headers can use
+filesystem identities. Arbitrary dynamic reads and complete tool runtime coverage are
+not established. Captured dependency evidence must prove overlay participation; partial
+coverage and successful Configure remain unknown overall freshness, not a green pass.
+
+Draft changes mark results stale for the current candidate. Background polling neither
+focuses nor scrolls. Leaving/reopening retains the browser's job reference, while shared
+jobs and Projects attempt records retain their original workspace. Verified diagnostics
+link only to the matching current overlay; other/generated paths remain evidence.
+Historical attempts added during Configure do not invalidate unchanged project context.
+See [ADR 0021](decisions/0021-editor-configuration-validation.md) and the
+[D5 handoff](device-tree-editor-d5-handoff.md) for exact bounds and verification.
+
 ## Verification and next stage
 
 The [D0 handoff](device-tree-editor-d0-handoff.md) records the prototype baseline.
@@ -536,5 +573,6 @@ load is not a configure/build or hardware test.
 The [D2 handoff](device-tree-editor-d2-handoff.md) records source-engine verification.
 The [D3 handoff](device-tree-editor-d3-handoff.md) records synchronized drafts and the
 [D4 handoff](device-tree-editor-d4-handoff.md) records guarded publication and recovery.
-The next stage is D5 only: explicit validation and the Projects handoff, preserving the
-separation between saving source and executing project tooling.
+The [D5 handoff](device-tree-editor-d5-handoff.md) records explicit saved-source
+configuration and Projects handoff. The next stage is D6 only: binding-aware properties
+and references, preserving the separation between source saving and project execution.

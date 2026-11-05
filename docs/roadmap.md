@@ -30,7 +30,7 @@ research master plan, not a general coding-assistant integration.
 | Feature | State | Initial implementation direction |
 | --- | --- | --- |
 | Memory Explorer (`memory`) | Available | Existing-build reports, visualization, snapshots and comparisons |
-| Device Tree Editor (`devicetree`) | Existing-overlay editing, reviewed Save and draft recovery available | D5 validation/handoff next; hardware modules and pins remain later stages |
+| Device Tree Editor (`devicetree`) | Existing-overlay editing, reviewed Save/recovery and explicit Configure available | D6 binding-aware properties next; hardware modules and pins remain later stages |
 | Project Creator (`projects`) | Applications, creation/build and environment discovery available | Maintain the delivered everyday workflow and add focused public editor handoffs |
 | Build Inspector (`inspector`) | Advanced build, resolved-tree, current source and binding navigation available | Preserve available inspection; further depth deferred |
 | TinyML Experiments (`tinyml`) | Planned | Connect model/build/run identities and compare imported experiment measurements |
@@ -80,8 +80,10 @@ D3 connects those operations to visual/source session drafts, shared undo/redo a
 context-bound navigation retention. See the [D3 handoff](device-tree-editor-d3-handoff.md)
 for verification and measured service latency. D4 adds guarded single-overlay saving,
 conflict comparison, explicit reload/discard and versioned recovery, making the limited
-editor available. See the [D4 handoff](device-tree-editor-d4-handoff.md). D5's explicit
-validation and Projects handoff is next; saving alone does not validate firmware.
+editor available. See the [D4 handoff](device-tree-editor-d4-handoff.md). D5 adds explicit
+saved-source Configure and a separate Projects build handoff; saving alone does not
+validate firmware. See the [D5 handoff](device-tree-editor-d5-handoff.md) for input
+coverage, staging limitations and verification. D6 binding-aware properties is next.
 
 The [Project Creator and environment analyser master plan](project-creator-masterplan.md)
 provides the earlier shared-context proposal; the editor master plan now defines its

@@ -274,7 +274,7 @@ class BuildWorkflow:
                 raise ValueError("The reusable output changed after preview. Review the build again.")
 
     @_workflow_locked
-    def build(self, body):
+    def build(self, body, *, validation_guard=None):
         workspace = self._workspace(body, {"build_plan_id"})
         saved = self._consume("build", body.get("build_plan_id"), workspace)
         plan, environment = saved["plan"], saved["environment"]
@@ -303,6 +303,8 @@ class BuildWorkflow:
                 self._recheck(plan["profile"], environment, report, cancel)
                 self._prepare_output(project, plan, cancel=cancel)
                 check_cancel(cancel)
+                if validation_guard is not None:
+                    attempt["editor_validation"] = validation_guard("before", attempt, cancel)
                 def output_ready(identity):
                     attempt["output_identity"] = deepcopy(identity)
                     self.store.save_attempt(attempt)
@@ -341,6 +343,8 @@ class BuildWorkflow:
                 attempt.setdefault("context", {})["application_freshness"] = "stale" if changed else "checked-at-finish"
                 if changed:
                     attempt.setdefault("diagnostics", []).append("Application inputs changed during execution; artifacts describe this attempt only.")
+                if validation_guard is not None:
+                    attempt["editor_validation"] = validation_guard("after", attempt, cancel)
             except CancelledError:
                 attempt.update(status="cancelled", error="Operation cancelled.")
             except Exception as exc:

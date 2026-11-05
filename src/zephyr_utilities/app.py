@@ -13,6 +13,7 @@ from .core.jobs import JobManager
 from .core.workspace import WorkspaceService, list_folders
 from .features import builtin_features
 from .features.projects.editor_context import ProjectsEditorContextProvider
+from .features.projects.editor_validation import ProjectsValidationProvider
 
 WEB_ROOT = Path(__file__).parent / "web"
 MIME_TYPES = {
@@ -38,6 +39,7 @@ class Application:
             creator = self.context.services.get("project_creator")
             if creator is not None:
                 self.context.project_context = ProjectsEditorContextProvider(self.context, creator)
+                self.context.project_validation = ProjectsValidationProvider(self.context, creator)
         except Exception:
             self.close()
             raise

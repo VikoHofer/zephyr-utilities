@@ -294,6 +294,15 @@ an existing overlay, edit it, then use **Review and Save**. The review shows the
 source diff and unresolved validation before writing. Saving does not configure, build,
 activate the overlay or change a recipe. Undo after Save produces another unsaved draft.
 
+The [D5 workflow](docs/device-tree-editor-d5-handoff.md) adds **Review Configure** for
+a saved overlay in a registered project/configuration. Review the candidate, selected
+environment and command, then explicitly run Configure. Results retain candidate/input
+identity, logs, cancellation and verified source diagnostic links. **Open in Projects**
+selects the matching configuration attempt; compilation requires its separate Build
+review. Unsaved staging is unsupported, so Save first. A successful Configure records
+whether the overlay was observed; partial input coverage remains unknown freshness,
+not proof of hardware behavior or a complete validation pass.
+
 Acknowledged drafts are retained under `.features/devicetree/drafts/` in the data directory.
 **Find recoverable drafts** compares retained text with current files before an explicit restore;
 it never replays firmware writes. Keep or export pending text if recovery storage fails.

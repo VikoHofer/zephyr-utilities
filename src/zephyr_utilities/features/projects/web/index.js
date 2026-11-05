@@ -19,7 +19,7 @@ export function createProjectsNavigation({environment, creator, customBoards, op
         if (customBoards) customBoards.hidden = owner !== "custom-boards";
         instance = owner === "environment" ? openEnvironment() : owner === "custom-boards" ? openCustomBoards() : openCreator();
       }
-      instance.navigate(next);
+      instance.navigate(next === "applications" && view.startsWith("applications/") ? view : next);
     },
     dispose() { if (!disposed) { disposed = true; instance?.dispose(); } },
   };

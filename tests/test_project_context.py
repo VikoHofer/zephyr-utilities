@@ -216,6 +216,22 @@ class ProjectContextTests(unittest.TestCase):
         self.assertNotEqual(self.capture()["input_evidence"]["source_fingerprints"],
                             selected["input_evidence"]["source_fingerprints"])
 
+    def test_new_configuration_history_does_not_invalidate_existing_editor_selection(self):
+        selected = self.capture()
+        attempt = {"schema_version": 1, "id": uuid.uuid4().hex, "workspace": str(self.workspace),
+                   "project_id": self.project["id"], "profile": deepcopy(self.profile), "status": "configured",
+                   "configuration": {"id": None, "name": "Original"}, "configuration_revision": 0,
+                   "finished_at": "2026-01-01T00:00:00+00:00", "context": {"configured": True,
+                   "source_dir": str(self.source), "requested_target": self.profile["target"],
+                   "devicetree": {"files_observed": True, "files": [str(self.source / "app.overlay")]}}}
+        self.creator.store.save_attempt(attempt)
+        current = self.provider.revalidate(selected)
+        self.assertTrue(current["input_evidence"]["captured"])
+        self.assertEqual(selected["input_evidence"]["captured"], [])
+        (self.source / "app.overlay").write_text("// Changed source still invalidates the selection.\n")
+        with self.assertRaisesRegex(ValueError, "changed"):
+            self.provider.revalidate(selected)
+
     def test_hidden_overlay_discovery_and_explicit_selection_never_read_hidden_files(self):
         hidden = (".secret.overlay", "boards/.secret.overlay", ".private/secret.overlay")
         for name in hidden:

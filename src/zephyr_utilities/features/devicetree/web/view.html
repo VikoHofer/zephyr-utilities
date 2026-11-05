@@ -3,7 +3,7 @@
     <div><p class="dte-eyebrow">Device Tree Editor</p><h1>Visual overlay editor</h1></div>
     <span class="dte-badge">Status and literal properties</span>
   </header>
-  <p class="dte-intro">Edit an existing application overlay visually or in source, then review and save its changes. Pin assignment, module placement and build validation are planned.</p>
+  <p class="dte-intro">Edit and save an existing application overlay, then explicitly configure it to check the saved source. Compilation is a separate action in Projects. Pin assignment and module placement remain planned.</p>
 
   <section class="dte-card dte-picker" aria-labelledby="dte-project-heading">
     <div class="dte-section-heading"><h2 id="dte-project-heading">Registered applications</h2><button type="button" data-dte-refresh-catalog>Refresh list</button></div>
@@ -63,6 +63,18 @@
       <p class="dte-muted" data-dte-recovery-status></p>
       <p class="dte-status" role="status" data-dte-save-status hidden></p>
       <p class="dte-error" role="alert" data-dte-draft-error hidden></p>
+      <section class="dte-validation" aria-labelledby="dte-validation-heading" data-dte-validation-panel>
+        <div class="dte-section-heading"><h3 id="dte-validation-heading">Configuration validation</h3><button type="button" data-dte-validate disabled>Review Configure</button></div>
+        <p class="dte-muted" role="status" data-dte-validation-status>Save the overlay before reviewing configuration. Opening and saving never run project tools.</p>
+        <p class="dte-error" role="alert" data-dte-validation-error hidden></p>
+        <div class="dte-node-actions" data-dte-validation-actions hidden>
+          <button type="button" data-dte-validation-refresh>Refresh status</button>
+          <button type="button" data-dte-validation-cancel hidden>Cancel Configure</button>
+          <button type="button" data-dte-validation-projects>Open in Projects</button>
+        </div>
+        <div data-dte-validation-diagnostics></div>
+        <details data-dte-validation-evidence hidden><summary>Configuration evidence and log</summary><dl class="dte-facts" data-dte-validation-facts></dl><pre class="dte-source dte-validation-log" data-dte-validation-log></pre></details>
+      </section>
       <div class="dte-conflict" data-dte-conflict hidden><p>Your retained text is shown below. Review the server draft before choosing the text to continue with.</p><details><summary>Inspect competing server draft</summary><pre class="dte-source" data-dte-server-source></pre></details><button type="button" data-dte-use-local>Continue with my text</button><button type="button" data-dte-use-server>Use server draft</button></div>
       <div class="dte-draft-columns">
         <section class="dte-visual" aria-labelledby="dte-visual-heading">
@@ -128,5 +140,18 @@
       <button type="button" data-dte-review-cancel>Cancel</button>
       <button type="button" class="dte-primary" data-dte-review-confirm disabled>Save overlay</button>
     </div>
+  </dialog>
+  <dialog class="dte-review" data-dte-configure-review aria-labelledby="dte-configure-heading">
+    <div class="dte-review-heading"><h2 id="dte-configure-heading">Review configuration validation</h2><button type="button" data-dte-configure-close aria-label="Close configuration review">Close</button></div>
+    <div class="dte-review-body">
+      <p>Run the selected project's Configure command against this exact saved overlay. Project CMake and selected toolchain code will run and write a fresh output directory.</p>
+      <dl class="dte-facts" data-dte-configure-facts></dl>
+      <div data-dte-configure-limitations></div>
+      <p class="dte-notice">This action does not compile or flash the application. Use a separate reviewed Build action in Projects when ready.</p>
+      <p class="dte-error" role="alert" data-dte-configure-error hidden></p>
+      <details><summary>Selected command and environment</summary><pre class="dte-source" data-dte-configure-command></pre></details>
+      <details><summary>Complete saved candidate</summary><pre class="dte-source" data-dte-configure-source></pre></details>
+    </div>
+    <div class="dte-review-actions"><button type="button" data-dte-configure-dismiss>Cancel</button><button type="button" class="dte-primary" data-dte-configure-confirm>Run Configure</button></div>
   </dialog>
 </section>

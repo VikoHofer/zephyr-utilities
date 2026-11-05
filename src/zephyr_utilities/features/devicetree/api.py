@@ -4,6 +4,7 @@ from .drafts import DraftService
 from .publication import OverlayPublisher
 from .saving import SavingService
 from .service import EditorService
+from .validation import ValidationService
 
 
 def register(router, context):
@@ -29,3 +30,8 @@ def register(router, context):
     for suffix in ("list", "read", "restore", "discard"):
         router.add("POST", f"/api/devicetree/editor/drafts/recovery/{suffix}",
                    lambda request, operation=getattr(saving, "recovery_" + suffix): operation(request.body))
+    validation = ValidationService(drafts)
+    context.services["devicetree_validation"] = validation
+    for suffix in ("review", "submit", "status", "cancel", "handoff"):
+        router.add("POST", f"/api/devicetree/editor/drafts/validation/{suffix}",
+                   lambda request, operation=getattr(validation, suffix): operation(request.body))

@@ -110,7 +110,8 @@ attempts persist separately from the shared job manager's in-memory retention.
 
 The Home view is a working feature catalog. Planned features are clearly labeled and do
 not pretend to implement model training or planned hardware tools. Device Tree Editor supports
-existing-overlay edits, reviewed Save and recovery; modules and pins remain planned. Project Creator exposes environment
+existing-overlay edits, reviewed Save, recovery and explicit saved-source Configure;
+modules and pins remain planned. Project Creator exposes environment
 analysis and a minimal workspace-app creation/configure/build workflow. Advanced project
 composition remains planned. Existing-build inspection hands a workspace-bound shared
 observation ID and domain to Inspector's read-only Device Tree reader and Memory's explicit

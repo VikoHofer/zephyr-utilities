@@ -263,6 +263,13 @@ class ProjectsEditorContextProvider:
             current = self.capture(selection["workspace"], selection["project"]["id"], selection["configuration"]["id"])
         except (KeyError, TypeError) as exc:
             raise ValueError("Invalid project selection context. Open it again.") from exc
-        if current != selection:
+        # New attempts add historical evidence without changing the editable
+        # selection. Keep the caller's captured history immutable while allowing
+        # its existing context to survive a separately requested Configure.
+        def stable(value):
+            value = deepcopy(value)
+            value.get("input_evidence", {}).pop("captured", None)
+            return value
+        if stable(current) != stable(selection):
             raise ValueError("The project selection or its inputs changed. Open the editor context again.")
         return current
