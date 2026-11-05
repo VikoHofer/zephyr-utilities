@@ -7,8 +7,9 @@ workspace selection and background jobs. Memory Explorer and Project Creator's e
 analysis, minimal C/C++ creation, curated local sample cloning and explicit configure/build workflow are available.
 Advanced Build Inspector reads existing outputs, resolved Device Trees, current sources
 and bindings, and carries the selected image into Memory Explorer for report generation.
-Device Tree Editor supports visual status/simple-property edits, editable overlay source,
-reviewed single-file Save and draft recovery. Hardware modules and pin configuration remain planned.
+Device Tree Editor supports visual status/property edits, local binding-aware forms and
+references, editable overlay source, reviewed single-file Save, draft recovery and explicit
+saved-source Configure. Hardware modules and pin configuration remain planned.
 TinyML model/experiment analysis also remains planned.
 
 ## Start
@@ -302,6 +303,22 @@ selects the matching configuration attempt; compilation requires its separate Bu
 review. Unsaved staging is unsupported, so Save first. A successful Configure records
 whether the overlay was observed; partial input coverage remains unknown freshness,
 not proof of hardware behavior or a complete validation pass.
+
+The [D6 workflow](docs/device-tree-editor-d6-handoff.md) adds **Load binding properties**
+for the current overlay draft. Select a local node and binding property to inspect its
+type, required/default/constant values and supported enumerations. Apply changes through
+the shared source draft and Undo/Redo history; defaults and required fields are never
+added by loading. **Reset local override** removes that local declaration and may reveal
+an unknown inherited value or default. **Delete property in overlay** writes an explicit
+deletion directive where supported.
+
+Supported forms cover booleans, unsigned integers, strings, numeric/string/byte arrays,
+local node references and provider-specific phandle arrays. Provider cell names come
+from the actual local provider binding and declared cell count. Add safe node labels and
+set/remove aliases or chosen references to unique declarations in this overlay. Label
+renaming, inherited effective-tree resolution, macro evaluation and pin maps are outside
+this stage. Missing/ambiguous bindings and unsupported fields remain explained and
+source-editable. Inspection can be cancelled; Save, Configure and Build remain separate.
 
 Acknowledged drafts are retained under `.features/devicetree/drafts/` in the data directory.
 **Find recoverable drafts** compares retained text with current files before an explicit restore;

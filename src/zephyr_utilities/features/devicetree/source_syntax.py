@@ -274,8 +274,28 @@ class _Parser:
     def _simple_value(self, tokens):
         if len(tokens) == 1 and tokens[0].kind == "string":
             return True
+        if len(tokens) == 1 and tokens[0].kind == "reference":
+            return True
+        if len(tokens) % 2 and all(token.kind == "string" if index % 2 == 0 else self.value(token) == b","
+                                  for index, token in enumerate(tokens)):
+            return True
+        if len(tokens) >= 3 and self.value(tokens[0]) == b"[" and self.value(tokens[-1]) == b"]":
+            return all(re.fullmatch(rb"[0-9a-fA-F]{2}", self.value(token)) for token in tokens[1:-1])
         if len(tokens) >= 3 and self.value(tokens[0]) == b"<" and self.value(tokens[-1]) == b">":
-            return all(_NUMBER.fullmatch(self.value(token)) for token in tokens[1:-1])
+            inside, items, separator = False, False, False
+            for token in tokens:
+                value = self.value(token)
+                if value == b"<" and not inside and not separator:
+                    inside, items = True, False
+                elif value == b">" and inside and items:
+                    inside, separator = False, True
+                elif value == b"," and separator:
+                    separator = False
+                elif inside and (token.kind == "reference" or _NUMBER.fullmatch(value)):
+                    items = True
+                else:
+                    return False
+            return not inside and separator
         return False
 
     def body(self, tokens, start, stop, parent_id=None, depth=0):

@@ -18,7 +18,9 @@ _NAME = re.compile(r"[A-Za-z_#][A-Za-z_0-9,#.+?-]*")
 _NODE = re.compile(r"[A-Za-z_0-9][A-Za-z_0-9,.+_-]*(?:@[A-Za-z_0-9,.+_-]+)?")
 _LABEL = re.compile(r"[A-Za-z_][A-Za-z_0-9]*")
 _REFERENCE = re.compile(r"&(?:[A-Za-z_][A-Za-z_0-9]*|\{/[A-Za-z_0-9,./+@-]*\})")
+_PATH = re.compile(r"/(?:[A-Za-z_0-9][A-Za-z_0-9,.+_@-]*(?:/[A-Za-z_0-9][A-Za-z_0-9,.+_@-]*)*)?")
 _NUMBER = re.compile(rb"(?:0[xX][0-9a-fA-F]+|0|[1-9][0-9]*)")
+_BYTE = re.compile(rb"[0-9a-fA-F]{2}")
 _TRIVIA = {"whitespace", "comment", "directive", "bom"}
 
 
@@ -38,29 +40,75 @@ def _integer(value):
     return value
 
 
+def _reference(value):
+    _name(value, _REFERENCE, "node reference")
+    if value.startswith("&{") and not _PATH.fullmatch(value[2:-1]):
+        raise SourceError("Node paths must be absolute without empty or parent-traversal components.")
+    return value
+
+
+def _string(value):
+    if not isinstance(value, str):
+        raise SourceError("String values must be text.")
+    try:
+        encoded = value.encode("utf-8")
+    except UnicodeError as exc:
+        raise SourceError("String values must be valid UTF-8.") from exc
+    if len(encoded) > 65536 or any(ord(char) < 32 and char not in "\n\r\t" for char in value):
+        raise SourceError("String values exceed the supported text limits.")
+
+
+def _quoted(value):
+    value = value.replace("\\", "\\\\").replace('"', '\\"')
+    value = value.replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+    return b'"' + value.encode("utf-8") + b'"'
+
+
 @dataclass(frozen=True)
 class PropertyValue:
     """Typed literal; strings and cells never accept executable source fragments."""
 
     kind: str
-    value: str | tuple[int, ...] | None = None
+    value: str | tuple | None = None
 
     def __post_init__(self):
         if self.kind == "boolean" and self.value is None:
             return
         if self.kind == "string" and isinstance(self.value, str):
-            try:
-                encoded = self.value.encode("utf-8")
-            except UnicodeError as exc:
-                raise SourceError("String values must be valid UTF-8.") from exc
-            if len(encoded) > 65536 or any(ord(char) < 32 and char not in "\n\r\t" for char in self.value):
-                raise SourceError("String values exceed the supported text limits.")
+            _string(self.value)
             return
         if self.kind == "cells" and isinstance(self.value, tuple) and 1 <= len(self.value) <= 64:
             for cell in self.value:
                 _integer(cell)
             return
-        raise SourceError("Choose a boolean, string or one to 64 unsigned literal cells.")
+        if self.kind == "string-array" and isinstance(self.value, tuple) and 1 <= len(self.value) <= 64:
+            for item in self.value:
+                _string(item)
+            if sum(len(item.encode("utf-8")) for item in self.value) > 65536:
+                raise SourceError("String arrays exceed the supported text limits.")
+            return
+        if self.kind == "bytes" and isinstance(self.value, tuple) and 1 <= len(self.value) <= 256:
+            if any(type(item) is not int or not 0 <= item <= 255 for item in self.value):
+                raise SourceError("Byte arrays require integers between zero and 255.")
+            return
+        if self.kind == "reference":
+            _reference(self.value)
+            return
+        if self.kind == "path" and isinstance(self.value, str) and len(self.value) <= 256 and _PATH.fullmatch(self.value):
+            return
+        if self.kind == "phandles" and isinstance(self.value, tuple) and 1 <= len(self.value) <= 64:
+            for item in self.value:
+                _reference(item)
+            return
+        if self.kind == "phandle-array" and isinstance(self.value, tuple) and 1 <= len(self.value) <= 64:
+            for group in self.value:
+                if not isinstance(group, tuple) or len(group) != 2 or not isinstance(group[1], tuple) or len(group[1]) > 64:
+                    raise SourceError("Each provider entry needs a reference and up to 64 literal cells.")
+                _reference(group[0])
+                for cell in group[1]:
+                    _integer(cell)
+            return
+        raise SourceError("Choose a supported typed literal, array or node reference.")
 
     @classmethod
     def boolean(cls):
@@ -76,14 +124,60 @@ class PropertyValue:
             raise SourceError("Cells must be a list or tuple of unsigned integers.")
         return cls("cells", tuple(values))
 
+    @classmethod
+    def strings(cls, values):
+        if not isinstance(values, (tuple, list)):
+            raise SourceError("String arrays require a list or tuple of text values.")
+        return cls("string-array", tuple(values))
+
+    @classmethod
+    def bytes(cls, values):
+        if not isinstance(values, (tuple, list)):
+            raise SourceError("Byte arrays require a list or tuple of integers.")
+        return cls("bytes", tuple(values))
+
+    @classmethod
+    def reference(cls, value):
+        return cls("reference", value)
+
+    @classmethod
+    def path(cls, value):
+        return cls("path", value)
+
+    @classmethod
+    def phandles(cls, values):
+        if not isinstance(values, (tuple, list)):
+            raise SourceError("Phandles require a list or tuple of node references.")
+        return cls("phandles", tuple(values))
+
+    @classmethod
+    def phandle_array(cls, values):
+        if not isinstance(values, (tuple, list)):
+            raise SourceError("Provider entries require a list or tuple.")
+        checked = []
+        for item in values:
+            if not isinstance(item, (tuple, list)) or len(item) != 2 or not isinstance(item[1], (tuple, list)):
+                raise SourceError("Each provider entry needs a reference and literal cell list.")
+            checked.append((item[0], tuple(item[1])))
+        return cls("phandle-array", tuple(checked))
+
     def render(self):
         if self.kind == "boolean":
             return b""
         if self.kind == "cells":
             return b"<" + b" ".join(str(value).encode("ascii") for value in self.value) + b">"
-        value = self.value.replace("\\", "\\\\").replace('"', '\\"')
-        value = value.replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
-        return b'"' + value.encode("utf-8") + b'"'
+        if self.kind == "string-array":
+            return b", ".join(_quoted(item) for item in self.value)
+        if self.kind == "bytes":
+            return b"[" + b" ".join(format(item, "02x").encode("ascii") for item in self.value) + b"]"
+        if self.kind == "reference":
+            return self.value.encode("ascii")
+        if self.kind == "phandles":
+            return b"<" + b" ".join(item.encode("ascii") for item in self.value) + b">"
+        if self.kind == "phandle-array":
+            return b", ".join(b"<" + reference.encode("ascii") +
+                b"".join(b" " + str(cell).encode("ascii") for cell in cells) + b">" for reference, cells in self.value)
+        return _quoted(self.value)
 
 
 @dataclass(frozen=True)
@@ -304,10 +398,46 @@ class SourceDocument:
         values = [self.source[token.start:token.end] for token in tokens]
         if len(tokens) == 1 and tokens[0].kind == "string":
             return ("string", _unquote(values[0])), tokens
+        if (len(tokens) >= 3 and len(tokens) % 2 and len(tokens) <= 127 and
+                all(token.kind == "string" if index % 2 == 0 else values[index] == b"," for index, token in enumerate(tokens))):
+            strings = [_unquote(value) for value in values[::2]]
+            if all(value is not None for value in strings):
+                return PropertyValue.strings(strings), tokens[::2]
+        if (len(tokens) >= 3 and values[0] == b"[" and values[-1] == b"]" and len(tokens) <= 258 and
+                all(_BYTE.fullmatch(value) for value in values[1:-1])):
+            return PropertyValue.bytes([int(value, 16) for value in values[1:-1]]), tokens[1:-1]
+        if len(tokens) == 1 and tokens[0].kind == "reference":
+            return PropertyValue.reference(values[0].decode("ascii")), tokens
         if (len(tokens) >= 3 and values[0] == b"<" and values[-1] == b">"
                 and len(tokens) <= 66 and all(len(value) <= 10 and _NUMBER.fullmatch(value) for value in values[1:-1])):
             cells = tuple(int(value, 16 if value.lower().startswith(b"0x") else 10) for value in values[1:-1])
             return PropertyValue.cells(cells), tokens[1:-1]
+        if len(tokens) >= 3 and values[0] == b"<" and values[-1] == b">":
+            groups, leaves, current = [], [], None
+            inside, separator = False, False
+            for token, value in zip(tokens, values):
+                if value == b"<" and not inside and not separator:
+                    inside = True
+                elif value == b">" and inside and current is not None:
+                    groups.append(current)
+                    current, inside, separator = None, False, True
+                elif value == b"," and separator:
+                    separator = False
+                elif token.kind == "reference" and inside:
+                    if current is not None:
+                        groups.append(current)
+                    current = [value.decode("ascii"), []]
+                    leaves.append(token)
+                elif current is not None and inside and len(value) <= 10 and _NUMBER.fullmatch(value):
+                    current[1].append(int(value, 16 if value.lower().startswith(b"0x") else 10))
+                    leaves.append(token)
+                else:
+                    break
+            else:
+                if groups and not inside and separator:
+                    if all(not group[1] for group in groups):
+                        return PropertyValue.phandles([group[0] for group in groups]), tuple(leaves)
+                    return PropertyValue.phandle_array(groups), tuple(leaves)
         raise SourceError("Opaque expressions are preserved; only literal properties can be changed.")
 
     def _value_edits(self, prop, value):
@@ -315,6 +445,13 @@ class SourceDocument:
             raise SourceError("Choose a typed property value.")
         old, tokens = self._literal(prop)
         if old == value or (isinstance(old, tuple) and value.kind == "string" and old[1] == value.value):
+            return []
+        if isinstance(old, tuple) and value.kind == "path" and old[1] == value.value:
+            return []
+        reference_kinds = {"phandles", "phandle-array"}
+        def groups(item):
+            return tuple((ref, ()) for ref in item.value) if item.kind == "phandles" else item.value
+        if isinstance(old, PropertyValue) and old.kind in reference_kinds and value.kind in reference_kinds and groups(old) == groups(value):
             return []
         if prop.value_start is None:
             return [self._edit(prop.name_end, prop.name_end, b" = " + value.render())]
@@ -327,6 +464,34 @@ class SourceDocument:
                                 if original.lower().startswith(b"0x") else str(after).encode("ascii"))
                     edits.append(self._edit(token.start, token.end, rendered))
             return edits
+        if isinstance(old, PropertyValue) and old.kind == value.kind and old.kind in {"bytes", "string-array", "phandles", "reference", "phandle-array"}:
+            def leaves(item):
+                if item.kind == "reference":
+                    return (item.value,)
+                if item.kind == "phandle-array":
+                    return tuple(leaf for ref, cells in item.value for leaf in (ref, *cells))
+                return item.value
+            before, after = leaves(old), leaves(value)
+            same_shape = len(before) == len(after)
+            if old.kind == "phandle-array":
+                same_shape = same_shape and tuple(len(cells) for _, cells in old.value) == tuple(len(cells) for _, cells in value.value)
+            if same_shape:
+                edits = []
+                for token, previous, desired in zip(tokens, before, after):
+                    if previous == desired:
+                        continue
+                    raw = self.source[token.start:token.end]
+                    if old.kind == "string-array":
+                        rendered = _quoted(desired)
+                    elif old.kind == "bytes":
+                        rendered = format(desired, "02X" if any(65 <= char <= 70 for char in raw) else "02x").encode("ascii")
+                    elif isinstance(desired, str):
+                        rendered = desired.encode("ascii")
+                    else:
+                        rendered = (raw[:2] + format(desired, "X" if raw.startswith(b"0X") else "x").encode("ascii")
+                                    if raw.lower().startswith(b"0x") else str(desired).encode("ascii"))
+                    edits.append(self._edit(token.start, token.end, rendered))
+                return edits
         start = prop.name_end if value.kind == "boolean" else prop.value_start
         if any(token.kind in {"comment", "directive"} for token in self._tokens(start, prop.value_end)):
             raise SourceError("Changing the literal shape would remove comments; edit the source explicitly instead.")
@@ -402,8 +567,145 @@ class SourceDocument:
 
     def plan_remove_property(self, property_id):
         _, prop = self._property(property_id)
+        labels = {self.source[token.start:token.end].decode("ascii") for token in self._label_tokens()
+                  if prop.start <= token.start < prop.end}
+        if labels:
+            references = {"&" + label for label in labels}
+            if any(token.kind == "reference" and not prop.start <= token.start < prop.end and
+                   self.source[token.start:token.end].decode("ascii") in references for token in self.syntax.tokens):
+                raise SourceError("Another source declaration references this property's label; remove that reference explicitly first.")
         return self._plan("remove-local-property", [self._edit(prop.start, prop.end, b"")],
                           ("Only this source declaration is removed; inherited or earlier values may remain.",))
+
+    def plan_reset_property(self, node_id, name):
+        """Remove one local assignment/deletion without materializing an inherited default."""
+        self._editable()
+        _name(name, _NAME, "property name")
+        node = self.node(node_id)
+        self._node_editable(node)
+        found = [prop for prop in node.properties if prop.name == name]
+        if len(found) > 1:
+            raise SourceError("Repeated property declarations cannot be reset as one unambiguous override.")
+        return self.plan_remove_property(found[0].id) if found else self._plan("reset-local-property", [])
+
+    def reference_inventory(self):
+        """Describe literal local references; external includes/macros stay unresolved."""
+        nodes = [{"id": node.id, "path": self._path(node), "labels": list(node.labels), "name": node.name}
+                 for node in self.syntax.nodes]
+        references = []
+
+        def add(reference, start, end, kind="reference"):
+            if reference.startswith("&{"):
+                path = reference[2:-1]
+                targets = [item["id"] for item in nodes if item["path"] == path]
+            else:
+                targets = [item["id"] for item in nodes if reference[1:] in item["labels"]]
+            references.append({"reference": reference, "start": start, "end": end, "kind": kind,
+                               "target_ids": targets, "state": "resolved" if len(targets) == 1 else "ambiguous" if targets else "missing"})
+
+        for token in self.syntax.tokens:
+            if token.kind == "reference":
+                add(self.source[token.start:token.end].decode("ascii"), token.start, token.end)
+        for node in self.syntax.nodes:
+            if self._path(node) not in {"/aliases", "/chosen"}:
+                continue
+            for prop in node.properties:
+                value = self.property_value(prop.id)
+                if value and value.kind == "string" and _PATH.fullmatch(value.value):
+                    add("&{" + value.value + "}", prop.value_start, prop.value_end, "path-string")
+        return {"nodes": nodes, "references": references,
+                "external_unknown": any(token.kind == "directive" for token in self.syntax.tokens) or
+                    any(item.code in {"include", "opaque-value", "opaque-structure"} for item in self.syntax.diagnostics),
+                "coverage": "literal-references-in-this-document"}
+
+    def _label_tokens(self):
+        significant = [token for token in self.syntax.tokens if token.kind not in _TRIVIA]
+        return [left for left, right in zip(significant, significant[1:])
+                if self.source[right.start:right.end] == b":" and
+                _LABEL.fullmatch(self.source[left.start:left.end].decode("ascii", errors="replace"))]
+
+    def plan_add_label(self, node_id, label):
+        self._editable()
+        _name(label, _LABEL, "node label")
+        node = self.node(node_id)
+        self._node_editable(node)
+        if node.name == "/":
+            raise SourceError("A root block cannot have a label; choose a child node.")
+        existing = [token for token in self._label_tokens() if self.source[token.start:token.end] == label.encode("ascii")]
+        if existing:
+            if len(existing) == 1 and label in node.labels:
+                return self._plan("add-node-label", [])
+            raise SourceError("The proposed label is already used or ambiguous in the source.")
+        return self._plan("add-node-label", [self._edit(node.start, node.start, label.encode("ascii") + b": ")],
+                          ("The label was added only to this source occurrence; external label uniqueness requires configuration validation.",))
+
+    def plan_rename_label(self, node_id, old, new, *, external_references_checked=False):
+        """Rename only when a caller establishes complete external-reference closure."""
+        self._editable()
+        node = self.node(node_id)
+        self._node_editable(node)
+        _name(old, _LABEL, "existing node label")
+        _name(new, _LABEL, "new node label")
+        if old not in node.labels:
+            raise SourceError("The selected node does not declare this label.")
+        labels = self._label_tokens()
+        old_tokens = [token for token in labels if self.source[token.start:token.end] == old.encode("ascii")]
+        if len(old_tokens) != 1:
+            raise SourceError("The existing label is ambiguous in this source.")
+        if old == new:
+            return self._plan("rename-node-label", [])
+        if any(self.source[token.start:token.end] == new.encode("ascii") for token in labels):
+            raise SourceError("The proposed label is already used in the source.")
+        if external_references_checked is not True or self.reference_inventory()["external_unknown"]:
+            raise SourceError("Label rename needs proven external-reference closure and source without includes or opaque expressions. Keep the label or edit source explicitly.")
+        edits = [self._edit(old_tokens[0].start, old_tokens[0].end, new.encode("ascii"))]
+        edits.extend(self._edit(token.start, token.end, ("&" + new).encode("ascii"))
+                     for token in self.syntax.tokens if token.kind == "reference" and
+                     self.source[token.start:token.end] == ("&" + old).encode("ascii"))
+        return self._plan("rename-node-label", edits)
+
+    def plan_set_named_reference(self, kind, name, reference):
+        """Set an alias/chosen link, creating missing local blocks in one reversible change."""
+        self._editable()
+        if kind not in {"aliases", "chosen"}:
+            raise SourceError("Choose aliases or chosen for a named node reference.")
+        _name(name, _NAME, "named reference")
+        if kind == "aliases" and not re.fullmatch(r"[a-z0-9][a-z0-9-]*", name):
+            raise SourceError("Alias names use lowercase letters, digits and hyphens.")
+        value = PropertyValue.reference(reference)
+        targets = [node for node in self.syntax.nodes if
+                   (self._path(node) == reference[2:-1] if reference.startswith("&{") else reference[1:] in node.labels)]
+        if len(targets) != 1:
+            raise SourceError("Choose a uniquely resolved local node target. Missing, inherited or ambiguous targets require source editing.")
+        self._node_editable(targets[0])
+        blocks = [node for node in self.syntax.nodes if self._path(node) == "/" + kind]
+        if len(blocks) > 1:
+            raise SourceError("Repeated aliases/chosen blocks require explicit source editing.")
+        if blocks:
+            return self.plan_set_property(blocks[0].id, name, value)
+        roots = [node for node in self.syntax.nodes if node.name == "/" and node.parent_id is None]
+        if len(roots) > 1:
+            raise SourceError("Repeated root contributors require an explicit aliases/chosen block in source.")
+        if roots:
+            return self.plan_add_node(roots[0].id, kind, properties=((name, value),))
+        # A local labelled child can belong to an external reference override;
+        # adding the ordinary root block leaves that original subtree untouched.
+        newline = self._newline(len(self.source))
+        statement = (b"/ {" + newline + b"\t" + kind.encode("ascii") + b" {" + newline + b"\t\t" +
+                     name.encode("ascii") + b" = " + value.render() + b";" + newline + b"\t};" + newline + b"};")
+        return self._plan("set-named-reference", [self._insert(None, statement)])
+
+    def plan_remove_named_reference(self, kind, name):
+        self._editable()
+        if kind not in {"aliases", "chosen"}:
+            raise SourceError("Choose aliases or chosen for a named node reference.")
+        _name(name, _NAME, "named reference")
+        blocks = [node for node in self.syntax.nodes if self._path(node) == "/" + kind]
+        if len(blocks) > 1:
+            raise SourceError("Repeated aliases/chosen blocks require explicit source editing.")
+        if not blocks:
+            return self._plan("remove-named-reference", [])
+        return self.plan_reset_property(blocks[0].id, name)
 
     def plan_add_node(self, parent_id, name, *, label=None, properties=()):
         self._editable()
@@ -460,14 +762,17 @@ class SourceDocument:
     def plan_remove_node(self, node_id):
         node = self.node(node_id)
         descendants = [item for item in self.syntax.nodes if node.start <= item.start < node.end]
-        labels = {label for item in descendants for label in item.labels}
-        labels.update(label for item in descendants for prop in item.properties for label in prop.labels)
+        labels = {self.source[token.start:token.end].decode("ascii") for token in self._label_tokens()
+                  if node.start <= token.start < node.end}
         paths = {self._path(item) for item in descendants} - {None}
         references = {"&" + label for label in labels} | {"&{" + path + "}" for path in paths}
         for token in self.syntax.tokens:
             if token.kind == "reference" and not node.start <= token.start < node.end:
                 if self.source[token.start:token.end].decode("ascii") in references:
                     raise SourceError("Another source declaration references this node or its labels; remove that reference explicitly first.")
+        for item in self.reference_inventory()["references"]:
+            if item["kind"] == "path-string" and not node.start <= item["start"] < node.end and item["reference"] in references:
+                raise SourceError("An alias or chosen path references this node; remove that reference explicitly first.")
         return self._plan("remove-local-node", [self._edit(node.start, node.end, b"")],
                           ("Only the selected source block is removed; shared parents and other contributors remain.",
                            "References in included or macro-generated source are not resolved."))

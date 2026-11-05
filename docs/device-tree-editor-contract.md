@@ -1,8 +1,9 @@
 # Device Tree Editor foundation contract
 
-Status: D0–D5 contracts, 2026-11-05. D4 adds reviewed existing-overlay Save and durable
-draft recovery; D5 adds explicit saved-source Configure through Projects. Hardware modules,
-pins and binding-aware editing remain planned. Verification is tracked in the stage handoffs.
+Status: D0–D6 contracts, 2026-11-06. D4 adds reviewed existing-overlay Save and durable
+draft recovery; D5 adds explicit saved-source Configure through Projects; D6 adds local
+binding-aware property/reference forms. Hardware modules, peripheral topology and pins
+remain planned. Verification is tracked in the stage handoffs.
 The D0 executable evidence is a bounded in-memory source prototype under
 `scripts/prototypes/`, outside the installed application. See the
 [master plan](device-tree-editor-masterplan.md) and
@@ -10,7 +11,7 @@ The D0 executable evidence is a bounded in-memory source prototype under
 the [D1 handoff](device-tree-editor-d1-handoff.md) and
 [D2 handoff](device-tree-editor-d2-handoff.md), [D3 handoff](device-tree-editor-d3-handoff.md)
 and [D4 handoff](device-tree-editor-d4-handoff.md), followed by the
-[D5 handoff](device-tree-editor-d5-handoff.md).
+[D5 handoff](device-tree-editor-d5-handoff.md) and [D6 handoff](device-tree-editor-d6-handoff.md).
 
 ## Ownership and compatibility
 
@@ -563,6 +564,73 @@ Historical attempts added during Configure do not invalidate unchanged project c
 See [ADR 0021](decisions/0021-editor-configuration-validation.md) and the
 [D5 handoff](device-tree-editor-d5-handoff.md) for exact bounds and verification.
 
+## D6 local bindings and references
+
+Binding forms describe source declarations in the selected overlay, not an effective
+tree merged from board/SoC files and all overlays. Explicit
+`POST /api/devicetree/editor/drafts/bindings` accepts the existing context and draft
+mutation guards. It returns an expiring `schema_id`, exact draft revision/hash, node
+binding states, typed property metadata, local values/deletions, unique local reference
+targets, provider-cell layouts, aliases/chosen and diagnostics. Loading reads metadata
+only: required/default values are not inserted and no project tools run.
+
+`BindingCatalog` reads the selected application's `dts/bindings`, selected Zephyr
+checkout's `dts/bindings`, and captured DTS roots within the workspace. YAML is data;
+checkout Python, macros and network sources are not executed. Supported include
+composition and property allow/block filters, child bindings, compatible order and
+bus-qualified matching are resolved conservatively. Missing, ambiguous and unsupported
+states remain distinct. Unknown field constraints withhold that field; unresolved schema
+composition and incomplete catalogue observations withhold unsafe matches.
+
+The observation fingerprints file contents, directories, root availability and workspace
+identity. Commands revalidate it before planning and before publishing the draft change.
+New/changed candidates, changed includes, replaced roots, expired observations and stale
+draft/context identities require a fresh explicit load. At most 16 observations are
+retained for ten minutes. No persistent schema or draft-format migration is introduced.
+
+The catalogue permits 64 roots, 10,000 files, 2,000 directories, 12,000 encountered entries
+and 16 MiB of YAML, with 256 KiB per file. Directory depth is limited to 32; YAML permits
+20,000 parsing events and depth 32, rejecting aliases, anchors, explicit tags and duplicate
+mapping keys. Include/child depth is 16, with 64 includes per declaration and 128 dependency
+files. Schemas permit 1,024 properties, 128 candidate paths and 100 diagnostics. Missing
+or exceeded coverage is never a successful complete scan. Symlink traversal is refused.
+
+The following commands use the existing guarded `drafts/command` endpoint, canonical
+`SourceDocument` patches, Undo/Redo, diff and durable draft acknowledgement:
+
+| Command | Additional arguments beyond `kind` and `schema_id` | Meaning |
+| --- | --- | --- |
+| `binding_set` | `node_id`, `name`, typed `value` | Apply a supported schema value to this local declaration |
+| `binding_reset` | `node_id`, `name` | Remove a unique local property or deletion directive |
+| `binding_delete` | `node_id`, `name` | Introduce an explicit `/delete-property/` directive |
+| `add_label` | `node_id`, `label` | Add a nonconflicting label to a safe local declaration |
+| `set_alias`, `set_chosen` | `name`, `reference` | Set a named reference to an existing unique local target |
+| `remove_alias`, `remove_chosen` | `name` | Remove a uniquely identified local named reference |
+
+Typed values are boolean, unsigned 32-bit integer, string, numeric/string/byte array,
+single reference (`phandle`/`path`), reference list, or phandle-array entries of
+`{reference, cells}`. Arrays use up to 64 explicit entries; bytes range from 0 to 255.
+Integer/string enumerations constrain scalar values, and array enumerations constrain
+each entry while preserving order and repetitions. Supported constants are applied only
+on an explicit action. Unsupported byte-array enum/constant semantics remain source-only.
+Boolean false uses explicit deletion; Reset does not claim that the effective value is
+false or absent. Reset may reveal an unknown inherited value or a binding default.
+
+References are limited to unique declarations identified by local labels or absolute
+paths. Provider cells require the actual matched provider's named specifier layout and
+an explicit matching `#<space>-cells` count in the overlay. Existing unknown references,
+macros, repeated contributors and incompatible cell counts are preserved without
+fabricating editable values. Neither binding presence nor a GPIO specifier establishes
+a board pin map. Label rename is not exposed through the API/UI because cross-file
+reference closure is not established; its lower-level source operation requires explicit
+closure proof. Unrelated unknown source remains byte-preserved.
+
+The browser loads binding metadata explicitly and supports cancelling inspection.
+Typing, Undo/Redo, context/workspace changes and navigation invalidate stale forms;
+late responses cannot restore them. Binding commands share source history and do not
+Save, Configure or Build. The existing D4/D5 workflows remain separate explicit actions.
+See the [D6 handoff](device-tree-editor-d6-handoff.md) for verification status and limits.
+
 ## Verification and next stage
 
 The [D0 handoff](device-tree-editor-d0-handoff.md) records the prototype baseline.
@@ -574,5 +642,7 @@ The [D2 handoff](device-tree-editor-d2-handoff.md) records source-engine verific
 The [D3 handoff](device-tree-editor-d3-handoff.md) records synchronized drafts and the
 [D4 handoff](device-tree-editor-d4-handoff.md) records guarded publication and recovery.
 The [D5 handoff](device-tree-editor-d5-handoff.md) records explicit saved-source
-configuration and Projects handoff. The next stage is D6 only: binding-aware properties
-and references, preserving the separation between source saving and project execution.
+configuration and Projects handoff. The [D6 handoff](device-tree-editor-d6-handoff.md)
+records local binding-aware properties and references. The next stage is D7 only:
+peripheral and bus configuration, preserving the same source command path and the
+separation between source saving and project execution.

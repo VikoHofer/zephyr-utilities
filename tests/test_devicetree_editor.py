@@ -474,7 +474,7 @@ class EditorContextHttpTests(unittest.TestCase):
     def test_draft_routes_share_authentication_and_synchronize_without_writing(self):
         for operation in ("open", "get", "source", "command", "undo", "redo", "review", "save", "compare", "reload",
                           "recovery/list", "recovery/read", "recovery/restore", "recovery/discard",
-                          "validation/review", "validation/submit", "validation/status", "validation/cancel", "validation/handoff"):
+                          "validation/review", "validation/submit", "validation/status", "validation/cancel", "validation/handoff", "bindings"):
             for authorized, expected in ((False, 403), (True, 400)):
                 with self.subTest(operation=operation, authorized=authorized), self.assertRaises(HTTPError) as error:
                     self.request(PREFIX + "drafts/" + operation, method="POST", body={}, authorized=authorized)

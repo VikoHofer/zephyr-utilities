@@ -295,7 +295,7 @@ class DevicetreeSourceTests(unittest.TestCase):
             existing.plan_delete_node(existing.find_node("&i2c0").id, "sensor@48")
 
     def test_opaque_values_are_preserved_and_cannot_be_overwritten_as_literals(self):
-        for value in (b"<BUS_RATE>", b"<(1 + 2)>", b"<(1 << 2)>", b"<MACRO('}')>", b'"a", "b"'):
+        for value in (b"<BUS_RATE>", b"<(1 + 2)>", b"<(1 << 2)>", b"<MACRO('}')>"):
             source = b'&uart0 { status = "disabled"; opaque = ' + value + b"; };"
             with self.subTest(value=value):
                 document = self.document(source)

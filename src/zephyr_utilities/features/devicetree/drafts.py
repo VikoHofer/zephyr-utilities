@@ -132,6 +132,7 @@ class DraftService:
         self.store = DraftStore(storage) if storage is not None else None
         self.publisher = publisher
         self.recovery_failures = {}
+        self.bindings = None
 
     def _capture(self, context):
         captured = deepcopy(context)
@@ -373,15 +374,19 @@ class DraftService:
                   "set_property": {"kind", "node_id", "name", "value"},
                   "remove_property": {"kind", "property_id"}}.get(kind)
         optional = {"property_id"} if kind == "set_property" else set()
-        if fields is None or not fields <= set(command) or set(command) - fields - optional:
+        binding_command = self.bindings is not None and kind in self.bindings.commands
+        if not binding_command and (fields is None or not fields <= set(command) or set(command) - fields - optional):
             raise ValueError("Choose the exact supported visual command fields.")
         with self.editor.lock, self.lock:
-            draft = self._scope(body, self._context(binding))
+            context = self._context(binding)
+            draft = self._scope(body, context)
             self._guard(body, draft)
             document = draft.document
             if document is None or document.syntax.blocked or self._visual_limit(document):
                 raise ValueError("This draft has incomplete or unsupported structure. Repair the source before using visual controls.")
-            if kind == "set_status":
+            if binding_command:
+                change = self.bindings.plan(body, context, draft)
+            elif kind == "set_status":
                 change = document.plan_set_status(command["node_id"], command["status"])
             elif kind == "set_property":
                 change = document.plan_set_property(command["node_id"], command["name"], self._value(command["value"]),

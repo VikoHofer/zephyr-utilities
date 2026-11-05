@@ -5,6 +5,7 @@ from .publication import OverlayPublisher
 from .saving import SavingService
 from .service import EditorService
 from .validation import ValidationService
+from .binding_service import BindingService
 
 
 def register(router, context):
@@ -19,6 +20,10 @@ def register(router, context):
     publisher = OverlayPublisher(storage)
     drafts = DraftService(service, storage=storage, publisher=publisher)
     context.services["devicetree_drafts"] = drafts
+    bindings = BindingService(drafts)
+    drafts.bindings = bindings
+    context.services["devicetree_bindings"] = bindings
+    router.add("POST", "/api/devicetree/editor/drafts/bindings", lambda request: bindings.inspect(request.body))
     for suffix in ("open", "get", "source", "command", "undo", "redo"):
         router.add("POST", f"/api/devicetree/editor/drafts/{suffix}",
                    lambda request, operation=getattr(drafts, suffix): operation(request.body))

@@ -1,12 +1,13 @@
 # Device Tree Editor master plan
 
-Status: limited overlay editor available; D0–D5 complete within their staged scopes on
-2026-11-05, with verification and measured limits recorded in their handoffs. The next product
+Status: limited overlay editor available; D0–D6 implementations complete within their
+staged scopes on 2026-11-06. Verification and measured limits are recorded in the stage handoffs. The next product
 priority is the visual Device Tree Editor
 following the delivered everyday Project Creator workflow. This plan does not imply
 that every advanced item in the Project Creator roadmap is complete. The editor's
 runtime now exposes existing-overlay editing, reviewed Save/recovery and explicit
-saved-source Configure. Module placement, pins and binding-aware editing remain later stages.
+saved-source Configure, plus local binding-aware properties and references. Module placement
+and pins remain later stages; D7 peripheral and bus configuration is next.
 
 Build an offline visual hardware editor inside the existing `zephyr-utils` application.
 Users open a project, select its exact configuration, place hardware modules, connect
@@ -26,7 +27,8 @@ read-only workspace. The [D2 handoff](device-tree-editor-d2-handoff.md) records 
 source engine, verification and measured limits. The [D3 handoff](device-tree-editor-d3-handoff.md)
 records synchronized session drafts and unified undo. The [D4 handoff](device-tree-editor-d4-handoff.md)
 records guarded existing-overlay Save and recovery. The [D5 handoff](device-tree-editor-d5-handoff.md)
-records explicit saved-source Configure and Projects handoff. D6 is next.
+records explicit saved-source Configure and Projects handoff. The [D6 handoff](device-tree-editor-d6-handoff.md)
+records local binding-aware property/reference editing. D7 is next.
 
 ## Product experience
 
@@ -327,7 +329,9 @@ within its session-draft preview scope; its handoff records synchronization chec
 the source lookup optimization. D4 is **complete** for existing-overlay Save, conflict
 comparison and durable recovery. D5 is **complete** for explicit saved-source Configure,
 candidate/input evidence and Projects handoff; unsaved staging remains unsupported.
-D6–D15 are **not started**.
+D6 implementation is **complete** for explicitly observed local binding/property/reference
+forms on the shared draft command path; its handoff records verification. It does
+not resolve inherited effective hardware or offer label renaming. D7–D15 are **not started**.
 The default order is sequential; shared contracts
 and source safety precede richer visuals. Split a stage further if its exit gate cannot
 be delivered and tested in a reviewable change. Complete the selected slice without
@@ -346,7 +350,7 @@ until D4. This uses the same application/server, not a separate feature launcher
 | D3 | Synchronized visual/source draft and undo | Complete session-draft preview; see D3 handoff |
 | D4 | Guarded Save, reload and recovery | Complete existing-overlay editor; see D4 handoff |
 | D5 | Explicit validation and build handoff | Complete Save-then-Configure workflow; see D5 handoff |
-| D6 | Binding-aware properties and references | General structured editing |
+| D6 | Binding-aware properties and references | Complete local-overlay implementation; see D6 handoff |
 | D7 | Peripheral and bus configuration | Common hardware topology |
 | D8 | Nordic pin assignment and pinctrl states | First complete pin workflow |
 | D9 | Module catalogue and visual placement | Main requested visual experience |
@@ -512,6 +516,15 @@ temporarily or import another feature's private workflow.
 ```
 
 ### D6 Binding-aware properties and references
+
+Implementation complete within the local-overlay scope. Explicit **Load binding properties**
+observes selected local schemas, supported includes/child bindings and bus matching.
+Typed forms, provider cells, safe label addition and alias/chosen changes use the existing
+canonical draft command/history path. Defaults are not materialized on load. Reset removes
+a local override; Delete uses an explicit directive. Inherited values and external targets
+remain unknown, and label rename is withheld without cross-file reference proof. See the
+[D6 handoff](device-tree-editor-d6-handoff.md) for supported forms, bounded observation
+and verification. The following prompt records this stage's original scope.
 
 Scope: resolve supported local schemas and render types, defaults, enums, arrays,
 provider specifier cells, labels, aliases and chosen references. Add property/reset/delete
@@ -774,10 +787,11 @@ performance claims without measurements.
 
 ## Starting point
 
-The next implementation request should be **D5 only**.
+The next implementation request should be **D7 only**.
 D0's contracts/source experiment, D1's read-only context and D2's source operations
 provide the foundation; D3 connects source and visual session drafts. D4 delivers the first small
-usable existing-overlay editor. D5 closes its configure/build loop; D8–D10 deliver the initial complete
+usable existing-overlay editor. D5 closes its configure/build loop and D6 adds local
+binding-aware properties/references. D7 adds common peripheral topology; D8–D10 deliver the initial complete
 module-and-pin experience. Later stages expand coverage while preserving the same
 source synchronization and save semantics.
 

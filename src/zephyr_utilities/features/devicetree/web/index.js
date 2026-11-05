@@ -3,6 +3,7 @@ import {createDraftSession, editorText, nodeSelection, propertySelection, restor
   restorePropertySelection, sourceOffset, sourceSelection} from "./drafts.js";
 import {createSaveSession} from "./saving.js";
 import {createValidationSession, diagnosticSelection} from "./validation.js";
+import {mountBindingPanel} from "./binding-view.js";
 
 const array = (value) => Array.isArray(value) ? value : [];
 const text = (value, fallback = "Unknown") => value == null || value === "" ? fallback : String(value);
@@ -23,6 +24,7 @@ export function mount(host, context) {
   let drafts;
   let saving;
   let validation;
+  let bindings;
   let shownReview;
   let reviewTrigger;
   let shownConfigure;
@@ -193,7 +195,7 @@ export function mount(host, context) {
   function populateProperty() {
     const property = selectedProperty();
     $("property-name").value = property?.name || "";
-    $("property-kind").value = property?.value?.kind || "string";
+    $("property-kind").value = ["string", "cells", "boolean"].includes(property?.value?.kind) ? property.value.kind : "string";
     $("property-value").value = property?.value?.kind === "cells" ? array(property.value.value).join(" ")
       : property?.value?.kind === "string" ? property.value.value : "";
     propertyControls();
@@ -201,12 +203,14 @@ export function mount(host, context) {
   function propertyControls() {
     const node = selectedNode();
     const property = selectedProperty();
-    const disabled = !node || node.editable === false || Boolean(property && !property.editable);
+    const simple = !property || ["string", "cells", "boolean"].includes(property.value?.kind);
+    const disabled = !node || node.editable === false || Boolean(property && !property.editable) || !simple;
     for (const name of ["property-name", "property-kind", "property-value", "apply-property"]) $(name).disabled = disabled;
     $("property-name").readOnly = Boolean(property);
     $("remove-property").disabled = disabled || !property;
     $("value-label").hidden = $("property-kind").value === "boolean";
-    $("property-help").textContent = property && !property.editable ? "This source value is opaque or conflicts with another declaration. Edit it in source."
+    $("property-help").textContent = !simple ? "Use the binding form below for this value type, or edit it in source."
+      : property && !property.editable ? "This source value is opaque or conflicts with another declaration. Edit it in source."
       : $("property-kind").value === "cells" ? "Enter unsigned 32-bit integers separated by spaces. Decimal and 0x hexadecimal are accepted."
         : $("property-kind").value === "boolean" ? "A boolean property is present without an assigned value."
           : "String contents are escaped as data. Removing a local property may reveal an inherited value.";
@@ -525,6 +529,7 @@ export function mount(host, context) {
     renderDraft();
     renderSaving();
     renderValidation();
+    bindings?.render();
   }
   async function action(operation, destination) {
     const captured = ++actionGeneration;
@@ -682,12 +687,14 @@ export function mount(host, context) {
   saving = createSaveSession({api: context.api, state, workspace: () => context.workspace.path, drafts,
     adopt: (data, document) => session.adopt(data, document), onChange: render});
   validation = createValidationSession({api: context.api, state, workspace: () => context.workspace.path, drafts, onChange: render});
+  bindings = mountBindingPanel($("bindings"), {api: context.api, state, workspace: () => context.workspace.path,
+    drafts, reveal: context.reveal, onChange: render});
   render();
   return {
-    navigate(view) { actionGeneration++; saving.cancel(); validation.closeReview(); validation.resume(); return session.navigate(view); },
+    navigate(view) { actionGeneration++; saving.cancel(); validation.closeReview(); validation.resume(); bindings.navigate(); return session.navigate(view); },
     dispose() {
       disposed = true; actionGeneration++; lifetime.abort(); saving.dispose(); closeReview({restoreFocus: false});
-      validation.dispose(); closeConfigure({restoreFocus: false}); session.dispose(); drafts.dispose();
+      validation.dispose(); closeConfigure({restoreFocus: false}); bindings.dispose(); session.dispose(); drafts.dispose();
       for (const url of downloadUrls) URL.revokeObjectURL(url);
     },
   };

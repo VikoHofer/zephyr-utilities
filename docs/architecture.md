@@ -299,6 +299,24 @@ invalidate unchanged project/source selections. See
 [ADR 0021](decisions/0021-editor-configuration-validation.md) and the
 [D5 handoff](device-tree-editor-d5-handoff.md).
 
+D6 adds feature-owned `BindingCatalog` and `BindingService`. Explicit binding inspection
+reads bounded local YAML as data from the selected application, Zephyr checkout and DTS
+roots. Supported includes, child schemas and bus-qualified matches produce metadata
+for declarations in the current overlay; this does not resolve inherited effective
+hardware. The observation binds its filesystem fingerprint to the exact context and
+canonical draft revision/hash. Every binding command revalidates that observation and
+uses the existing `DraftService.command` source-patch/history/recovery path. There is no
+parallel generated-source model or persistent binding cache.
+
+The frontend loads metadata explicitly, uses only proven local reference targets and
+actual provider cell layouts, and invalidates forms after source/context changes.
+Defaults and required properties are descriptive until Apply. Reset and explicit
+deletion have distinct commands. Unsupported schemas, expressions and unresolved
+references remain source-only; no board pin map or inherited value is inferred. Safe
+label addition is available, while label renaming is withheld without cross-file proof.
+The separate reviewed Save/Configure/Build boundaries remain unchanged. See the
+[D6 handoff](device-tree-editor-d6-handoff.md) for limits and verification status.
+
 ## Measurement boundary
 
 Memory Explorer preserves upstream totals and uncertainty. Static reservations, runtime

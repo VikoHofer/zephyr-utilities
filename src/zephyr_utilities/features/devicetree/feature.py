@@ -8,7 +8,7 @@ from .api import register
 FEATURE = FeatureDefinition(
     id='devicetree',
     title='Device Tree Editor',
-    description='Edit overlay status and simple properties, review and save source changes, and recover drafts. Modules and pin configuration are planned.',
+    description='Edit overlay properties and local binding references, review and save source changes, and explicitly configure them. Modules and pin configuration are planned.',
     entry_path="/#/devicetree/editor",
     frontend=FrontendDefinition(Path(__file__).parent / "web"),
     register=register,
