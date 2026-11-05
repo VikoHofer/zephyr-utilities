@@ -20,7 +20,7 @@ export function createFragmentView({node, choices}) {
     const refresh = node("button", "projects-button", "Refresh files");
     refresh.type = "button"; refresh.dataset.fragmentRefresh = ""; refresh.dataset.fragmentControl = "refresh";
     heading.append(node("h4", "", "Application fragments"), refresh);
-    section.append(heading, node("p", "projects-muted", "Select existing .conf and .overlay files from this application. Saving keeps their paths and order; builds use their current contents. Refresh after adding or removing files."));
+    section.append(heading, node("p", "projects-muted", "Select existing .conf and .overlay files from this application. A listed overlay is available, not necessarily used by the selected target. Saving keeps the selected paths and order; Configure records the actual inputs. Refresh after adding or removing files."));
     const status = node("div"); status.dataset.fragmentStatus = ""; status.setAttribute("role", "status");
     section.append(status);
     for (const kind of fragmentKinds) {

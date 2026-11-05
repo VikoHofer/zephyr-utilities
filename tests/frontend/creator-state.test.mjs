@@ -79,7 +79,7 @@ test("template choice survives workspace round trips and remount without restori
 });
 
 test("unavailable or malformed template catalogues never silently retarget a saved choice", async () => {
-  for (const catalogue of [[], undefined, null, [{}], [templates[0]], [templates[1], templates[1]], [{...templates[1], version: 2}], [{...templates[1], language: "C"}]]) {
+  for (const catalogue of [[], undefined, null, [{}], [templates[0]], [templates[1], templates[1]], [{...templates[1], version: 3}], [{...templates[1], language: "C"}]]) {
     let writes = 0;
     const app = harness(async (path, options) => {
       if (options.method) writes++;
@@ -125,6 +125,8 @@ test("catalogue changes invalidate an in-flight template review", async () => {
 test("template labels use recorded identity for C and C++ and retain unknown identities", () => {
   assert.equal(creatorTemplateLabel({id: "minimal-cpp", version: 1}, templates), "Minimal C++ · version 1");
   assert.equal(creatorTemplateLabel({id: "minimal-c", version: 1}, []), "Minimal C · version 1");
+  assert.equal(creatorTemplateLabel({id: "minimal-c", version: 2}, []), "Minimal C · version 2");
+  assert.equal(creatorTemplates(templates.map((entry) => ({...entry, version: 2}))).length, templates.length);
   assert.equal(creatorTemplateLabel({id: "future-template", version: 2}, templates), "future-template · version 2");
   assert.equal(creatorTemplateLabel(null, templates), "Template unknown");
 });

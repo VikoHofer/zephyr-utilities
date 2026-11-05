@@ -14,6 +14,7 @@ import sys
 import uuid
 
 from .probing import check_cancel
+from .default_overlay import default_overlay
 from .templates import render_template, select_template, template_paths, validate_template
 
 
@@ -274,6 +275,10 @@ def preview_project(workspace, body, snapshot, *, recipe_factory=None):
             "destination_identity": identity, "recipe": recipe, "created_at": _now()}
     if sample:
         plan["sample"] = deepcopy(provenance)
+        if provenance.get("default_overlay"):
+            plan["default_overlay"] = deepcopy(provenance["default_overlay"])
+    elif template["version"] >= 2:
+        plan["default_overlay"] = default_overlay(profile["target"])
     return plan
 
 
@@ -464,8 +469,21 @@ def apply_project(plan, *, cancel=None):
     if sample:
         from .samples import validate_sample_plan
         validate_sample_plan(plan, cancel=cancel)
-    elif names != template_paths(template):
+    elif names != template_paths(template, plan["profile"]):
         raise ValueError("The change plan contains unsupported generated files.")
+    elif template["version"] >= 2:
+        cmake = next(item["content"] for item in files if item["path"] == "CMakeLists.txt")
+        expected_cmake = render_template(template, plan["name"], plan["profile"], plan["recipe"])["CMakeLists.txt"]
+        if cmake != expected_cmake:
+            raise ValueError("The default board overlay activation changed. Preview the application again.")
+    expected_overlay = (plan.get("sample", {}).get("default_overlay") if sample else
+                        default_overlay(plan["profile"]["target"]) if template["version"] >= 2 else None)
+    if plan.get("default_overlay") != expected_overlay:
+        raise ValueError("The default board overlay identity changed. Preview the application again.")
+    if expected_overlay:
+        overlay = next((item for item in files if item["path"] == expected_overlay["path"]), None)
+        if not overlay or overlay["sha256"] != expected_overlay["sha256"]:
+            raise ValueError("The default board overlay changed. Preview the application again.")
     check_cancel(cancel)
     owned = []
     parent = staging = None
@@ -528,6 +546,8 @@ def apply_project(plan, *, cancel=None):
                 "diagnostics": diagnostics, "created_at": _now()}
         if sample:
             project["sample"] = deepcopy(plan["sample"])
+        if expected_overlay:
+            project["default_overlay"] = deepcopy(expected_overlay)
         return project
     finally:
         if staging is not None:

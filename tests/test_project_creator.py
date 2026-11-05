@@ -77,7 +77,7 @@ class CreatorServiceTests(unittest.TestCase):
         initial = self.call("GET", "creator").data
         self.assertEqual(initial["projects"], [])
         plan = self.preview()
-        self.assertEqual(len(plan["files"]), 5)
+        self.assertEqual(len(plan["files"]), 6)
         self.assertFalse(Path(plan["destination"]).exists())
         self.assertIn("display_configure", plan["recipe"])
         self.analyze.assert_not_called()
@@ -90,7 +90,7 @@ class CreatorServiceTests(unittest.TestCase):
         self.assertEqual([item["language"] for item in templates], ["C", "C++", "C"])
         for template in templates:
             self.assertEqual(set(template), {"id", "version", "title", "description", "language"})
-            self.assertEqual(template["version"], 1)
+            self.assertEqual(template["version"], 1 if template["id"] == "local-sample" else 2)
             self.assertTrue(template["description"])
         templates[0]["id"] = "replaced"
         self.assertEqual(self.call("GET", "creator").data["templates"][0]["id"], "minimal-c")
@@ -99,7 +99,7 @@ class CreatorServiceTests(unittest.TestCase):
 
     def test_cpp_preview_identity_is_retained_and_persists_after_reopening(self):
         plan = self.preview(template_id="minimal-cpp")
-        expected_template = {"id": "minimal-cpp", "version": 1}
+        expected_template = {"id": "minimal-cpp", "version": 2}
         self.assertEqual(plan["template"], expected_template)
         # Only the retained plan is applied, regardless of changes to the
         # response object in the caller or template overrides at creation.
@@ -148,7 +148,7 @@ class CreatorServiceTests(unittest.TestCase):
             scan.assert_called_once()
         plan = self.preview(**selection)
         self.assertEqual(plan["sample"]["id"], "hello_world")
-        self.assertEqual(plan["sample"]["fingerprint"], selection["sample_fingerprint"])
+        self.assertEqual(plan["sample"]["source_fingerprint"], selection["sample_fingerprint"])
         self.assertFalse(Path(plan["destination"]).exists())
         self.assertEqual(before, {str(path): path.read_bytes() for path in source.rglob("*") if path.is_file()})
         self.assertEqual(self.app.context.jobs.list(), [])
@@ -190,7 +190,7 @@ class CreatorServiceTests(unittest.TestCase):
         self.assertEqual(self.creator.current()["projects"], [])
         refreshed = self.sample_selection()
         self.assertNotEqual(refreshed["sample_fingerprint"], selection["sample_fingerprint"])
-        self.assertEqual(self.preview(**refreshed)["sample"]["fingerprint"], refreshed["sample_fingerprint"])
+        self.assertEqual(self.preview(**refreshed)["sample"]["source_fingerprint"], refreshed["sample_fingerprint"])
 
     def test_create_rechecks_then_persists_and_remains_separate_from_build(self):
         with patch("zephyr_utilities.features.projects.creator.execute_build") as execute:

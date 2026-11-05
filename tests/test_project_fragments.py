@@ -63,7 +63,7 @@ class ProjectFragmentTests(unittest.TestCase):
         self.assertEqual(data["workspace"], str(self.workspace))
         self.assertEqual(data["project_id"], project["id"])
         self.assertEqual(data["files"]["kconfig"], ["configs/first.conf", "configs/last.conf", "prj.conf"])
-        self.assertEqual(data["files"]["overlays"], ["app.overlay", "overlays/first.overlay", "overlays/last.overlay"])
+        self.assertEqual(data["files"]["overlays"], ["app.overlay", "overlays/demo_chip.overlay", "overlays/first.overlay", "overlays/last.overlay"])
         self.assertEqual(data["diagnostics"], [])
         self.assertEqual(before, {path: path.read_bytes() for path in root.rglob("*") if path.is_file()})
         self.assertEqual(jobs, self.app.context.jobs.list())

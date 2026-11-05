@@ -11,6 +11,7 @@ import stat
 import yaml
 
 from .creation import open_directory, path_identity, validate_identity
+from .default_overlay import ARCHIVED_CMAKE, add_default_overlay
 from .probing import check_cancel
 from .sample_adaptations import adapt_blinky
 
@@ -376,8 +377,14 @@ def _adaptation_input(zephyr, relative):
     return content, {"directory_identity": identity}
 
 
-def preview_sample(snapshot, sample_id, recipe, *, profile=None, cancel=None):
+def preview_sample(snapshot, sample_id, recipe, *, profile=None, cancel=None, provenance_version=None):
     """Return copied bytes and a standalone guide without running local tools."""
+    if provenance_version is not None and (type(provenance_version) is not int or provenance_version not in {1, 2, 3}):
+        raise ValueError("Unsupported local sample provenance schema. Preview again.")
+    if provenance_version == 1:
+        profile = None
+    if provenance_version == 3 and not isinstance(profile, dict):
+        raise ValueError("A default sample overlay requires the selected board profile.")
     contents, provenance = _capture(snapshot, sample_id, cancel)
     contents, provenance = adapt_blinky(contents, provenance, profile,
                                        lambda path: _adaptation_input(provenance["zephyr"], path), cancel=cancel)
@@ -385,6 +392,16 @@ def preview_sample(snapshot, sample_id, recipe, *, profile=None, cancel=None):
     if adaptation:
         _includes({path: content for path, content in contents.items() if not path.startswith("upstream/")},
                   provenance["zephyr"])
+        provenance.pop("fingerprint")
+        provenance["fingerprint"] = _digest(provenance)
+    overlay = None
+    if profile is not None and provenance_version not in {1, 2}:
+        contents, overlay = add_default_overlay(contents, profile.get("target"), archive_cmake=True)
+        provenance = {**provenance, "schema_version": 3,
+                      "source_fingerprint": provenance.get("source_fingerprint", provenance["fingerprint"]),
+                      "default_overlay": overlay,
+                      "overlay_files": [{"path": path, "sha256": _hash(contents[path].encode())}
+                                        for path in ("CMakeLists.txt", overlay["path"], ARCHIVED_CMAKE)]}
         provenance.pop("fingerprint")
         provenance["fingerprint"] = _digest(provenance)
     contents["zephyr-sample.json"] = json.dumps(provenance, sort_keys=True, indent=2) + "\n"
@@ -396,6 +413,14 @@ def preview_sample(snapshot, sample_id, recipe, *, profile=None, cancel=None):
         "source evidence is retained under upstream/led-strip/.\n"
         if adaptation else
         "Upstream source files, README.rst, sample.yaml and board files are unchanged.\n")
+    if overlay:
+        if not adaptation:
+            origin = ("Upstream source files, README.rst, sample.yaml and board files are unchanged.\n"
+                      "The root CMakeLists.txt adds a labeled default-overlay activation block; its\n"
+                      "original bytes are preserved in upstream/original/CMakeLists.txt.\n")
+        else:
+            origin += ("The root CMakeLists.txt also adds the labeled default-overlay activation block;\n"
+                       "its pre-overlay adaptation is preserved in upstream/original/CMakeLists.txt.\n")
     contents["ZEPHYR-SAMPLE.md"] = (
         f"# {provenance['title']} — local sample copy\n\n"
         f"Copied from `{provenance['path']}` in `{provenance['zephyr']['path']}`.\n"
@@ -415,6 +440,16 @@ def preview_sample(snapshot, sample_id, recipe, *, profile=None, cancel=None):
         "Use a new build directory after changing the target, SDK or configuration. The\n"
         "sample's test metadata is preserved; Twister-specific options are not applied by\n"
         "these commands. A successful compile does not establish hardware operation.\n")
+    if overlay:
+        contents["ZEPHYR-SAMPLE.md"] += (
+            f"\n## Default application overlay\n\nEdit `{overlay['path']}` for `{overlay['target']}`. "
+            "This empty starting file makes no hardware changes. It is outside boards/ so it cannot "
+            "shadow the sample's automatically selected overlays. Automatic selection preserves those "
+            "overlays, followed by this default; Append adds the selected overlays after it.\n\n"
+            "Use a fresh build directory when changing overlay selection. Replace selection omits "
+            "this default unless explicitly selected. For an existing standalone build, "
+            "`-DZEPHYR_UTILS_DEFAULT_OVERLAY=OFF` disables its automatic inclusion. The CMake block "
+            "selects this file only for the exact target recorded above.\n")
     contents[".gitignore"] = "/build/\n"
     if len(contents) > MAX_FILES or sum(len(value.encode()) for value in contents.values()) > MAX_TOTAL_BYTES:
         raise ValueError("The complete sample copy exceeds the supported file or byte limit.")
@@ -432,10 +467,11 @@ def validate_sample_plan(plan, cancel=None):
     provenance = plan.get("sample")
     if not isinstance(provenance, dict):
         raise ValueError("The local sample provenance is missing. Preview again.")
-    if provenance.get("schema_version") not in {1, 2}:
+    if provenance.get("schema_version") not in {1, 2, 3}:
         raise ValueError("Unsupported local sample provenance schema. Preview again.")
     actual = preview_sample({"zephyr": plan["profile"]["zephyr"]}, provenance.get("id"), plan["recipe"],
-                            profile=plan["profile"] if provenance["schema_version"] == 2 else None, cancel=cancel)
+                            profile=plan["profile"] if provenance["schema_version"] in {2, 3} else None,
+                            cancel=cancel, provenance_version=provenance["schema_version"])
     if actual["provenance"] != provenance or actual["files"] != plan.get("files"):
         raise ValueError("The local sample changed after preview. Refresh the sample list and preview again.")
     return provenance

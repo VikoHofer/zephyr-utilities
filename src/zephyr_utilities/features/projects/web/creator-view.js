@@ -2,7 +2,8 @@ import {activeJob} from "./environment-state.js";
 import {createCreatorSession, creatorBoards, creatorSdks, creatorTemplates, creatorTemplateId, creatorTemplateLabel, selectedCreatorTemplate, currentCreatorJob} from "./creator-state.js";
 import {createConfigurationView} from "./configuration-view.js";
 import {appendFragmentFacts} from "./fragment-view.js";
-import {isLocalSample, selectedSample, sampleSelectionError, sampleCheckSelection, sampleCompatibilityNotice} from "./sample-state.js";
+import {isLocalSample, selectedSample, sampleSelectionError, sampleCheckSelection, sampleCompatibilityNotice, currentSampleCompatibility} from "./sample-state.js";
+import {createOverlayView} from "./overlay-view.js";
 
 /** A review opens only after an explicit request; refreshes can only invalidate it. */
 export function createReviewDialog(dialog) {
@@ -123,6 +124,7 @@ export function mountCreator(root, context) {
     return detail;
   }
   const configurations = createConfigurationView({node, fact, choices});
+  const overlays = createOverlayView({node});
   function recipe(parent, value, operation, key = "recipe") {
     parent.replaceChildren();
     if (!value) { parent.append(node("p", "projects-muted", "Commands are unavailable. Generate a new preview.")); return; }
@@ -173,6 +175,7 @@ export function mountCreator(root, context) {
     fact(profile, "SDK installation", plan.profile?.sdk?.path, true);
     fact(profile, "Zephyr checkout", plan.profile?.zephyr?.path, true);
     fact(profile, "Template", creatorTemplateLabel(plan.template, state.templates, plan.sample));
+    overlays.render($("preview-overlays"), plan.overlay_usage, {target: plan.profile?.target, disclosureKey: "creation-preview"});
     const compatibility = $("preview-compatibility"); compatibility.replaceChildren(); compatibility.hidden = !plan.sample;
     if (plan.sample) {
       const result = plan.sample_compatibility || {status: "unknown", message: "Compatibility has not been checked for this sample and target.", details: []};
@@ -238,6 +241,9 @@ export function mountCreator(root, context) {
     for (const message of array(notice.details)) details.append(node("li", "", message));
     details.hidden = !details.childElementCount;
     renderAdaptation($("sample-check-adaptation"), notice.adaptation);
+    const overlayReport = currentSampleCompatibility(state)?.overlay_usage;
+    $("sample-check-overlays").hidden = !overlayReport;
+    if (overlayReport) overlays.render($("sample-check-overlays"), overlayReport, {target: state.form.target, disclosureKey: "sample-check"});
     $("sample-check").disabled = busy || !sampleCheckSelection(state) || check?.submitting || active;
     $("sample-check").textContent = check?.submitting ? "Starting check…" : active ? check.stale ? "Waiting for previous check…" : "Checking compatibility…" : check?.verified ? "Check again" : "Check compatibility";
     $("sample-check-cancel").hidden = !active;
@@ -280,7 +286,7 @@ export function mountCreator(root, context) {
     remove.type = "button"; remove.dataset.projectRemove = projectId;
     return remove;
   }
-  function renderAttempt(parent, attempt, projectId) {
+  function renderAttempt(parent, attempt, projectId, overlayReport) {
     const detail = node("details", "projects-attempt");
     const key = `attempt:${attempt.id}`;
     detail.dataset.disclosure = key;
@@ -296,6 +302,9 @@ export function mountCreator(root, context) {
     fact(facts, "Output directory", attempt.build_dir || attempt.context?.build_dir || attempt.context?.build_directory, true);
     fact(facts, "Effective target", attempt.context?.effective_target || attempt.context?.target || attempt.context?.board, true);
     detail.append(facts);
+    const overlayDetails = node("div");
+    overlays.render(overlayDetails, overlayReport, {target: attempt.profile?.target, freshness: attempt.context?.application_freshness, disclosureKey: key});
+    detail.append(overlayDetails);
     const buildDirectory = attempt.build_dir || attempt.context?.build_dir || attempt.context?.build_directory;
     if (buildDirectory) {
       const inspect = node("a", "projects-button", "Inspect build");
@@ -360,7 +369,7 @@ export function mountCreator(root, context) {
         card.append(actions);
         card.append(disclosure("Advanced details", `project:${project.id}:advanced`,
           node("p", "projects-muted", "Open current source and binding details in Build Inspector."), sources));
-        for (const attempt of array(project.attempts)) renderAttempt(card, attempt, project.id);
+        for (const attempt of array(project.attempts)) renderAttempt(card, attempt, project.id, project.overlay_usage_by_attempt?.[attempt.id]);
         target.append(card);
       }
       if (unavailable.length) {
@@ -374,7 +383,7 @@ export function mountCreator(root, context) {
             node("p", "projects-muted", `Created ${time(project.created_at)}`),
             node("p", "projects-banner", project.availability_reason || (project.availability === "replaced" ? "This folder was replaced." : "This folder is missing or was moved.")),
             removalButton(project.id));
-          for (const attempt of array(project.attempts)) renderAttempt(card, attempt, project.id);
+          for (const attempt of array(project.attempts)) renderAttempt(card, attempt, project.id, project.overlay_usage_by_attempt?.[attempt.id]);
           hidden.append(card);
         }
         target.append(hidden);
@@ -403,6 +412,7 @@ export function mountCreator(root, context) {
     fact(facts, "Requested target", plan.profile?.target, true);
     fact(facts, "SDK installation", plan.profile?.sdk?.path, true);
     appendFragmentFacts(facts, plan.profile, fact);
+    overlays.render($("build-preview-overlays"), plan.overlay_usage, {target: plan.profile?.target, disclosureKey: "build-preview"});
     $("build-preview-summary").replaceChildren(facts, node("p", "projects-path", `New output directory: ${plan.build_dir}`));
     if (plan.sample_compatibility) {
       const compatibility = node("div", "projects-compatibility"); compatibility.dataset.status = plan.sample_compatibility.status;

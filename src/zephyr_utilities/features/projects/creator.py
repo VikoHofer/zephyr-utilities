@@ -21,6 +21,7 @@ from .records import ProjectStore, configuration_name, identifier, now
 from .samples import preview_sample, sample_catalog
 from .sample_compatibility import check_sample, inspect_sample_requirements
 from .sample_check_identity import sample_input_guard
+from .overlay_usage import overlay_usage
 from .templates import template_catalog
 
 
@@ -120,6 +121,7 @@ class CreatorService:
                 reason = ("replaced", "The saved application path no longer refers to its original directory.")
             except OSError as exc:
                 diagnostics.append(f"Cannot check application directory {project['path']}: {exc}")
+            self._project_overlay_reports(project)
             if reason:
                 project.update(availability=reason[0], availability_reason=reason[1])
                 unavailable.append(project)
@@ -147,6 +149,37 @@ class CreatorService:
         return {"workspace": workspace, "snapshot": snapshot, "projects": projects,
                 "unavailable_projects": unavailable, "jobs": jobs,
                 "diagnostics": diagnostics, "templates": template_catalog()}
+
+    @staticmethod
+    def _project_overlay_reports(project):
+        """Expose historical selection without treating it as current filesystem state."""
+        attempts = project.get("attempts", [])
+        reports = {}
+        for attempt in attempts:
+            report = overlay_usage(attempt.get("profile") or project["profile"], project["path"],
+                files=attempt.get("sources", {}).get("files", project.get("files", [])),
+                context=attempt.get("context"), default_overlay=project.get("default_overlay"))
+            report["evidence"] = {"kind": "attempt", "attempt_id": attempt["id"],
+                "checked_at": attempt.get("finished_at") or attempt.get("started_at"),
+                "configuration_name": attempt.get("configuration", {}).get("name", "Original"),
+                "note": "Captured for this attempt. Configure again to confirm selection after changing application or board files."}
+            reports[attempt["id"]] = report
+        project["overlay_usage_by_attempt"] = reports
+        selected = {}
+        for configuration in [{"id": "", "name": "Original", "profile": project["profile"]}, *project.get("configurations", [])]:
+            profile = configuration["profile"]
+            matching = next((attempt for attempt in attempts
+                if (attempt.get("configuration", {}).get("id") or "") == configuration["id"]
+                and attempt.get("profile") == profile and reports[attempt["id"]]["status"] == "confirmed"), None)
+            if matching:
+                selected[configuration["id"]] = deepcopy(reports[matching["id"]])
+            else:
+                report = overlay_usage(profile, project["path"], files=project.get("files", []),
+                                       default_overlay=project.get("default_overlay"))
+                report["evidence"] = {"kind": "creation", "configuration_name": configuration["name"],
+                    "note": "Based on files recorded at creation. Review Configure to inspect current files and confirm overlay selection."}
+                selected[configuration["id"]] = report
+        project["overlay_usage_by_configuration"] = selected
 
     def _require_idle(self, project, workspace):
         for job in self.context.jobs.list("projects"):
@@ -216,6 +249,16 @@ class CreatorService:
         plan["profile"]["execution_fingerprint"] = execution_guard(snapshot, plan["profile"])
         if "sample" in plan:
             plan["sample_compatibility"] = self._sample_result(body, plan, snapshot)
+        checked_overlays = plan.get("sample_compatibility", {}).get("overlay_usage")
+        if isinstance(checked_overlays, dict) and checked_overlays.get("status") == "confirmed":
+            plan["overlay_usage"] = deepcopy(checked_overlays)
+            plan["overlay_usage"]["evidence"] = {"kind": "compatibility-check",
+                "checked_at": plan["sample_compatibility"].get("checked_at"),
+                "note": "Confirmed by configuring an identical temporary sample copy with this target."}
+        else:
+            plan["overlay_usage"] = overlay_usage(plan["profile"], plan["destination"], files=plan["files"],
+                                                   default_overlay=plan.get("default_overlay"))
+            plan["overlay_usage"]["evidence"] = {"kind": "creation", "note": "Expected selection; Configure confirms the actual inputs."}
         return self._remember("create", plan, environment)
 
     @staticmethod
@@ -281,6 +324,7 @@ class CreatorService:
             input_guard = sample_input_guard(profile, cancel=cancel)
             result = check_sample(profile, sample["files"], body["sample_id"],
                                   root=self.context.feature_data("projects") / "sample-checks",
+                                  default_overlay=sample["provenance"].get("default_overlay"),
                                   environ=environment, emit=emit, cancel=cancel)
             self._recheck(profile, environment, emit, cancel)
             if preview_sample(snapshot, body["sample_id"], recipe, profile=profile, cancel=cancel) != sample:
@@ -391,6 +435,19 @@ class CreatorService:
                 "operation": operation, "build_dir": str(output), "recipe": recipe, "sources": sources,
                 "parent_identity": parent_identity, "created_at": now(), "profile": profile,
                 "configuration": configuration}
+        overlay_files = deepcopy(sources["files"])
+        cmake = next((item for item in overlay_files if item["path"] == "CMakeLists.txt"), None)
+        if cmake is not None:
+            try:
+                data = read_regular(source / "CMakeLists.txt", 1024 * 1024)
+                if hashlib.sha256(data).hexdigest() == cmake["sha256"]:
+                    cmake["content"] = data.decode("utf-8")
+            except (OSError, ValueError):
+                pass
+        plan["overlay_usage"] = overlay_usage(profile, source, files=overlay_files,
+                                               default_overlay=project.get("default_overlay"))
+        plan["overlay_usage"]["evidence"] = {"kind": "build-preview", "configuration_name": configuration["name"],
+            "note": "Expected from the current application files and selection. This Configure/Build will confirm the actual inputs."}
         if project.get("sample"):
             adaptation = project["sample"].get("adaptation")
             if adaptation and adaptation.get("target") != profile["target"]:

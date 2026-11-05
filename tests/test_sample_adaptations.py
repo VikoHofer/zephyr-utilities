@@ -70,7 +70,7 @@ class RgbSampleAdaptationTests(unittest.TestCase):
                 plan = self.plan(self.profile(board))
                 provenance = plan["sample"]
                 files = {item["path"]: item["content"] for item in plan["files"]}
-                self.assertEqual(provenance["schema_version"], 2)
+                self.assertEqual(provenance["schema_version"], 3)
                 self.assertEqual(provenance["source_fingerprint"], base["fingerprint"])
                 self.assertEqual(provenance["files"], base["files"])
                 self.assertEqual(provenance["attribution"], base["attribution"])
@@ -101,7 +101,12 @@ class RgbSampleAdaptationTests(unittest.TestCase):
         self.assertEqual(base["provenance"]["schema_version"], 1)
         for target in ("some_other_board/esp32c3", "esp32c3_devkitc", "esp32c3_devkitc/esp32c3/custom", "esp32c3_devkitc@1/esp32c3"):
             with self.subTest(target=target):
-                self.assertEqual(self.preview({**self.profile(), "target": target}), base)
+                current = self.preview({**self.profile(), "target": target})
+                self.assertNotIn("adaptation", current["provenance"])
+                self.assertEqual(current["provenance"]["source_fingerprint"], base["provenance"]["fingerprint"])
+                self.assertEqual(current["provenance"]["default_overlay"]["target"], target)
+                source = next(item for item in current["files"] if item["path"] == "src/main.c")
+                self.assertEqual(source, next(item for item in base["files"] if item["path"] == "src/main.c"))
         legacy = {"profile": self.profile(), "recipe": self.recipe, "sample": base["provenance"], "files": base["files"]}
         self.assertEqual(validate_sample_plan(legacy), base["provenance"])
 
@@ -180,7 +185,7 @@ class RgbSampleAdaptationTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     validate_sample_plan(plan)
         plan = deepcopy(original)
-        plan["sample"]["schema_version"] = 3
+        plan["sample"]["schema_version"] = 4
         with self.assertRaisesRegex(ValueError, "Unsupported.*schema"):
             validate_sample_plan(plan)
 

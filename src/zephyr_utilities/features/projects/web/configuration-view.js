@@ -1,12 +1,14 @@
 import {creatorBoards, creatorSdks, selectedConfiguration} from "./creator-state.js";
 import {copyFragments, fragmentSelectionError} from "./fragment-state.js";
 import {appendFragmentFacts, createFragmentView} from "./fragment-view.js";
+import {createOverlayView, selectedOverlayUsage} from "./overlay-view.js";
 
 const array = (value) => Array.isArray(value) ? value : [];
 
 /** Keep configuration controls mounted while drafts and filtered choices change. */
 export function createConfigurationView({node, fact, choices}) {
   const fragmentView = createFragmentView({node, choices});
+  const overlayView = createOverlayView({node});
   function captureFocus(root) {
     const control = root.ownerDocument.activeElement;
     const section = control?.closest("[data-configuration-project]");
@@ -38,6 +40,7 @@ export function createConfigurationView({node, fact, choices}) {
     remove.type = "button"; remove.dataset.configurationRemove = project.id;
     row.append(label, add, remove);
     const facts = node("dl", "projects-identity"); facts.dataset.configurationFacts = "";
+    const overlays = node("div"); overlays.dataset.configurationOverlays = "";
     const notice = node("p", "projects-banner"); notice.dataset.configurationNotice = "";
     notice.setAttribute("role", "status"); notice.setAttribute("aria-live", "polite");
     const form = node("form", "projects-configuration-form");
@@ -68,7 +71,7 @@ export function createConfigurationView({node, fact, choices}) {
     const save = node("button", "projects-button primary", "Save configuration"); save.type = "submit"; save.dataset.configurationSave = "";
     const close = node("button", "projects-button", "Close"); close.type = "button"; close.dataset.configurationClose = project.id;
     actions.append(save, close); form.append(grid, targetNote, fragmentView.create(), actions);
-    section.append(row, facts, notice, form);
+    section.append(row, facts, overlays, notice, form);
     return section;
   }
   function update(section, project, state, busy) {
@@ -94,6 +97,8 @@ export function createConfigurationView({node, fact, choices}) {
       fact(facts, "SDK installation", selected?.profile?.sdk?.path, true);
       appendFragmentFacts(facts, selected?.profile, fact);
     }
+    overlayView.render(section.querySelector("[data-configuration-overlays]"), selectedOverlayUsage(project, selected?.id),
+      {target: selected?.profile?.target, disclosureKey: `project:${project.id}:configuration:${selected?.id || "original"}`});
     const notice = section.querySelector("[data-configuration-notice]");
     notice.hidden = state.configurationNotice?.project_id !== project.id;
     notice.textContent = notice.hidden ? "" : state.configurationNotice.message;

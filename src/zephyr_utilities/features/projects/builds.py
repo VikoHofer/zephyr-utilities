@@ -193,7 +193,7 @@ def _artifact(path, base, kind):
             if size > MAX_ARTIFACT_BYTES:
                 raise ValueError("Artifact grew beyond the hashing limit.")
             digest.update(chunk)
-            if kind in {"cmake-cache", "build-info"} and len(content) <= 8 * 1024 * 1024:
+            if kind in {"cmake-cache", "build-info", "devicetree-dependencies", "preprocessed-dts"} and len(content) <= 8 * 1024 * 1024:
                 content.extend(chunk)
         after = os.fstat(stream.fileno())
         def identity(info):
@@ -224,13 +224,56 @@ def _yaml_mapping(content):
     return data.get("cmake", {})
 
 
+def _dts_dependencies(content, source_dir):
+    """Read one generated Make dependency rule without evaluating Make syntax."""
+    if len(content) > 2 * 1024 * 1024:
+        raise ValueError("Device Tree dependencies exceed the 2 MiB metadata limit.")
+    text = re.sub(r"\\\r?\n", "", content.decode("utf-8")).strip()
+    match = re.match(r"[^:\n]+:\s*", text)
+    if match is None or "\n" in text or "\r" in text or "$" in text or "\x00" in text:
+        raise ValueError("Device Tree dependencies use unsupported Make syntax.")
+    tokens, current, escaped = [], [], False
+    for character in text[match.end():]:
+        if escaped:
+            current.append(character)
+            escaped = False
+        elif character == "\\":
+            escaped = True
+        elif character == "#":
+            raise ValueError("Device Tree dependencies contain an unsupported comment.")
+        elif character.isspace():
+            if current:
+                tokens.append("".join(current))
+                current = []
+        else:
+            current.append(character)
+    if escaped:
+        raise ValueError("Device Tree dependency path has an incomplete escape.")
+    if current:
+        tokens.append("".join(current))
+    if not tokens or len(tokens) > 20000:
+        raise ValueError("Device Tree dependencies are empty or exceed the path limit.")
+    paths, seen = [], set()
+    for token in tokens:
+        if len(token) > 4096 or any(ord(c) < 32 for c in token):
+            raise ValueError("Device Tree dependency path is invalid.")
+        path = Path(token)
+        path = os.path.normpath(path if path.is_absolute() else Path(source_dir) / path)
+        if path not in seen:
+            paths.append(path)
+            seen.add(path)
+    return paths
+
+
 def capture_context(profile, source_dir, build_dir, *, configured=False):
     """Capture bounded text metadata and live artifact identities; never unpickle build data."""
     output = Path(build_dir)
     diagnostics, artifacts, cache, info = [], [], {}, {}
+    dependencies, preprocessed = None, None
     files = [("CMakeCache.txt", "cmake-cache"), ("build_info.yml", "build-info"),
              ("zephyr_modules.txt", "modules"), ("compile_commands.json", "compile-commands"),
              ("zephyr/zephyr.dts.pre", "preprocessed-dts"), ("zephyr/zephyr.dts", "resolved-dts"),
+             ("zephyr/zephyr.dts.d", "devicetree-dependencies"),
              ("zephyr/.config", "kconfig"), ("zephyr/zephyr.elf", "elf"),
              ("zephyr/zephyr.bin", "binary"), ("zephyr/zephyr.hex", "hex"), ("zephyr/zephyr.map", "map"),
              ("zephyr/include/generated/zephyr/devicetree_generated.h", "devicetree-header")]
@@ -248,6 +291,12 @@ def capture_context(profile, source_dir, build_dir, *, configured=False):
                         cache[name_type.split(":", 1)[0]] = value
             elif kind == "build-info":
                 info = _yaml_mapping(content)
+            elif kind == "devicetree-dependencies":
+                dependencies = _dts_dependencies(content, source_dir)
+            elif kind == "preprocessed-dts":
+                if len(content) > 8 * 1024 * 1024:
+                    raise ValueError("Preprocessed Device Tree exceeds the 8 MiB metadata limit.")
+                preprocessed = content.decode("utf-8")
         except FileNotFoundError:
             continue
         except (OSError, ValueError, RuntimeError, yaml.YAMLError) as exc:
@@ -263,6 +312,15 @@ def capture_context(profile, source_dir, build_dir, *, configured=False):
     if board_name:
         target = board_name + (f"@{revision}" if revision else "") + (f"/{qualifiers}" if qualifiers else "")
     compiler = cache.get("CMAKE_C_COMPILER")
+    direct_dts = mapping("devicetree").get("files")
+    dependency_coverage = "unknown" if dependencies is None else "partial"
+    # Header paths in CPP line markers commonly contain /include/. Only DTS
+    # directives outside comments and strings can make dtlib read extra files.
+    dts_tokens = re.sub(r'"(?:\\.|[^"\\])*"|/\*.*?\*/|//[^\n]*', "", preprocessed or "", flags=re.DOTALL)
+    if (dependencies is not None and preprocessed is not None and isinstance(direct_dts, list) and
+            all(isinstance(path, str) and path in dependencies for path in direct_dts) and
+            re.search(r"/(?:include|incbin)/", dts_tokens) is None):
+        dependency_coverage = "complete"
     context = {"schema_version": 1, "source_dir": str(source_dir), "build_dir": str(output), "image": "application",
                "requested_target": profile.get("target"), "effective_target": target,
                "board": board_name, "revision": revision, "qualifiers": qualifiers,
@@ -275,6 +333,10 @@ def capture_context(profile, source_dir, build_dir, *, configured=False):
                "configuration": {"mode": "automatic", "files": mapping("kconfig").get("files", []),
                                  "user_files": mapping("kconfig").get("user-files", [])},
                "devicetree": {"mode": "automatic", "files": mapping("devicetree").get("files", []),
+                              "files_observed": isinstance(mapping("devicetree").get("files"), list),
+                              "user_files": mapping("devicetree").get("user-files", []),
+                              "extra_user_files": mapping("devicetree").get("extra-user-files", []),
+                              "dependencies": dependencies or [], "dependency_coverage": dependency_coverage,
                               "include_dirs": mapping("devicetree").get("include-dirs", []),
                               "binding_dirs": mapping("devicetree").get("bindings-dirs", [])},
                "freshness": "captured-at-attempt", "input_coverage": "partial", "hardware_validated": False,

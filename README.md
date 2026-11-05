@@ -160,6 +160,10 @@ For local samples, use **Check compatibility** to configure a temporary copy and
 the selected board's hardware requirements. Missing requirements block preview; unverified
 results show a warning. Blinky uses a reviewed RGB LED adaptation on the official
 ESP32-C3 DevKitC/M targets. Other boards retain the GPIO sample and are checked for `led0`.
+Every new project also includes an editable default overlay named for its exact board
+target, including discovered custom boards. Previews show expected overlay selection;
+completed configurations show the files actually used, separately from copied overlays
+for other boards. Existing project files are preserved.
 Open **Applications** in the Project Creator sidebar. Choose **Configure** or **Build**, review the exact command and
 new output path, then start that operation. Each attempt retains its outcome and bounded
 log; leaving the view does not cancel it.

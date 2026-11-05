@@ -15,6 +15,7 @@ from zephyr_utilities.features.projects.creation import (
     apply_project, open_directory, path_identity, preview_project, validate_identity,
 )
 from zephyr_utilities.features.projects import creation
+from zephyr_utilities.features.projects.templates import render_template
 
 
 class ProjectCreationTests(unittest.TestCase):
@@ -61,6 +62,7 @@ class ProjectCreationTests(unittest.TestCase):
         # Sample scanning has its own tests. These fixtures isolate publication
         # after the scanner has accepted exact nested source and license bytes.
         plan = self.preview()
+        plan.pop("default_overlay", None)
         plan["template"] = {"id": "local-sample", "version": 1}
         plan["sample"] = {"schema_version": 1, "id": "hello-world", "fingerprint": "a" * 64}
         for path, content in {
@@ -75,12 +77,13 @@ class ProjectCreationTests(unittest.TestCase):
         plan = self.preview()
         self.assertEqual(list(self.workspace.iterdir()), before)
         files = {item["path"]: item for item in plan["files"]}
-        self.assertEqual(set(files), {"CMakeLists.txt", "prj.conf", "src/main.c", ".gitignore", "README.md"})
+        self.assertEqual(set(files), {"CMakeLists.txt", "prj.conf", "src/main.c", ".gitignore", "README.md", plan["default_overlay"]["path"]})
         for item in files.values():
             self.assertEqual(item["sha256"], hashlib.sha256(item["content"].encode()).hexdigest())
         self.assertIn(plan["recipe"]["display_configure"], files["README.md"]["content"])
         self.assertIn(plan["recipe"]["display_build"], files["README.md"]["content"])
-        self.assertNotIn(self.body["target"], files["CMakeLists.txt"]["content"])
+        self.assertIn(self.body["target"], files["CMakeLists.txt"]["content"])
+        self.assertEqual(plan["default_overlay"]["target"], self.body["target"])
         self.assertNotIn(str(self.sdk), files["src/main.c"]["content"])
         self.assertEqual(plan["profile"]["environment_fingerprint"], self.snapshot["fingerprint"])
 
@@ -90,42 +93,65 @@ class ProjectCreationTests(unittest.TestCase):
         destination = Path(project["path"])
         self.assertEqual(project["directory_identity"], path_identity(destination))
         self.assertEqual(project["profile"]["target"], self.body["target"])
-        self.assertEqual(project["template"], {"id": "minimal-c", "version": 1})
+        self.assertEqual(project["template"], {"id": "minimal-c", "version": 2})
+        self.assertEqual(project["default_overlay"], plan["default_overlay"])
         for item in plan["files"]:
             self.assertEqual((destination / item["path"]).read_text(), item["content"])
         self.assertEqual({path.name for path in destination.parent.iterdir()}, {destination.name})
 
-    def test_default_and_explicit_c_preserve_version_one_generated_bytes(self):
+    def test_v2_overlay_activation_cannot_be_removed_or_edited_with_a_matching_file_hash(self):
+        for template_id in ("minimal-c", "minimal-cpp"):
+            for change in ("removed", "edited"):
+                with self.subTest(template=template_id, change=change):
+                    plan = self.preview(template_id=template_id)
+                    cmake = next(item for item in plan["files"] if item["path"] == "CMakeLists.txt")
+                    if change == "removed":
+                        cmake["content"] = render_template({"id": template_id, "version": 1}, plan["name"],
+                                                           plan["profile"], plan["recipe"])["CMakeLists.txt"]
+                    else:
+                        cmake["content"] = cmake["content"].replace("list(PREPEND EXTRA_DTC_OVERLAY_FILE",
+                                                                  "list(APPEND EXTRA_DTC_OVERLAY_FILE")
+                    cmake["sha256"] = hashlib.sha256(cmake["content"].encode()).hexdigest()
+                    with self.assertRaisesRegex(ValueError, "overlay activation changed"):
+                        apply_project(plan)
+                    self.assertFalse(Path(plan["destination"]).exists())
+        self.assertFalse((self.workspace / "applications").exists())
+
+    def test_retained_version_one_c_preserves_generated_bytes_and_remains_publishable(self):
         # Recorded before introducing template selection; only the fixture root
         # is normalized so the published version-one README is covered as well.
         expected = "a8fc55462439aa95cdd0430653030ef4e2bfe0934aef20240f8af763a9757b36"
-        for changes in ({}, {"template_id": "minimal-c"}):
-            with self.subTest(changes=changes):
-                plan = self.preview(**changes)
-                contents = {item["path"]: item["content"].replace(str(self.root), "<ROOT>")
-                            for item in plan["files"]}
-                self.assertEqual(hashlib.sha256(json.dumps(contents, sort_keys=True).encode()).hexdigest(), expected)
-                self.assertEqual(plan["template"], {"id": "minimal-c", "version": 1})
+        plan = self.preview()
+        plan["template"] = {"id": "minimal-c", "version": 1}
+        plan.pop("default_overlay")
+        contents = render_template(plan["template"], plan["name"], plan["profile"], plan["recipe"])
+        normalized = {name: value.replace(str(self.root), "<ROOT>") for name, value in contents.items()}
+        self.assertEqual(hashlib.sha256(json.dumps(normalized, sort_keys=True).encode()).hexdigest(), expected)
+        plan["files"] = [{"path": name, "content": value, "sha256": hashlib.sha256(value.encode()).hexdigest()}
+                         for name, value in contents.items()]
+        project = apply_project(plan)
+        self.assertEqual(project["template"], {"id": "minimal-c", "version": 1})
+        self.assertNotIn("default_overlay", project)
 
     def test_cpp_preview_and_publication_use_independent_cpp_sources(self):
         plan = self.preview(template_id="minimal-cpp")
         self.assertFalse(Path(plan["destination"]).parent.exists())
-        self.assertEqual(plan["template"], {"id": "minimal-cpp", "version": 1})
+        self.assertEqual(plan["template"], {"id": "minimal-cpp", "version": 2})
         files = {item["path"]: item["content"] for item in plan["files"]}
-        self.assertEqual(set(files), {"CMakeLists.txt", "prj.conf", "src/main.cpp", ".gitignore", "README.md"})
+        self.assertEqual(set(files), {"CMakeLists.txt", "prj.conf", "src/main.cpp", ".gitignore", "README.md", plan["default_overlay"]["path"]})
         self.assertIn("project(hello_test LANGUAGES C CXX)", files["CMakeLists.txt"])
         self.assertIn("target_sources(app PRIVATE src/main.cpp)", files["CMakeLists.txt"])
         self.assertEqual(files["prj.conf"].splitlines()[1:], ["CONFIG_CPP=y", "CONFIG_PRINTK=y"])
         self.assertIn("constexpr", files["src/main.cpp"])
-        self.assertIn("A minimal Zephyr C++ application generated from the minimal-cpp template, version 1.",
+        self.assertIn("A minimal Zephyr C++ application generated from the minimal-cpp template, version 2.",
                       files["README.md"])
         self.assertIn(plan["recipe"]["display_configure"], files["README.md"])
         self.assertIn(plan["recipe"]["display_build"], files["README.md"])
-        for path in ("CMakeLists.txt", "prj.conf", "src/main.cpp"):
+        for path in ("prj.conf", "src/main.cpp"):
             self.assertNotIn(self.body["target"], files[path])
             self.assertNotIn(str(self.sdk), files[path])
         project = apply_project(plan)
-        self.assertEqual(project["template"], {"id": "minimal-cpp", "version": 1})
+        self.assertEqual(project["template"], {"id": "minimal-cpp", "version": 2})
         for item in plan["files"]:
             self.assertEqual((Path(project["path"]) / item["path"]).read_text(), item["content"])
         self.assertFalse((Path(project["path"]) / "src/main.c").exists())
@@ -140,7 +166,7 @@ class ProjectCreationTests(unittest.TestCase):
 
     def test_unknown_template_identity_or_version_cannot_be_published(self):
         plan = self.preview()
-        identities = [None, {}, {"id": "unknown", "version": 1}, {"id": "minimal-c", "version": 2},
+        identities = [None, {}, {"id": "unknown", "version": 1}, {"id": "minimal-c", "version": 3},
                       {"id": "minimal-c", "version": True}, {"id": "minimal-c", "version": 1.0},
                       {"id": "minimal-c", "version": "1"}, {"id": "minimal-c", "version": 1, "path": "custom"}]
         for identity in identities:

@@ -89,6 +89,12 @@ and workspace. Loading, empty and error outcomes also need visible feedback. Bac
 polling must not scroll, focus, open dialogs or switch the user's view.
 Use shared `--app-*` design tokens and the [UI guidelines](ui-guidelines.md).
 
+When extending Project Creator templates, retain its board-named default overlay for
+built-in and discovered custom boards. Preserve existing sample overlay behavior and
+explicit fragment replacement. Present overlay usage as expected until configuration
+provides evidence; keep overlays copied for other boards distinct from selected inputs.
+See [the overlay contract](decisions/0016-default-overlays-and-usage.md).
+
 Render imported text through `textContent` or equivalent safe DOM construction. Bundle
 all runtime assets; do not add CDN scripts or require another web server. Preserve keyboard
 access, useful empty states, actionable errors and clear progress/cancellation feedback.

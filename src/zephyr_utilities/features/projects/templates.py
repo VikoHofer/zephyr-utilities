@@ -1,13 +1,15 @@
 """Trusted, versioned application templates shipped with Project Creator."""
 
+from .default_overlay import add_default_overlay, default_overlay
+
 
 _TEMPLATES = {
     "minimal-c": {
-        "id": "minimal-c", "version": 1, "title": "Minimal C", "language": "C",
+        "id": "minimal-c", "version": 2, "title": "Minimal C", "language": "C",
         "description": "A small C application that prints a greeting.",
     },
     "minimal-cpp": {
-        "id": "minimal-cpp", "version": 1, "title": "Minimal C++", "language": "C++",
+        "id": "minimal-cpp", "version": 2, "title": "Minimal C++", "language": "C++",
         "description": "A small C++ application that prints a greeting without standard-library extras.",
     },
     "local-sample": {
@@ -33,22 +35,27 @@ def select_template(template_id):
 def validate_template(value):
     """Validate a retained plan's complete template identity before publication."""
     if (not isinstance(value, dict) or set(value) != {"id", "version"} or
-            type(value.get("version")) is not int or value["version"] != 1):
+            type(value.get("version")) is not int or value["version"] not in {1, 2} or
+            not isinstance(value.get("id"), str) or value["id"] not in _TEMPLATES or
+            value["id"] == "local-sample" and value["version"] != 1):
         raise ValueError("Unsupported application template identity or version. Preview again.")
-    return select_template(value["id"])
+    return dict(value)
 
 
-def template_paths(template):
+def template_paths(template, profile=None):
     """Only these generated paths may be published for the selected template."""
     identity = validate_template(template)
     if identity["id"] == "local-sample":
         raise ValueError("Local sample files require a validated source preview.")
     source = "src/main.cpp" if identity["id"] == "minimal-cpp" else "src/main.c"
-    return {"CMakeLists.txt", "prj.conf", source, ".gitignore", "README.md"}
+    paths = {"CMakeLists.txt", "prj.conf", source, ".gitignore", "README.md"}
+    if identity["version"] == 2:
+        paths.add(default_overlay((profile or {}).get("target"))["path"])
+    return paths
 
 
 def render_template(template, name, profile, recipe):
-    """Render version-one sources and their standalone build instructions."""
+    """Render retained version-one or current sources and standalone build instructions."""
     identity = validate_template(template)
     if identity["id"] == "local-sample":
         raise ValueError("Local samples require a validated source preview.")
@@ -57,7 +64,7 @@ def render_template(template, name, profile, recipe):
     source = "src/main.cpp" if cpp else "src/main.c"
     languages = "C CXX" if cpp else "C"
     readme = (f"# {name}\n\nA minimal Zephyr {descriptor['language']} application generated from the "
-              f"{identity['id']} template, version 1.\n\n"
+              f"{identity['id']} template, version {identity['version']}.\n\n"
               "The application sources do not depend on Zephyr Utilities. The selected board and SDK\n"
               "are arguments to the following commands, not hardcoded into the source.\n\n"
               f"Requested target: `{profile['target']}`.\n\n"
@@ -75,7 +82,7 @@ def render_template(template, name, profile, recipe):
         source_content = ("#include <zephyr/kernel.h>\n\n"
                           f'constexpr char greeting[] = "Hello from {name}!";\n\n'
                           'int main(void)\n{\n\tprintk("%s\\n", greeting);\n\treturn 0;\n}\n')
-    return {
+    contents = {
         "CMakeLists.txt": ("cmake_minimum_required(VERSION 3.20.0)\n\n"
                            "find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})\n"
                            f"project({name} LANGUAGES {languages})\n\n"
@@ -86,3 +93,13 @@ def render_template(template, name, profile, recipe):
         ".gitignore": "/build/\n",
         "README.md": readme,
     }
+    if identity["version"] == 2:
+        contents, overlay = add_default_overlay(contents, profile["target"])
+        contents["README.md"] += (
+            f"\n## Default application overlay\n\nEdit `{overlay['path']}` for `{overlay['target']}`. "
+            "It starts empty and adds no guessed hardware mapping. Automatic overlay discovery is preserved; "
+            "this overlay follows discovered upstream overlays and precedes appended overlays.\n\n"
+            "Use a fresh build directory when changing overlay selection. Replace selection omits this default "
+            "unless explicitly selected. For an existing standalone build, "
+            "`-DZEPHYR_UTILS_DEFAULT_OVERLAY=OFF` disables its automatic inclusion.\n")
+    return contents

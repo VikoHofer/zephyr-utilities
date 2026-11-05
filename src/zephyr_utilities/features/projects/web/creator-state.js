@@ -7,9 +7,10 @@ const defaults = () => ({name: "my_app", destination: "", search: "", board_id: 
 const configurationDefaults = () => ({name: "", search: "", board_id: "", target: "", sdk_id: ""});
 const array = (value) => Array.isArray(value) ? value : [];
 const templateLanguages = {"minimal-c": "C", "minimal-cpp": "C++", "local-sample": "C"};
+const templateVersion = (entry) => entry?.id === "local-sample" ? entry.version === 1 : [1, 2].includes(entry?.version);
 export function creatorTemplates(value) {
   if (!Array.isArray(value) || value.length > 3 || new Set(value.map((entry) => entry?.id)).size !== value.length) return [];
-  if (!value.every((entry) => entry && Object.hasOwn(templateLanguages, entry.id) && entry.version === 1 && entry.language === templateLanguages[entry.id]
+  if (!value.every((entry) => entry && Object.hasOwn(templateLanguages, entry.id) && templateVersion(entry) && entry.language === templateLanguages[entry.id]
     && typeof entry.title === "string" && entry.title.trim() && typeof entry.description === "string" && entry.description.trim())) return [];
   return value;
 }
@@ -18,7 +19,7 @@ export const selectedCreatorTemplate = (state) => creatorTemplates(state.templat
 export function creatorTemplateLabel(template, templates, sample) {
   if (template?.id === "local-sample" && template.version === 1) return sampleLabel(sample);
   const descriptor = creatorTemplates(templates).find((entry) => entry.id === template?.id && entry.version === template?.version);
-  const title = descriptor?.title || (template?.version === 1 && Object.hasOwn(templateLanguages, template?.id) ? `Minimal ${templateLanguages[template.id]}` : template?.id);
+  const title = descriptor?.title || (templateVersion(template) && Object.hasOwn(templateLanguages, template?.id) ? `Minimal ${templateLanguages[template.id]}` : template?.id);
   return title ? `${title} · version ${template.version ?? "unknown"}` : "Template unknown";
 }
 export const creatorBoards = (snapshot, query = "") => filterBoards(array(snapshot?.boards).filter((board) => board.status === "discovered" && array(board.targets).length), array(snapshot?.socs), {query});

@@ -63,7 +63,10 @@ class SampleCompatibilityTests(unittest.TestCase):
         (build / "zephyr/zephyr.dts").write_text("/dts-v1/; / {};\n")
         (build / "zephyr/.config").write_text(self.config)
         self.compile_commands(build, source)
-        return {"status": "configured"}
+        direct = ["/synthetic/board.dts", str(source / "captured.overlay")]
+        return {"status": "configured", "context": {"configured": True, "source_dir": str(source),
+                "requested_target": profile["target"], "devicetree": {"files_observed": True, "files": direct,
+                "dependencies": direct, "dependency_coverage": "complete"}}}
 
     def compile_commands(self, build, source, entries=None):
         entries = entries if entries is not None else [{
@@ -95,6 +98,9 @@ class SampleCompatibilityTests(unittest.TestCase):
         original = deepcopy(self.profile)
         result, configure, probe = self.run_check(environ={"SECRET": "private"})
         self.assertEqual(result["status"], "compatible")
+        self.assertEqual(result["overlay_usage"]["status"], "confirmed")
+        self.assertEqual(result["overlay_usage"]["files"][0]["path"], "captured.overlay")
+        self.assertEqual(result["overlay_usage"]["files"][0]["state"], "active")
         self.assertIn("not tested", " ".join(result["details"]))
         self.assertEqual(self.profile, original)
         self.assertEqual(configure.call_args.args[0], original)

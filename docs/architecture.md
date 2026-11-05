@@ -144,12 +144,17 @@ Unknown formats are preserved. Interrupted work is shown as interrupted after re
 not resumed. See [ADR 0004](decisions/0004-reviewed-project-creation.md) and the
 [creator contract](project-creator.md).
 
-Curated local sample copies add optional version-1 source provenance to the existing
+Curated local sample copies add optional versioned source provenance to the existing
 project record. A bounded source adapter preserves upstream files and license evidence;
 source fingerprints are checked independently of environment observations. The reviewed
 publisher supports nested files and retains the same no-replacement and cleanup guards
 for built-in templates. Saved copies do not depend on their upstream sample directory.
 See [ADR 0012](decisions/0012-reviewed-local-sample-cloning.md).
+New Minimal C/C++ templates use version 2 and new target-selected sample previews use
+provenance version 3. They include a board-named default overlay without suppressing
+upstream defaults; older versions remain readable. Project Creator distinguishes expected
+overlay selection from captured configuration inputs and preserves historical evidence.
+See [ADR 0016](decisions/0016-default-overlays-and-usage.md).
 
 ## Browser feature boundary
 

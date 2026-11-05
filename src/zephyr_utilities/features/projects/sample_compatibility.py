@@ -12,6 +12,7 @@ from tempfile import TemporaryDirectory
 
 from .builds import execute_build
 from .creation import path_identity
+from .overlay_usage import overlay_usage
 from .probing import check_cancel, run_probe
 
 
@@ -327,7 +328,7 @@ def inspect_sample_requirements(profile, files, sample_id, build_dir, *, source_
     return result
 
 
-def check_sample(profile, files, sample_id, *, root, environ=None, emit=None, cancel=None):
+def check_sample(profile, files, sample_id, *, root, environ=None, emit=None, cancel=None, default_overlay=None):
     """Configure reviewed sample files in disposable storage after an explicit request."""
     check_cancel(cancel)
     contents = _validated_files(files)
@@ -365,6 +366,9 @@ def check_sample(profile, files, sample_id, *, root, environ=None, emit=None, ca
             if result.get("status") != "configured":
                 return _result("unknown", "The sample could not be configured; compatibility is unverified.",
                                [result.get("error", "Configuration did not complete."), *recent])
-            return inspect_sample_requirements(profile, files, sample_id, build, source_dir=source, emit=emit, cancel=cancel)
+            compatibility = inspect_sample_requirements(profile, files, sample_id, build, source_dir=source, emit=emit, cancel=cancel)
+            compatibility["overlay_usage"] = overlay_usage(profile, source, files=files, context=result.get("context"),
+                                                           default_overlay=default_overlay)
+            return compatibility
         except (OSError, ValueError) as exc:
             return _result("unknown", "The sample could not be configured; compatibility is unverified.", [str(exc), *recent])

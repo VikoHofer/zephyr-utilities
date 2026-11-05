@@ -116,6 +116,16 @@
 .projects-feature .projects-compatibility-summary {font-weight:600;font-size:12px;padding:9px 0}
 .projects-feature .projects-compatibility-summary[data-status="incompatible"] {color:var(--app-danger)}
 .projects-feature .projects-compatibility-summary[data-status="unknown"] {color:var(--app-warning)}
+.projects-feature .projects-overlay-usage {min-width:0;border:1px solid var(--app-border);border-radius:7px;background:var(--app-surface-subtle);padding:12px 15px;margin:13px 0}
+.projects-feature .projects-overlay-heading {display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:5px 12px;margin-bottom:5px}
+.projects-feature .projects-overlay-heading h4 {font-size:12px;margin:0;font-weight:650}
+.projects-feature .projects-overlay-files {list-style:none;padding:0;margin:8px 0}
+.projects-feature .projects-overlay-files>li {padding:7px 0;border-top:1px solid var(--app-border)}
+.projects-feature .projects-overlay-file-heading {display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:4px 12px}
+.projects-feature .projects-overlay-state {font-size:10px;font-weight:600;color:var(--app-muted)}
+.projects-feature .projects-overlay-note {font-size:10px;color:var(--app-muted);margin-top:8px;line-height:1.5}
+.projects-feature .projects-overlay-usage>details>summary {padding:6px 0}
+.projects-feature .projects-overlay-usage[data-overlay-status="unknown"] {border-left:3px solid var(--app-warning-border)}
 .projects-feature .projects-preview-file {border-top:1px solid var(--app-border);padding:3px 0 10px}
 .projects-feature .projects-preview-file summary {font-size:11px}
 .projects-feature .projects-recipe {margin-top:13px}

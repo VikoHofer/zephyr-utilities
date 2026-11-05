@@ -68,6 +68,10 @@ Visual editing and TinyML experiment analysis remain planned.
   technical details. Support Escape, keyboard focus, cancellation and return to the trigger.
 - Verify actions from a scrolled page and at narrow widths, including error/empty states,
   leaving/reopening a feature and late responses after navigation or workspace changes.
+- New Project Creator templates must include an editable default overlay named for the
+  exact target, including discovered custom boards, without suppressing sample defaults.
+  Show predicted overlay selection separately from captured configuration evidence;
+  copied overlay files alone do not establish use. See [default overlays](docs/decisions/0016-default-overlays-and-usage.md).
 
 ## Data and process rules
 

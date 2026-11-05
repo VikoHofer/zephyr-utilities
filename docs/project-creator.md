@@ -162,13 +162,15 @@ metadata, API routes and the remaining P3 scope. Overlay editing remains planned
 
 ## Generated files and independent use
 
-Both built-in templates are version 1. They produce five files:
+Both built-in templates now use version 2. They produce six files; retained version-1
+projects remain supported without being rewritten:
 
 ```text
 <application>/
   CMakeLists.txt
   prj.conf
   src/main.c        # main.cpp for Minimal C++
+  overlays/<exact-target>.overlay
   .gitignore
   README.md
 ```
@@ -184,10 +186,39 @@ Additional C++ features can be configured in application fragments later. The se
 SDK must provide a compatible C++ compiler; explicit configure/build establishes
 compatibility. See [Zephyr's C++ support](https://docs.zephyrproject.org/latest/develop/languages/cpp/index.html).
 
-The sources have no board-specific LED or sensor requirement. They do not require an
-application overlay. The board and SDK appear in build arguments, not in the portable
-C or C++ source. Zephyr defines the usual application files and permits direct CMake builds;
+The sources have no board-specific LED or sensor requirement. The default overlay starts
+with comments only and provides a place for your hardware changes. The board and SDK
+appear in build arguments, not in the portable C or C++ source. Zephyr defines the usual application files and permits direct CMake builds;
 see [Zephyr application development](https://docs.zephyrproject.org/latest/develop/application/index.html).
+
+## Default overlays and selected inputs
+
+Every new application, including local samples and discovered custom-board targets, has
+an editable overlay named for its creation target. For example,
+`nrf54l15dk/nrf54l15/cpuapp` produces
+`overlays/nrf54l15dk_nrf54l15_cpuapp.overlay`. Names include qualifiers and requested
+revisions. This file does not create a board port or invent a pin assignment.
+
+The generated CMake block adds this overlay for that exact target in Automatic and
+Append mode. Keeping it under `overlays/` avoids hiding an existing sample `app.overlay`
+or board-specific overlay. Append applies the explicit files after the default; a fresh
+Replace configuration uses your selected list without automatically adding the default.
+You can include the default explicitly in that list. Switching to another target does
+not apply the original target's default. Existing applications and newly saved build
+configurations are not silently given new files.
+
+For standalone builds, `ZEPHYR_UTILS_DEFAULT_OVERLAY` records whether the default is
+enabled. Use a new build directory when changing overlay selection; alternatively set
+that CMake option explicitly. Reconfiguration with the same selection keeps the default.
+
+Creation and build reviews show **Expected overlays** before configuration. A sample
+compatibility check or a completed Configure/Build records actual Device Tree inputs.
+The selected saved configuration and attempt details show that captured result, including
+the target and time. **Other overlay files** explains copied files for other boards and
+preserved originals separately. Base board DTS files are shown separately from overlays.
+Missing or unsupported evidence stays unknown; configure again after editing inputs.
+The list of available files in the fragment picker is not a list of files being used.
+See [the default-overlay decision](decisions/0016-default-overlays-and-usage.md).
 
 The generated README contains the selected direct CMake/Ninja commands. These work
 without the utilities' stored profile and use `build/manual`; choose another output
@@ -226,8 +257,10 @@ files, output directories and incomplete or oversized scans. An unsupported samp
 needs an explicit adapter extension, not a best-effort partial copy.
 
 For an unadapted sample, the preview contains the complete supported sample tree, including upstream README,
-`sample.yaml`, configuration files and board overlays. Upstream contents and CMake
-project names are preserved. The chosen application name names its new directory and
+`sample.yaml`, configuration files and board overlays. Source contents and CMake
+project names are preserved. The root CMake gains the default-overlay activation block;
+its previous contents are retained at `upstream/original/CMakeLists.txt` with hashes.
+The chosen application name names its new directory and
 saved entry. Root `LICENSE` and `REUSE.toml`, and an applicable root `NOTICE` when
 present, accompany the copy. `ZEPHYR-SAMPLE.md` adds independent build commands and
 `zephyr-sample.json` records origin and file hashes. All added files appear in the
@@ -378,16 +411,18 @@ writing. The existing `{id, version}` template identity needs no persistent migr
 `local-sample` additionally requires a supported `sample_id` and its 64-character
 SHA-256 `sample_fingerprint` from the current catalogue. Other templates reject both
 sample fields. The catalogue returns `available`, `missing` or `unsupported` entries;
-only available entries have a usable fingerprint. Unadapted copies retain version-1
-`sample` provenance; adapted copies use version 2 with original source identity,
-adapter identity, input evidence and generated file hashes. Both envelopes are retained
-in the plan/project and independently revalidated during creation.
+only available entries have a usable fingerprint. New target-selected copies use
+`sample` provenance version 3, including default-overlay metadata and hashes for the
+changed CMake, archived CMake and generated overlay. RGB adaptations additionally retain
+their adapter identity and input evidence. Versions 1 and 2 remain supported for retained
+plans and saved projects. Provenance is independently revalidated during creation.
 Copies are bounded to 128 files, 1 MiB per file, 4 MiB total and eight path components.
 Generated origin/build files and license copies count toward publication limits.
 
 Compatibility results contain `status` (`compatible`, `incompatible`, or `unknown`),
 `message`, `details`, the exact workspace/sample/board/target/SDK/environment selection,
-`checked_at`, and optional `adaptation`. `sample_check_id` is an optional opaque token
+`checked_at`, optional `adaptation`, and captured `overlay_usage` when configuration
+provided usable evidence. `sample_check_id` is an optional opaque token
 for local samples only; it expires after 30 minutes or server restart. Preview rejects
 expired or mismatched supplied evidence. A matching cached incompatible result blocks
 preview even when its token is omitted; absent evidence produces a visible unknown
@@ -410,6 +445,16 @@ Automatic mode requires an empty array. Omitting `fragments` preserves the earli
 automatic profile contract. The catalogue is discovery, not an effective input list;
 selection is independently validated on Save and again before build preview.
 
+Creation/build plans include `overlay_usage`. Creator responses also provide each
+project's `overlay_usage_by_configuration` (empty key means Original) and
+`overlay_usage_by_attempt`. These are derived view reports, not mutations to stored
+attempts. Reports distinguish `expected`, `confirmed` and `unknown`; each overlay row
+has a path, state, role and reason. Historical evidence includes its attempt identity and
+time. Direct selection is distinguished from transitive includes: only complete captured
+dependency evidence can establish that an available overlay was not used. Optional
+version-1 `default_overlay` metadata on a project identifies the generated
+file, exact target and activation behavior.
+
 A recipe contains `cwd`, `environment`, `configure` and `build` argument arrays, plus
 `display_configure` and `display_build` shell renderings. The execution uses argument
 arrays and explicit working directory/environment, without a shell. Display commands
@@ -429,7 +474,7 @@ Project, configuration and attempt records are feature-owned JSON under
 
 | Record | Main fields |
 | --- | --- |
-| Project | `schema_version`, `id`, `workspace`, `name`, `path`, `profile`, template identity/version, optional versioned `sample` provenance, generated file hashes, directory identity, creation time |
+| Project | `schema_version`, `id`, `workspace`, `name`, `path`, `profile`, template identity/version, optional versioned `sample` provenance and `default_overlay`, generated file hashes, directory identity, creation time |
 | Profile | Exact requested target/board, selected SDK and tools, Zephyr identity, modules/roots, environment observation identity and execution guard, analysis choices; version 2 adds the versioned `fragments` selection |
 | Configuration | `schema_version`, `id`, `project_id`, `workspace`, `name`, `created_at`, complete `profile` |
 | Attempt | `schema_version`, `id`, `project_id`, `workspace`, selected `configuration` and `profile`, operation/status, recipe, source hashes, output path, times, context, artifacts, diagnostics, error and bounded log |
