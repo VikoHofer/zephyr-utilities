@@ -1,0 +1,9 @@
+#if defined(CONFIG_SERIAL)
+&uart0 {
+    status = "okay";
+};
+#else
+&uart0 {
+    status = "disabled";
+};
+#endif

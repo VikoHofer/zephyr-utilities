@@ -1,0 +1,306 @@
+# Device Tree Editor foundation contract
+
+Status: D0 design baseline, 2026-11-05. Runtime selection, editing, persistence and
+write APIs below are specified for later stages; they are not implemented by this
+document. The D0 executable evidence is a bounded in-memory source prototype under
+`scripts/prototypes/`, outside the installed application. See the
+[master plan](device-tree-editor-masterplan.md) and
+[ADR 0019](decisions/0019-device-tree-editor-foundation.md).
+
+## Ownership and compatibility
+
+The editor uses feature ID `devicetree`, service key `devicetree_editor`, API namespace
+`/api/devicetree/editor/`, and future shell view `devicetree/editor`. These are reserved
+names for D1 onward. D0 registers none of them. The production feature remains planned
+with no frontend, registration callback or implemented navigation entries.
+
+Inspector retains both `context.services["inspector"]` and its alias
+`context.services["devicetree"]`, pointing to the same service. Its existing POST paths
+remain unchanged:
+
+- `/api/devicetree/inspect`
+- `/api/devicetree/sources`
+- `/api/devicetree/bindings`
+- `/api/devicetree/source-file`
+- `/api/devicetree/application-sources`
+- `/api/devicetree/application-source-file`
+
+Existing `devicetree/inspect` and `devicetree/application` hash redirects still belong
+to Inspector. D1–D3 use an explicitly injected development/test feature definition in
+the existing application composition, replacing the planned definition rather than
+appending a duplicate feature ID. This adds no server or launcher. D4 may
+promote the production definition after its usable editing workflow passes its gate.
+
+| Existing implementation | Audited capability and limit |
+| --- | --- |
+| `core/context.py` | Workspace, jobs, build observations and feature storage; no project-selection provider yet |
+| `core/source_files.py` | Bounded UTF-8 reads, hashes and guarded directories; no general source writer or public file-identity receipt |
+| `core/builds.py` | Existing-output observation and selected artifact reads; source freshness remains unknown |
+| `features/projects/configurations.py` | Separate original/named configuration revisions and reviewed edits |
+| `features/projects/fragments.py` | Version-1 fragment envelope with independent Kconfig/overlay modes and ordered application-relative files |
+| `features/projects/overlay_usage.py` | Predicted, captured direct and transitive evidence remain distinct |
+| `features/projects/reviewed_files.py` | Guarded Linux exchange pattern for a restricted creator operation; not an editor writer |
+| `features/inspector/api.py` | Owns the legacy aliases and shared transient catalogue identities |
+| `features/inspector/parser.py` | Structural generated-DTS reader; unsuitable for editable overlay serialization |
+
+## Public project selection proposal for D1
+
+Introduce a small `ProjectContextProvider` protocol in `core/project_context.py` only
+when D1 adds its first editor consumer. Projects implements it; application composition
+supplies it explicitly. Core must not import Projects, and the editor must not call
+private `CreatorService` methods or read Projects-owned JSON directly.
+
+The proposed methods are read-only:
+
+```text
+capture(workspace: str, project_id: str, configuration_id: str | None)
+    -> ProjectSelection
+revalidate(selection: ProjectSelection) -> ProjectSelection
+```
+
+`capture` takes identifiers, validates their relationship and directory identities, and
+returns detached data. `None` selects the original configuration; it never means the
+most recent build. `revalidate` either returns an equivalent current selection or raises
+a context-conflict/unavailable result; it must not silently substitute another profile,
+target or environment. Neither method configures, builds, rescans or mutates records.
+Do not call the private build-preview workflow to obtain this data: opening an editor
+does not require build readiness or create a retained executable plan.
+
+For an unregistered application, the editor uses the public source reader to create a
+partial context from its selected directory. This does not import/register the project
+or invent a build profile. Target, environment and domain can remain unknown. Opening
+an existing build adds separately identified build evidence; it does not manufacture
+a saved configuration or prove that current source matches that build.
+
+### Version 1 selection and context fields
+
+The following is a minimum JSON-compatible shape. Each field is required, with explicit
+`null` where allowed. Future fields require a deliberate schema change or a documented
+optional extension; consumers reject unknown schema versions without overwriting data.
+
+| Field | Type and rule |
+| --- | --- |
+| `schema_version` | Integer `1`, excluding booleans |
+| `workspace` | Absolute validated path and captured directory identity |
+| `application` | Absolute validated path, captured ancestor/directory identities and availability |
+| `project` | `null` for unregistered sources, otherwise `{id: string, revision: integer >= 0}` |
+| `configuration` | `null` when no saved configuration is selected, otherwise `{id: string or null, revision: integer >= 0, name: string, profile_version: integer}`; a new registered app has an Original configuration before its first Configure |
+| `target` | `null`, or `{requested: string, board_id: string or null, revision: string or null, qualifiers: string[]}`; retain the original exact target string |
+| `environment` | `null`, or selected observation/tool/root identities with availability and staleness evidence; no implicit replacement with the active shell environment |
+| `fragments` | `null`, or the detached version-1 selection envelope described below |
+| `default_overlay` | `null`, or preserved project metadata plus its path, exact target and selection evidence |
+| `roots` | Ordered records of `{kind, path, origin, identity, availability}`; evidence for unknown/dynamic roots remains partial |
+| `build_evidence` | `null`, or `{inspection_id, domain, artifact hashes, captured input evidence, freshness}` verified through `context.builds` |
+| `image` | `null` when unknown, otherwise a verified image/domain identity and parent-build relationship; a domain is not inferred to be a CPU core |
+| `editing_document` | `null`, or selected validated application-relative overlay path with observed hash and predicted/captured usage state |
+| `diagnostics` | Bounded records of code, severity, message and optional source reference; no raw HTML |
+
+`ProjectSelection` is the registered portion above. The editor wraps a selection or
+partial unregistered source context as `EditorContext`, adding `id` (opaque server
+session identifier), `revision` (monotonic session integer), `fingerprint` (SHA-256 of
+the captured canonical context), and `capabilities` with explanations. Identifiers are
+not filesystem permissions. Server-side validated selection remains authoritative.
+
+Original configuration revision comes from `project.profile_revision` (legacy default
+zero); a named configuration uses its own `revision` (legacy default zero). The separate
+project registration `revision` must also be captured: reconnecting a directory changes
+context even when a named configuration is unchanged. D1 tests both independently.
+
+The fragment envelope retains `schema_version: 1`, `kconfig` and `overlays`, each with
+`mode: "auto" | "append" | "replace"` and ordered `files: string[]`. Reuse Projects'
+validation, including its 32-file limit per kind. Legacy profile version 1 represents
+automatic discovery; version 2 carries the fragment envelope. Do not persist a profile
+migration merely by opening it.
+
+Keep this requested selection separate from `predicted_inputs` and
+`captured_inputs`. Each evidence record identifies its source, target/configuration,
+ordered paths, available hashes, and coverage (`direct`, `transitive`, or `partial`).
+A current file observation, old configure attempt and creation recipe are different
+evidence. Null or incomplete input order must not be turned into an authoritative empty
+list. Later overlays can shadow an edit, and includes can introduce unknown contributors.
+
+### D1 transport and failure rules
+
+Specify final route payloads alongside their D1 consumers. A request to open a registered
+selection contains the expected workspace plus project/configuration identifiers;
+an unregistered-source request contains the expected workspace and application path.
+Reject unknown fields, invalid types, traversal, symlinks, foreign configuration IDs and
+stale workspace selection through the existing router and source validation boundaries.
+
+Follow-up requests carry the editor context ID and expected revision. Reopening or
+changing target creates a new context identity; late results cannot populate another
+context. Distinguish invalid input, unavailable input, context conflict, unsupported
+capability and expired context with actionable messages. These are domain categories,
+not a requirement to replace the shared HTTP error envelope.
+
+Use Projects' existing 32-lowercase-hex identifier validation for its record IDs, not
+a new project ID scheme. The browser submits identifiers and selection intent, never
+trusted directory identities, authoritative environment records or arbitrary commands.
+
+## Draft and change plan proposal
+
+Source bytes are authoritative; the hardware graph is derived. Byte offsets belong to
+the server's UTF-8 source representation, not JavaScript UTF-16 indices. D3 must convert
+editor positions explicitly and test non-ASCII comments before using text selections.
+
+| Record | Minimum version-1 contents |
+| --- | --- |
+| `SourceDocument` | Context ID/revision; validated document ID/path; original UTF-8 bytes/hash; identity receipt; draft bytes/hash/revision; token/span and capability diagnostics |
+| `DraftRecord` | Schema version, full context fingerprint and selection, document path, base bytes/hash, draft bytes/hash/revision, original newline/BOM policy, recovery timestamp |
+| `EditCommand` | Command ID/kind, context and document IDs, expected draft revision/hash, selected construct/span, typed arguments and inverse patch |
+| `ChangePlan` | Schema version, immutable plan ID, context fingerprint/revision, draft revision/hash, one destination in D4, expected identity/base hash or explicit absence, exact candidate bytes/hash, validation reference and affected-configuration evidence |
+| `SaveReceipt` | Plan ID, published path/identity/hash, original/recovery identity, outcome and time; only produced after verified publication |
+
+When stored as JSON, bytes use a documented lossless UTF-8 string representation;
+hashes always cover the original bytes, never normalized newlines or reserialized JSON.
+Do not silently add/remove BOMs or normalize CRLF. D0 rejects BOM input for editing;
+D2 must either support it explicitly or retain the limitation. NUL/binary/invalid UTF-8
+input cannot enter the editable document path.
+
+Change plans are bounded server-held reviews with an expiry time and an explicit
+`create` or `replace` operation. An expired/changed plan requires new review. Successful
+publication consumes the plan; a retry retrieves its receipt rather than applying
+the patch again. A failed/uncertain publication first enters recovery/reconciliation,
+not automatic retry. D4 defines retention limits and tests duplicate requests.
+
+Drafts, receipts and later journals belong under
+`context.feature_data("devicetree")`, with versioned envelopes. D0 creates no records,
+directories or migration. Introduce the concrete storage layout and compatibility tests
+in D4. Unknown future versions remain untouched and explain why they cannot be opened.
+Recovery never automatically applies source changes. Layout/recipe metadata cannot become
+necessary for standalone firmware builds.
+
+Dirty drafts are keyed by workspace/application identity, project and configuration
+revision, target, domain and destination. Leaving a view retains its draft. Switching
+context does not reuse it; returning reconciles current source and configuration first.
+Two drafts of the same file still compete through the same Save conflict checks.
+
+Missing semantic understanding is not malformed syntax. Opaque source remains visible
+and preserved. The prototype only proposes literal replacements it can locate exactly;
+it does not authorize D4 to save malformed text or declare unknown constructs invalid.
+D2 must establish a complete/incomplete/opaque distinction before D3/D4 use it.
+
+## Initial support matrix
+
+These targets are selected design/fixture references, not newly certified hardware.
+The local Zephyr observation is commit
+`fbab2f598d545ad043ce50a75fefa4550b053f0b`, `VERSION` 4.4.2. Runtime decisions use the
+user-selected checkout and revalidated metadata, not this observation or a bundled list.
+
+| Area | D0 evidence | Planned runtime boundary |
+| --- | --- | --- |
+| Nordic target | Exact identifier `nrf52840dk/nrf52840` in `boards/nordic/nrf52840dk/nrf52840dk_nrf52840.yaml` | Initial D1 context reference and D8 nRF52840 pin adapter target |
+| Second pin family | `nucleo_f401re` in `boards/st/nucleo_f401re/nucleo_f401re.yaml`; SoC `stm32f401xe` in `board.yml` | D13 STM32 comparison target, not a D0 pin editor |
+| Custom boards | Existing Projects custom-root registration contract | Synthetic custom-target fixtures first; no new board port or assumed wiring |
+| Project shape | Registered/imported workspace app or partial unregistered source context | One application/image and selected application overlay through D4 |
+| Source language | UTF-8 synthetic overlays; lossless lexical coverage | D0 direct existing string or one numeric-cell property only |
+| Opaque syntax | Includes, macros, conditionals and deletion directives retained as bytes | Conditional/deletion documents remain non-editable in the D0 prototype; D2 decides narrower safe spans |
+| Pins and bindings | Selected local files can be read as evidence | No pin validity, binding evaluation or effective-tree interpretation in D0 |
+| Writes and execution | Pure in-memory bytes and test fixtures | No firmware writes, source registration, configure, build, or external parser execution |
+
+Use synthetic fixtures with provenance comments rather than copying complete board
+ports. No real build artifacts, device captures or personal workspace settings belong
+in the corpus.
+
+## Source feasibility experiment
+
+`scripts/prototypes/devicetree_source.py` is a disposable D0 experiment, not an installed
+module or a stable API. It has no filesystem reader/writer or external tool integration.
+The tests load explicit synthetic files from `tests/fixtures/devicetree_editor/`.
+
+The intended API is:
+
+```text
+lex(source: bytes) -> tuple[Token(start, end, kind)]
+round_trip(source: bytes) -> bytes
+plan_literal_replacement(source, node_reference, property_name, replacement)
+    -> BytePatch
+BytePatch.apply(source: bytes) -> bytes
+BytePatch.inverse() -> BytePatch
+```
+
+Tokens cover every byte, including whitespace and comments; round trip reconstructs
+their spans rather than pretty-printing a semantic tree. A patch selects exactly one
+existing property in one direct top-level `&label` or `&{/absolute/path}` block and
+replaces only its complete string or numeric-cell value. Base and resulting hashes
+guard forward and inverse application. Repeated blocks/properties, ambiguous structure,
+nonliteral values, and conditional/deletion-sensitive input are refused.
+Escaped physical newlines outside recognized opaque preprocessor directives also block
+edits: preprocessing can splice a following apparent node into a line comment. The
+prototype does not resolve that preprocessing phase.
+
+Includes and macro expressions in unrelated properties may be preserved during an
+accepted edit. They are never resolved. A successful patch means only that the intended
+source range changed; it does not establish its effective contribution after preprocessing
+or later overlays. Node creation/removal, inheritance, general arrays, phandle mutation,
+forms and Save are D2 or later work.
+
+Use 256 KiB, 32,768 tokens and 64 nested delimiters as initial experiment limits. They
+are intentionally below the public reader's 2 MiB ceiling. D2 must choose and document
+production limits from measured workloads; it must not silently truncate source. D0
+tests boundary rejection, malformed input, no-op bytes, edit locality, stale patches and
+exact inverse behavior. Known invalid typing can remain in a later draft even if the
+prototype refuses to tokenize it.
+Its structural checks are lexical/delimiter checks, not a complete DTS grammar validator.
+
+Development performance budgets are at most 100 ms per edit on a representative 64 KiB
+document and 1 s for bounded processing/rejection near the prototype's 256 KiB limit.
+Record the environment, corpus shape and observed timings in the handoff; these budgets
+are targets, not hardware-independent guarantees. Timing is measured separately from
+unit tests to avoid flaky pass/fail assertions. D3/D15 set browser rendering budgets
+against real measured UI workloads when that UI exists.
+
+The dependency decision is to proceed to D2 with byte-span/concrete-syntax preservation
+as the editing model. No parser package is added in D0. The prototype demonstrates the
+approach only for its literal subset; D2 must evaluate richer parsing against the same
+corpus. Inspector's parser and selected Zephyr `dtlib`/`edtlib` are semantic readers,
+not replacements for the lossless source layer. Do not serialize their resolved tree
+back into an overlay or deserialize imported `edt.pickle`.
+
+## Filesystem concurrency policy for D4
+
+The source prototype provides no filesystem race protection. Adopt the following writer
+requirements now and test their implementation in D4:
+
+1. Revalidate context/draft/base hashes and opened ancestor/destination identities.
+   Refuse symlink traversal, non-regular source files and replaced directories. Define
+   a hard-link policy before saving; the initial proposal rejects multiply linked files
+   rather than silently separating their contents.
+2. Lock by opened parent directory `(device, inode)` plus basename for participating
+   application writers, not only by editor session, project ID or the old file inode.
+   This stable key covers replacement and creation; check the original file inode
+   separately. Coordinate with Projects' source mutations
+   through a focused shared writer boundary when both become consumers. Locks must
+   cover review recheck and publication; review itself does not hold a long-lived lock.
+3. Stage exact candidate bytes on the same filesystem, preserve supported permissions,
+   flush contents and use a recoverable exchange for an existing file. Verify the
+   displaced file's bytes/identity against the reviewed original and verify the
+   published candidate before returning success. Do not rely solely on a pre-write hash
+   followed by an unconditional `os.replace`.
+4. Publish a new file with a no-replacement operation. Never replace a destination that
+   appeared after review. Make recovery records durable before irreversible cleanup and
+   retain originals until successful publication is established.
+5. On interference, report a conflict and retain both candidates for recovery. Restore
+   the original only while the destination still matches this operation's candidate;
+   never overwrite a newer external change during rollback. A crash/partial outcome
+   cannot produce a success receipt or automatic restart replay.
+
+The first writer can require Linux atomic-exchange/no-replacement support, consistent
+with the current creator platform. Unsupported filesystems fail closed until an
+equivalent tested protocol exists. An exchange verifies a displaced inode but is not
+a content-based filesystem compare-and-swap. Nonparticipating processes can hold writable
+descriptors or write during/after exchange; transient candidate visibility and later
+external changes cannot be excluded. Retain recoverable evidence and describe this
+limit rather than promising perfect isolation. Multi-file transactions remain D12.
+
+## Verification and D1 handoff
+
+Run the focused prototype tests and existing architecture/Inspector compatibility
+tests, then both repository check modes. No new browser assets, frontend behavior or
+runtime registration are introduced in D0, so browser/package verification is not D0
+evidence. Selected-environment configuration and hardware tests remain unperformed.
+
+Record actual commands, counts, benchmark observations, fixture coverage and limitations
+in the [D0 handoff](device-tree-editor-d0-handoff.md). The next stage is D1: implement
+the read-only selection provider and development/test workspace, preserve aliases in
+both feature registration orders, and leave the default runtime feature planned.

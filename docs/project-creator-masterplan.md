@@ -12,11 +12,17 @@ supported-SoC filter. Further editor work and advanced composition remain
 planned. The agreed first creation priority is
 **new applications inside the existing `zephyrproject` workspace**.
 
-Product direction clarified on 2026-11-04: finish the ordinary Project Creator workflow
+Product direction update on 2026-11-05: the delivered everyday creator workflow is the
+basis for the next feature, the [Device Tree Editor](device-tree-editor-masterplan.md).
+Its D0–D15 plan now supplies the detailed interaction design and implementation prompts.
+Advanced creator/composition work below remains separate; this does not mark all P0–P7
+work complete.
+
+Earlier direction on 2026-11-04: finish the ordinary Project Creator workflow
 first, with sidebar guidance for Applications, Create application and Environment.
 Inspection belongs in the separate optional Advanced area. Device Tree Editor
 (`devicetree`) is reserved for a future visual overlay editor with hardware modules and
-pin assignment; its detailed interaction design comes later. Further inspection depth
+pin assignment; its detailed interaction design is now in the editor master plan. Further inspection depth
 is deferred and is not the automatic next task. See [ADR 0009](decisions/0009-project-navigation-and-inspector.md).
 
 Delivered records are `EnvironmentSnapshot` version 1, feature-owned version-1
@@ -305,6 +311,10 @@ Later presets may cover logging, shell, UART, sensors, networking/BLE, storage, 
 TinyML, but each needs versioned requirements and a bounded validation matrix.
 
 ## Device Tree Editor connection
+
+The [Device Tree Editor master plan](device-tree-editor-masterplan.md) now defines the
+editing workflow, source synchronization, proposed contracts and implementation stages.
+The context and provenance requirements below remain applicable.
 
 A resolved devicetree belongs to a configured application, board target, configuration
 and image/domain. Selecting a board alone provides source browsing, not the final tree.

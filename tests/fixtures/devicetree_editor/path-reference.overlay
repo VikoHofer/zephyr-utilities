@@ -1,0 +1,5 @@
+&{/soc/serial@1000} {
+    status = "disabled";
+    current-speed = <115200>;
+    peer = &{/soc/i2c@2000};
+};

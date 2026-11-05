@@ -1,0 +1,8 @@
+&uart0 {
+    status = "okay";
+};
+
+/* A later override must not be mistaken for a unique editable declaration. */
+&uart0 {
+    status = "disabled";
+};

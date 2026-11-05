@@ -30,8 +30,8 @@ research master plan, not a general coding-assistant integration.
 | Feature | State | Initial implementation direction |
 | --- | --- | --- |
 | Memory Explorer (`memory`) | Available | Existing-build reports, visualization, snapshots and comparisons |
-| Device Tree Editor (`devicetree`) | Planned visual editor | Define overlays, add hardware modules and assign pins after the creator workflow is ready |
-| Project Creator (`projects`) | Applications, creation/build and environment discovery available | Current priority: everyday project workflow and richer profile integration |
+| Device Tree Editor (`devicetree`) | Planned visual editor; next product priority | Follow the staged editor master plan for live overlay editing, hardware modules and pin assignment |
+| Project Creator (`projects`) | Applications, creation/build and environment discovery available | Maintain the delivered everyday workflow and add focused public editor handoffs |
 | Build Inspector (`inspector`) | Advanced build, resolved-tree, current source and binding navigation available | Preserve available inspection; further depth deferred |
 | TinyML Experiments (`tinyml`) | Planned | Connect model/build/run identities and compare imported experiment measurements |
 
@@ -59,15 +59,25 @@ include links and direct property summaries do not perform schema resolution or 
 Applications can also be opened before configuration to browse current sources and local
 bindings. Conventional include locations are candidates, not configured search paths.
 The user-facing Device Tree Editor remains planned. Its goal is visual overlay creation,
-hardware-module placement and pin/signal assignment. Design that interaction after the
-Project Creator workflow is ready. Inspection capabilities can support it, but a source
-reader is not the editor itself. Further attribution and advanced inspection work are
-deferred while application management and creation take priority.
+hardware-module placement and pin/signal assignment. Following the delivered everyday
+Project Creator workflow, the [Device Tree Editor master plan](device-tree-editor-masterplan.md)
+is the next product direction. It defines D0–D15 with separate implementation prompts
+and exit gates: source-preserving edits and guarded saving first, then peripherals,
+pins, modules and advanced composition. Hardware UI actions immediately update the
+overlay draft; an explicit Save publishes source changes. Inspection capabilities can
+support it, but a source reader is not the editor itself. Further advanced inspection
+depth remains deferred.
+
+D0 foundation is complete: the [editor contract](device-tree-editor-contract.md) fixes
+ownership, context/version proposals and source-preservation limits, with a tested
+in-memory literal-edit prototype. The editor remains planned; D1 next adds read-only
+project context loading through the existing application composition. See the
+[D0 handoff](device-tree-editor-d0-handoff.md) for evidence and remaining limits.
 
 The [Project Creator and environment analyser master plan](project-creator-masterplan.md)
-defines the proposed shared build context, source-overlay handoff and staged editor
-integration. A resolved tree belongs to an application configuration and image/domain,
-not just a board selection.
+provides the earlier shared-context proposal; the editor master plan now defines its
+staged implementation needs. A resolved tree belongs to an application configuration
+and image/domain, not just a board selection.
 
 Treat generated build outputs as inspection artifacts. Do not present generated files as
 the canonical place for durable source edits. Preserve user formatting/comments where
@@ -111,8 +121,8 @@ Reviewed configuration editing now supports renaming and refreshing target/SDK c
 with an explicit optional default-overlay patch. Import/reconnect retains history;
 managed build outputs support verified reuse and cleanup. Ordered Kconfig/overlay selection is also available with
 independent automatic, append and replacement modes, bounded app-local discovery and
-reviewed source checks. Visual overlay/hardware editing remains deferred until the
-creator workflow is ready.
+reviewed source checks. Visual overlay/hardware editing is the next planned workflow,
+scoped independently in the editor master plan; advanced creator milestones remain separate.
 P5 provides a Minimal C++ starter alongside the original C template and curated local
 Hello World, Blinky and Button cloning through the same reviewed creation/build workflow.
 Sample copies retain nested supporting files, license evidence and origin hashes;

@@ -237,6 +237,13 @@ Inspector now owns the read-only implementation previously under Device Tree and
 Projects. Legacy HTTP paths remain aliases, and persistence is unchanged. The visual
 editor has no executable registration. See [ADR 0009](decisions/0009-project-navigation-and-inspector.md).
 
+The editor's D0 foundation reserves `/api/devicetree/editor/` and the
+`devicetree_editor` service key without registering them. Inspector retains its
+`devicetree` service alias. A source-preserving prototype lives outside the installed
+application; no public project-context provider or draft persistence is implemented yet.
+See the [foundation contract](device-tree-editor-contract.md) and
+[ADR 0019](decisions/0019-device-tree-editor-foundation.md) for the adopted staged design.
+
 ## Measurement boundary
 
 Memory Explorer preserves upstream totals and uncertainty. Static reservations, runtime

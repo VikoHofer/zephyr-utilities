@@ -1,0 +1,7 @@
+&uart0 {
+    /delete-property/ current-speed;
+    status = "okay";
+    /delete-node/ old-device;
+};
+
+/delete-node/ &unused_controller;

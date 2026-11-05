@@ -1,0 +1,20 @@
+/* Synthetic D0 fixture: café; braces { } and // inside comments are data. */
+#include "board-defaults.dtsi"
+#include <zephyr/dt-bindings/pinctrl/nrf-pinctrl.h>
+#define BUS_RATE 400000
+
+&uart0 {
+    status /* keep before */ = "disabled" /* keep after */;
+    current-speed = < /* speed */ 9600 >;
+    label = "diagnostic { }; /* text */ and \"quote\"";
+    opaque = <NRF_PSEL(UART_TX, 0, 6)>;
+    other-vendor = <STM32_PINMUX('A', 9, AF2)>;
+    child: device@0 {
+        status = "disabled";
+    };
+};
+
+&i2c0 {
+    status = "okay";
+    clock-frequency = <BUS_RATE>;
+};

@@ -1,0 +1,4 @@
+&uart0 {
+    status = "disabled";
+    child {
+        reg = <1>;

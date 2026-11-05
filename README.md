@@ -275,6 +275,11 @@ The analysis modules are independent of HTTP. See the [platform contract](docs/p
 [Project Creator contract](docs/project-creator.md),
 [memory API contract](docs/implementation-contract.md) and
 [Memory Explorer master plan](docs/memory-explorer-masterplan.md) for details.
+The planned [Device Tree Editor master plan](docs/device-tree-editor-masterplan.md)
+divides live overlay editing, hardware-module placement and pin configuration into
+16 implementation stages with individual prompts and acceptance gates.
+Its [D0 foundation](docs/device-tree-editor-d0-handoff.md) defines the contracts and
+tests a bounded source-edit prototype; the runtime visual editor remains planned.
 
 Existing snapshot layouts, IDs, exports and legacy memory endpoints are preserved.
 `--data-dir` remains the memory-history directory; environment observations use
