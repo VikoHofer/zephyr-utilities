@@ -251,7 +251,16 @@ tool execution. Unregistered directories remain partial source-only contexts.
 The preview retains at most 16 contexts for 30 minutes, rechecks source/context identity
 before follow-up reads, and selects an application overlay without changing it. It
 does not attach a build/image, create persistent editor data or import the D0 prototype
-into the runtime. Source editing and saving remain later stages.
+into the runtime. Browser editing and saving remain later stages.
+
+D2's feature-owned `source_syntax.py` indexes source occurrences and byte spans;
+`source.py` plans and applies immutable, reversible source changes in memory. Neither
+module reads files, loads includes, evaluates macros, calls tools or registers routes.
+Occurrence identities distinguish repeated contributors instead of collapsing them
+into effective hardware. Document identity, monotonic revision, full source hashes and
+exact ranges guard patch application and inverse operations. The D0 prototype remains
+separate; production code does not import it. See the
+[D2 handoff](device-tree-editor-d2-handoff.md) for supported operations and limits.
 See the [foundation contract](device-tree-editor-contract.md) and
 [ADR 0019](decisions/0019-device-tree-editor-foundation.md) for the adopted staged design.
 

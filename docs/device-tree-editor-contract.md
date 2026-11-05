@@ -1,13 +1,15 @@
 # Device Tree Editor foundation contract
 
-Status: D0 design baseline and D1 read-only context implementation, 2026-11-05.
+Status: D0 design baseline, D1 read-only context and D2 in-memory source operations,
+2026-11-05. Final D2 verification is tracked in its handoff.
 D1 supplies an explicitly injected development/test preview; the built-in editor stays
 planned. Draft editing, persistence and source-write contracts below remain future work.
 The D0 executable evidence is a bounded in-memory source prototype under
 `scripts/prototypes/`, outside the installed application. See the
 [master plan](device-tree-editor-masterplan.md) and
-[ADR 0019](decisions/0019-device-tree-editor-foundation.md). Final D1 verification is
-recorded in the [D1 handoff](device-tree-editor-d1-handoff.md).
+[ADR 0019](decisions/0019-device-tree-editor-foundation.md). Verification is recorded in
+the [D1 handoff](device-tree-editor-d1-handoff.md) and
+[D2 handoff](device-tree-editor-d2-handoff.md).
 
 ## Ownership and compatibility
 
@@ -189,7 +191,83 @@ Use Projects' existing 32-lowercase-hex identifier validation for its record IDs
 a new project ID scheme. The browser submits identifiers and selection intent, never
 trusted directory identities, authoritative environment records or arbitrary commands.
 
-## Draft and change plan proposal
+## D2 in-memory source operations
+
+`features/devicetree/source_syntax.py` and `source.py` implement the source layer inside
+the installed package. They do not import the D0 prototype, read files, resolve includes,
+evaluate macros, execute tools or register mutation endpoints. D1's browser remains
+read only. This layer is a byte-preserving syntax index, not an effective Device Tree
+or a complete DTS grammar/binding validator.
+
+`source_syntax.parse(source: bytes)` returns immutable `Syntax`: original bytes/hash,
+complete token coverage, flat node occurrences, direct property occurrences, known node
+deletion occurrences and diagnostics. IDs combine the full document hash, construct
+kind and byte span. Repeated overrides, repeated properties and duplicate labels stay
+separate. The `complete`, `opaque` and `incomplete` states describe this parser's coverage;
+`blocked` separately records whether source transformations are permitted. Incomplete
+structure exposes no node/deletion index. Unrelated opaque property values may coexist
+with editable literals; structural ambiguity blocks the document.
+
+The command interface is:
+
+```text
+SourceDocument.parse(bytes, document_id=None, revision=0) -> SourceDocument
+document.find_node(reference_or_path) -> Node       # rejects absent/ambiguous lookup
+document.node(occurrence_id) -> Node
+document.find_property(node_id, name) -> Property  # rejects absent/ambiguous lookup
+document.plan_set_property(node_id, name, PropertyValue, property_id=None)
+document.plan_set_status(node_id, "okay" | "disabled")
+document.plan_remove_property(property_id)
+document.plan_add_node(parent_id | None, name, label=None, properties=())
+document.plan_remove_node(node_id)
+document.plan_delete_property(node_id, name)
+document.plan_delete_node(parent_id, child_name)
+document.plan_delete_reference("&label" | "&{/absolute/path}")
+    -> SourceChange
+change.apply(document) -> new SourceDocument
+change.inverse() -> SourceChange
+```
+
+`PropertyValue.boolean()`, `.string(text)` and `.cells(values)` accept typed values,
+not arbitrary source fragments. Cells contain one to 64 unsigned 32-bit integers.
+Node creation accepts at most 128 unique literal properties; root declarations cannot
+carry labels. Source is bounded to
+256 KiB, 32,768 tokens and 64 nested delimiters; names are bounded to 256 characters,
+string values to 64 KiB of UTF-8 and document identifiers to 128 characters. Invalid
+UTF-8/NUL input and resource overflows raise `SourceError`; no source is truncated.
+The [D2 handoff](device-tree-editor-d2-handoff.md) records workload measurements.
+
+`SourceChange` contains document identity, expected/result revision and hashes, ordered
+nonoverlapping `TextEdit(start, end, before, after)` entries and operation diagnostics.
+Applying it verifies the complete source identity/hash, expected revision, exact original
+ranges and result hash. Changed bytes advance the revision; a no-op does not. An inverse
+restores exact prior bytes under the result preconditions and advances the revision
+again. Stale IDs, unrelated source changes, wrong documents and stale revisions cannot
+silently apply. There is no persistent draft or Save receipt in this layer.
+
+Literal updates preserve unaffected bytes, comments and line endings. Equal-length cell
+updates replace only changed numeric tokens, preserving surrounding trivia and existing
+hexadecimal style. A shape change that would discard an internal comment is refused.
+Insertion uses local indentation/newline evidence without reformatting existing source.
+Removing a declaration removes only its selected span, including content inside that
+declaration; surrounding comments and other contributors remain unchanged.
+
+Local override removal, `status = "disabled"`, `/delete-property/` and `/delete-node/`
+are separate operations. Local removal can reveal inherited or earlier values; it does
+not promise effective deletion. Explicit deletion inserts a directive and requires
+later selected-environment validation. Conflicting local declarations/deletion targets
+are refused where identified. Local node removal rejects visible references to its
+labels or known paths; includes/macros are not resolved, so that is not a complete
+dependency analysis. Undo reverses emitted directives as exact source changes.
+
+UTF-8 BOMs, conditionals, physical line splicing outside recognized directives and
+unknown structural constructs remain preserved but block transformations. Expressions,
+phandle values, string lists, byte arrays and unsupported literal encodings are not
+converted into invented typed values. Supported source occurrences beside opaque
+expressions remain editable when their structure is unambiguous. D3 must bind these
+pure operations to a revalidated D1 context and handle UTF-8/UTF-16 position conversion.
+
+## Draft and change plan proposal for D3/D4
 
 Source bytes are authoritative; the hardware graph is derived. Byte offsets belong to
 the server's UTF-8 source representation, not JavaScript UTF-16 indices. D3 must convert
@@ -205,8 +283,8 @@ editor positions explicitly and test non-ASCII comments before using text select
 
 When stored as JSON, bytes use a documented lossless UTF-8 string representation;
 hashes always cover the original bytes, never normalized newlines or reserialized JSON.
-Do not silently add/remove BOMs or normalize CRLF. D0 rejects BOM input for editing;
-D2 must either support it explicitly or retain the limitation. NUL/binary/invalid UTF-8
+Do not silently add/remove BOMs or normalize CRLF. D0 and D2 preserve BOM input but
+reject it for editing. NUL/binary/invalid UTF-8
 input cannot enter the editable document path.
 
 Change plans are bounded server-held reviews with an expiry time and an explicit
@@ -230,7 +308,7 @@ Two drafts of the same file still compete through the same Save conflict checks.
 Missing semantic understanding is not malformed syntax. Opaque source remains visible
 and preserved. The prototype only proposes literal replacements it can locate exactly;
 it does not authorize D4 to save malformed text or declare unknown constructs invalid.
-D2 must establish a complete/incomplete/opaque distinction before D3/D4 use it.
+D2 supplies the complete/incomplete/opaque distinction described above for D3/D4.
 
 ## Initial support matrix
 
@@ -352,6 +430,7 @@ The [D1 handoff](device-tree-editor-d1-handoff.md) records provider, context-ser
 frontend, browser and package validation for the injected preview. A successful context
 load is not a configure/build or hardware test.
 
-After the D1 exit gate, implement D2 only: production source-preserving operations for
-the agreed syntax subset, using the prototype corpus while keeping UI mutations and
-filesystem publication out of scope.
+The [D2 handoff](device-tree-editor-d2-handoff.md) records source-engine verification.
+After that exit gate, implement D3 only: connect revisioned source/visual drafts to the
+engine and exact D1 context, with selection, diff and unified undo/redo. Filesystem
+publication remains D4.

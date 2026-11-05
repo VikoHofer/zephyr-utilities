@@ -74,8 +74,9 @@ in-memory literal-edit prototype. D1 adds read-only project/configuration contex
 overlay evidence and source inspection through an explicitly injected preview in the
 existing application. The built-in editor remains planned. See the
 [D0 handoff](device-tree-editor-d0-handoff.md) and [D1 handoff](device-tree-editor-d1-handoff.md)
-for evidence and remaining limits. D1 verification is complete; D2 next adds production
-source-preserving operations; visual mutations and saving remain later gates.
+for evidence and remaining limits. D2 now implements production in-memory source
+operations, with verification and measured limits recorded in the [D2 handoff](device-tree-editor-d2-handoff.md).
+D3 next connects those operations to visual/source drafts; saving remains D4.
 
 The [Project Creator and environment analyser master plan](project-creator-masterplan.md)
 provides the earlier shared-context proposal; the editor master plan now defines its

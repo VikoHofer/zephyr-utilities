@@ -284,6 +284,9 @@ The [D1 read-only preview](docs/device-tree-editor-d1-handoff.md) adds project/c
 context loading and overlay inspection through explicit development/test injection.
 The default application still labels the visual editor planned; source editing and
 saving are not enabled by the preview.
+The [D2 source engine](docs/device-tree-editor-d2-handoff.md) adds pure in-memory,
+reversible operations for literal properties, status and source node declarations.
+It preserves surrounding overlay bytes; browser editing and saving remain later stages.
 
 Existing snapshot layouts, IDs, exports and legacy memory endpoints are preserved.
 `--data-dir` remains the memory-history directory; environment observations use

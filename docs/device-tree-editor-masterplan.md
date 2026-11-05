@@ -1,7 +1,7 @@
 # Device Tree Editor master plan
 
-Status: visual editor planned; D0 foundation completed and D1 read-only preview
-implemented on 2026-11-05, with final D1 verification recorded in its handoff. The next product
+Status: visual editor planned; D0/D1/D2 complete within their staged scopes on
+2026-11-05, with D2 verification and measured limits recorded in its handoff. The next product
 priority is the visual Device Tree Editor
 following the delivered everyday Project Creator workflow. This plan does not imply
 that every advanced item in the Project Creator roadmap is complete. The editor's
@@ -21,7 +21,8 @@ The [foundation contract](device-tree-editor-contract.md),
 [ADR 0019](decisions/0019-device-tree-editor-foundation.md), and
 [D0 handoff](device-tree-editor-d0-handoff.md) record the adopted design and prototype
 evidence. The [D1 handoff](device-tree-editor-d1-handoff.md) describes the injected
-read-only workspace and verification status. D2 is the next stage after that gate.
+read-only workspace. The [D2 handoff](device-tree-editor-d2-handoff.md) records the
+source engine, verification and measured limits. D3 is next.
 
 ## Product experience
 
@@ -128,9 +129,10 @@ The D0/D1 namespace decision preserves Inspector's existing routes:
 
 ### Proposed contracts
 
-The context/selection portion is implemented in D1's read-only preview. Draft, change,
-validation, pin and recipe interfaces remain planned. Their concrete delivered fields
-and limits are recorded in the foundation contract.
+The context/selection portion is implemented in D1's read-only preview. D2 adds an
+in-memory source document and reversible source changes. Context-bound browser drafts,
+Save reviews, validation, pin and recipe interfaces remain planned. Concrete delivered
+fields and limits are recorded in the foundation contract.
 
 | Contract | Required information |
 | --- | --- |
@@ -313,7 +315,8 @@ freshness, not a green pass. Source edits do not rewrite historical build eviden
 ## Delivery stages
 
 D0 is **complete** within its foundation/prototype scope. D1 is **complete** within its
-read-only preview scope; verification is recorded in its handoff. D2–D15 are **not started**.
+read-only preview scope. D2 is **complete** within its in-memory source-engine scope;
+its handoff records verification and the observed latency limitation. D3–D15 are **not started**.
 The default order is sequential; shared contracts
 and source safety precede richer visuals. Split a stage further if its exit gate cannot
 be delivered and tested in a reviewable change. Complete the selected slice without
@@ -328,7 +331,7 @@ until D4. This uses the same application/server, not a separate feature launcher
 | --- | --- | --- |
 | D0 | Contracts, support matrix and source-edit feasibility | Complete; see foundation contract and D0 handoff |
 | D1 | Open project and exact editor context | Complete read-only preview; see D1 handoff |
-| D2 | Source-preserving overlay patch engine | Safe source transformations |
+| D2 | Source-preserving overlay patch engine | Complete in-memory operations; verification and limits in D2 handoff |
 | D3 | Synchronized visual/source draft and undo | Live editing without disk writes |
 | D4 | Guarded Save, reload and recovery | First usable visual editor |
 | D5 | Explicit validation and build handoff | Verified editing loop |
@@ -393,6 +396,12 @@ switches, stale responses and Inspector compatibility. Do not implement mutation
 ```
 
 ### D2 Source-preserving overlay operations
+
+Implementation: the production syntax index and command engine live in
+`features/devicetree/source_syntax.py` and `source.py`. They expose typed literal,
+status, declaration and explicit deletion operations with guarded inverse patches.
+There are no new HTTP routes, browser controls or filesystem writes. See the
+[D2 handoff](device-tree-editor-d2-handoff.md) for verification and conservative limits.
 
 Scope: implement a token/span or concrete-syntax document model and deterministic edit
 commands for status, simple properties and nodes. Preserve expressions and opaque
@@ -739,9 +748,9 @@ performance claims without measurements.
 
 ## Starting point
 
-The next implementation request should be **D2 only**.
-D0's contracts/source experiment and D1's read-only context implementation provide the
-foundation. D4 delivers the first small
+The next implementation request should be **D3 only**.
+D0's contracts/source experiment, D1's read-only context and D2's source operations
+provide the foundation. D4 delivers the first small
 usable editor; D5 closes its configure/build loop; D8–D10 deliver the initial complete
 module-and-pin experience. Later stages expand coverage while preserving the same
 source synchronization and save semantics.
@@ -753,3 +762,5 @@ part of the original planning change. D0 subsequently added only foundation docu
 synthetic fixtures and an unregistered in-memory prototype.
 D1 adds only the public selection provider and explicitly injected read-only preview;
 the built-in visual editor remains planned.
+D2 adds the production in-memory syntax/patch engine. Browser mutations and source
+publication are still later stages; D2 does not promote the built-in feature.
