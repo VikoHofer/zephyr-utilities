@@ -147,6 +147,13 @@ Unknown formats are preserved. Interrupted work is shown as interrupted after re
 not resumed. See [ADR 0004](decisions/0004-reviewed-project-creation.md) and the
 [creator contract](project-creator.md).
 
+Custom-board roots use a separate version-1 workspace registry. Environment reads derive
+staleness from its fingerprint and directory availability; saved observations remain
+immutable. Registered roots participate in both analysis and build rechecks. The board
+scaffold and application creator share a feature-owned guarded file publisher; each
+validates its own source contract before publishing. See
+[ADR 0018](decisions/0018-custom-board-workflow.md).
+
 Curated local sample copies add optional versioned source provenance to the existing
 project record. A bounded source adapter preserves upstream files and license evidence;
 source fingerprints are checked independently of environment observations. The reviewed

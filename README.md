@@ -151,7 +151,7 @@ creation and explicit configure/build jobs. See the
 ## Application creation and builds
 
 Project Creator opens **Applications**. Its sidebar links separate application management,
-**Create application**, and **Environment**. Detailed build/source inspection lives in
+**Create application**, **Custom boards**, and **Environment**. Detailed build/source inspection lives in
 the optional **Advanced → Build Inspector** area. **Device Tree Editor** is planned as
 a visual tool for overlays, hardware modules and pin assignment, after the creator workflow.
 
@@ -186,6 +186,14 @@ or workspace update is included. Existing applications can be imported without c
 source files; moved applications can be reconnected while preserving their saved history. Device Tree editing remains
 planned. Generated source files and their README commands work independently of the
 utilities' metadata.
+
+Use **Custom boards** to register an existing board root, reconnect a moved folder, or
+remove a registration while retaining its source. Registered roots persist per workspace
+and participate in environment analysis. The guided creator starts from a local reference
+board, directly or after filtering by supported SoC, and previews all renamed board files
+in a new hardware directory. It retains the reference's hardware settings and license
+evidence; configure/build and physical validation remain separate steps. See the
+[custom-board workflow](docs/custom-boards.md).
 
 Use **Advanced → Build Inspector → Build outputs** to open an existing build, select its image/domain and
 inspect saved outputs. **Inspect Device Tree** shows that image's resolved nodes and

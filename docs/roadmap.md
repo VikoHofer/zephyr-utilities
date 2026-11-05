@@ -118,6 +118,11 @@ Hello World, Blinky and Button cloning through the same reviewed creation/build 
 Sample copies retain nested supporting files, license evidence and origin hashes;
 unsupported layouts or changed source inputs block copying. Further sample adapters remain a later
 template expansion, with source provenance, licenses and dependency checks required.
+The first custom-board workflow registers workspace board roots with reviewed
+rename/reconnection/removal and environment invalidation. A guided creator copies an
+eligible local reference port into a new board root, directly or through a supported-SoC
+filter, with reviewed files and retained provenance. Hardware settings are inherited;
+visual customization and device validation remain separate. See [custom boards](custom-boards.md).
 Later stages cover editing, advanced
 composition and environment migration. Build evidence does not establish hardware operation.
 

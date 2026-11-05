@@ -31,6 +31,11 @@ against the selected workspace. These form choices are kept separately for each 
 during the browser session, so changing workspace does not silently reuse its predecessor's
 absolute paths.
 
+For persistent board-root management, use **Custom boards**. Available registered roots
+are automatically merged into analysis and build rechecks. Registration changes or a
+missing/replaced registered directory mark saved observations stale until a new scan.
+Manual discovery paths remain independent of registration. See [custom boards](custom-boards.md).
+
 Leaving the view does not cancel its server job. Reopening it restores the selected
 workspace's saved observation and latest retained job. Switching workspace changes future
 analysis requests; a submitted job keeps its captured workspace, options and environment.
@@ -43,7 +48,7 @@ analysis requests; a submitted job keeps its captured workspace, options and env
 | Zephyr | Record the selected checkout's path, declared version, Git commit/dirty state when available, and SDK reference from `SDK_VERSION` |
 | Tools | Query local Python, west, CMake, Ninja, dtc and Git versions; missing tools produce diagnostics |
 | Projects and modules | Distinguish active west projects from Zephyr modules, record available revisions and module metadata, and report missing projects |
-| Hardware roots | Combine explicit roots, supported environment overrides, roots in the selected directory, module build settings and the Zephyr checkout |
+| Hardware roots | Combine explicit and registered custom roots, supported environment overrides, roots in the selected directory, module build settings and the Zephyr checkout |
 | Boards and chips | Read hardware model v2 metadata, board/SoC extensions, CPU clusters, nested variants, revisions and platform architecture hints |
 | SDKs | Inspect installation metadata, installed executable GNU/LLVM compiler components, recognized host tools and CMake package files |
 

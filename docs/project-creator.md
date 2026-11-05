@@ -16,6 +16,11 @@ Configure/Build operations. Choose **Create application** for a new destination,
 **Environment** for board, chip and SDK discovery. These are separate sidebar subviews.
 Advanced inspection is available separately under **Advanced → Build Inspector**.
 
+**Custom boards** registers and manages persistent board roots and guides creation of a
+new port from a local reference board, directly or through a supported-SoC filter.
+Generated files retain the reference hardware settings and are reviewed before writing.
+See the [custom-board workflow](custom-boards.md) for lifecycle and supported limits.
+
 ## Create an application
 
 1. Start `zephyr-utils` in the existing Zephyr environment and select the workspace.

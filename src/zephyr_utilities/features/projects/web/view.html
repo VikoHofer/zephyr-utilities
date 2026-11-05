@@ -108,4 +108,35 @@
     </dialog>
   </div>
 
+  <div data-custom-boards-view hidden>
+    <header class="projects-heading"><div><span class="projects-eyebrow">PROJECT CREATOR · CUSTOM BOARDS</span><h1>Your custom hardware.</h1><p>Register existing board definitions or create a board using a local reference port.</p></div></header>
+    <section class="projects-workspace" aria-label="Custom board workspace"><div class="projects-workspace-info"><span class="projects-eyebrow">SELECTED WORKSPACE</span><p class="projects-path" data-custom-workspace></p><p class="projects-muted">Registered locations are saved for this workspace and included in future environment analyses.</p></div><a class="projects-button" href="#/projects/environment">Review environment</a></section>
+    <div class="projects-error" role="alert" data-custom-error hidden></div>
+    <section class="projects-panel" data-custom-next aria-label="Custom board actions"><div class="projects-section-heading"><div><h2>Manage board locations</h2><p class="projects-muted">A board root contains a boards/ directory. Removing its registration leaves source files on disk.</p></div><span data-custom-count class="projects-muted" role="status"></span></div><div class="projects-actions"><button type="button" class="projects-button primary" data-custom-register>Register existing boards</button><button type="button" class="projects-button" data-custom-create>Create custom board</button><button type="button" class="projects-button" data-custom-refresh>Refresh locations</button><button type="button" class="projects-button" data-custom-analyze>Analyze workspace</button></div><p class="projects-banner" role="status" aria-live="polite" data-custom-notice hidden></p><p class="projects-banner" data-custom-requirement hidden></p></section>
+    <section class="projects-job" data-custom-job hidden aria-label="Custom board analysis progress"><div class="projects-section-heading"><div><h2 data-custom-job-status role="status" aria-live="polite"></h2><p data-custom-job-description></p></div><button type="button" class="projects-button" data-custom-cancel>Cancel scan</button></div><details><summary>Scan log</summary><pre data-custom-logs></pre></details></section>
+    <section class="projects-panel" aria-label="Registered custom board locations"><div data-custom-registrations></div></section>
+    <div data-custom-diagnostics></div>
+    <dialog class="projects-review-dialog" data-custom-dialog aria-labelledby="projects-custom-dialog-title">
+      <div class="projects-review-heading"><h2 id="projects-custom-dialog-title" data-custom-dialog-title tabindex="-1" autofocus>Custom boards</h2><button type="button" class="projects-button" data-custom-close>Close</button></div>
+      <div class="projects-review-body"><div class="projects-error" role="alert" data-custom-dialog-error hidden></div><p role="status" aria-live="polite" data-custom-dialog-progress hidden></p>
+        <form id="projects-custom-board-form" data-custom-form aria-label="Custom board choices">
+          <div data-custom-registration-fields><p class="projects-muted">Select an existing folder containing boards/. Review the discovered definitions and affected applications before saving. Reconnecting changes the saved location; it does not move files.</p><div class="projects-option-grid"><label>Location name<input data-custom-field="name" required maxlength="64" autocomplete="off" placeholder="Prototype hardware"></label><label>Board root directory<input data-custom-field="path" required autocomplete="off" spellcheck="false" placeholder="hardware/prototype"></label></div></div>
+          <div data-custom-creation-fields hidden><p class="projects-muted">Start with a supported SoC or a reference board from the selected environment. A matching reference port supplies the hardware settings; the generated files are reviewed before writing.</p><div class="projects-option-grid">
+            <label class="projects-full-width">Starting point<select data-custom-field="mode"><option value="reference">Reference board</option><option value="soc">Supported SoC</option></select></label>
+            <label class="projects-full-width" data-custom-soc-field hidden>Supported SoC<select data-custom-field="soc" required><option value="">Choose a supported SoC</option></select></label>
+            <label class="projects-full-width">Find a reference board<input type="search" data-custom-field="search" autocomplete="off" placeholder="Board name, chip or vendor…"></label>
+            <label class="projects-full-width">Reference board<select data-custom-field="reference_id" required><option value="">Choose a reference board</option></select><span class="projects-input-help" data-custom-reference-count></span></label>
+            <p class="projects-muted projects-full-width" data-custom-reference-note></p>
+            <label>New board identifier<input data-custom-field="name" required pattern="[a-z][a-z0-9_]*" maxlength="64" autocomplete="off" spellcheck="false" placeholder="my_board"><span class="projects-input-help">Lowercase letters, digits and underscores.</span></label>
+            <label>Display name<input data-custom-field="full_name" required maxlength="64" autocomplete="off" placeholder="My prototype board"></label>
+            <label>Vendor identifier<input data-custom-field="vendor" required pattern="[a-z][a-z0-9_-]*" maxlength="64" autocomplete="off" spellcheck="false" placeholder="custom"></label>
+            <label>New board root directory<input data-custom-field="path" data-custom-create-path autocomplete="off" spellcheck="false" placeholder="hardware/my_board"><span class="projects-input-help">Leave blank for hardware/&lt;board identifier&gt;. The directory must be new.</span></label>
+          </div><p class="projects-banner">Clocks, memory, console, pins and programmer settings are inherited from the reference. Review them against your hardware before use. This creates an editable board port; it does not establish physical hardware compatibility.</p></div>
+          <p class="projects-banner" data-custom-remove-note hidden></p>
+        </form>
+        <div data-custom-review hidden><div class="projects-review-summary"><dl class="projects-identity" data-custom-summary></dl></div><div data-custom-evidence></div><p class="projects-muted">After applying, analyze the workspace to refresh the board catalogue. Configure and Build remain explicit actions on an application.</p></div>
+      </div>
+      <div class="projects-review-actions"><button type="button" class="projects-button" data-custom-back hidden>Back to choices</button><button type="submit" form="projects-custom-board-form" class="projects-button primary" data-custom-preview>Review changes</button><button type="button" class="projects-button primary" data-custom-apply hidden>Apply change</button></div>
+    </dialog>
+  </div>
 </section>

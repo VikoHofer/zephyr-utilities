@@ -12,6 +12,7 @@ FEATURE = FeatureDefinition(
     entry_path="/#/projects/applications",
     navigation=(NavigationItem("Applications", "applications"),
                 NavigationItem("Create application", "create"),
+                NavigationItem("Custom boards", "custom-boards"),
                 NavigationItem("Environment", "environment")),
     frontend=FrontendDefinition(Path(__file__).parent / "web"),
     register=register,

@@ -484,6 +484,30 @@ def apply_project(plan, *, cancel=None):
         overlay = next((item for item in files if item["path"] == expected_overlay["path"]), None)
         if not overlay or overlay["sha256"] != expected_overlay["sha256"]:
             raise ValueError("The default board overlay changed. Preview the application again.")
+    publication = publish_files(destination, plan["destination_identity"], files,
+                                revalidate=(lambda: validate_sample_plan(plan, cancel=cancel)) if sample else None,
+                                cancel=cancel)
+    project = {"schema_version": SCHEMA_VERSION, "id": uuid.uuid4().hex, "workspace": plan["workspace"],
+               "name": plan["name"], "profile": deepcopy(plan["profile"]), "template": template,
+               "files": [{"path": item["path"], "sha256": item["sha256"]} for item in files],
+               "created_at": _now(), **publication}
+    if sample:
+        project["sample"] = deepcopy(plan["sample"])
+    if expected_overlay:
+        project["default_overlay"] = deepcopy(expected_overlay)
+    return project
+
+
+def publish_files(destination, destination_identity, files, *, revalidate=None, cancel=None):
+    """Publish reviewed text files once, retaining concurrent edits on any failure.
+
+    Callers validate their domain-specific manifest and may recheck source inputs
+    immediately before publication. Existing destinations are never replaced.
+    """
+    destination = _path(str(destination), "Destination")
+    if _destination_identity(destination) != destination_identity:
+        raise ValueError("The destination ancestors changed after preview. Preview again.")
+    _validate_file_manifest(files)
     check_cancel(cancel)
     owned = []
     parent = staging = None
@@ -493,7 +517,7 @@ def apply_project(plan, *, cancel=None):
     published = False
     written = []
     try:
-        parent = _open_parent(destination, plan["destination_identity"], owned)
+        parent = _open_parent(destination, destination_identity, owned)
         os.mkdir(stage_name, mode=0o755, dir_fd=parent)
         staging = _directory(parent, stage_name)
         stage_identity = _identity(os.fstat(staging))
@@ -512,11 +536,11 @@ def apply_project(plan, *, cancel=None):
         for entry in reversed(list(directories.values())):
             os.fsync(entry["descriptor"])
         os.fsync(staging)
-        if sample:
-            validate_sample_plan(plan, cancel=cancel)
+        if revalidate is not None:
+            revalidate()
         # The descriptors pinned the parent; rechecking paths catches renamed ancestors.
-        expected = deepcopy(plan["destination_identity"])
-        expected["ancestors"].extend({"path": str(Path(plan["destination_identity"]["missing"][index])), **identity}
+        expected = deepcopy(destination_identity)
+        expected["ancestors"].extend({"path": str(Path(destination_identity["missing"][index])), **identity}
                                      for index, (_, _, identity) in enumerate(owned))
         expected["missing"] = []
         expected.pop("hash", None)
@@ -539,16 +563,7 @@ def apply_project(plan, *, cancel=None):
                                 "message": f"Application created, but directory synchronization failed: {exc}"})
         ancestry = [{key: entry[key] for key in ("path", "device", "inode")} for entry in expected["ancestors"]]
         ancestry.append({"path": str(destination), **stage_identity})
-        project = {"schema_version": SCHEMA_VERSION, "id": uuid.uuid4().hex, "workspace": plan["workspace"],
-                "name": plan["name"], "path": str(destination), "profile": deepcopy(plan["profile"]),
-                "template": template, "directory_identity": ancestry,
-                "files": [{"path": item["path"], "sha256": item["sha256"]} for item in files],
-                "diagnostics": diagnostics, "created_at": _now()}
-        if sample:
-            project["sample"] = deepcopy(plan["sample"])
-        if expected_overlay:
-            project["default_overlay"] = deepcopy(expected_overlay)
-        return project
+        return {"path": str(destination), "directory_identity": ancestry, "diagnostics": diagnostics}
     finally:
         if staging is not None:
             if not published:

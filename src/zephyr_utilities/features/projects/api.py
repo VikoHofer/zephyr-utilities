@@ -3,6 +3,7 @@
 from ...core.http import Response
 from .service import ProjectsService
 from .creator import CreatorService
+from .custom_boards import CustomBoardsService
 
 
 def register(router, context):
@@ -12,6 +13,11 @@ def register(router, context):
     router.add("POST", "/api/projects/analyze", lambda request: Response(service.start(request.body), status=202))
     creator = CreatorService(context, service.store)
     context.services["project_creator"] = creator
+    boards = CustomBoardsService(context, service.store, creator)
+    context.services["custom_boards"] = boards
+    router.add("GET", "/api/projects/custom-boards", lambda request: boards.current())
+    router.add("POST", "/api/projects/custom-boards/preview", lambda request: boards.preview(request.body))
+    router.add("POST", "/api/projects/custom-boards/apply", lambda request: boards.apply(request.body))
     router.add("GET", "/api/projects/creator", lambda request: creator.current())
     router.add("POST", "/api/projects/samples", lambda request: creator.samples(request.body))
     router.add("POST", "/api/projects/sample-check", lambda request: Response(creator.sample_check(request.body), status=202))

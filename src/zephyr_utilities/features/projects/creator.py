@@ -335,7 +335,10 @@ class CreatorService(ConfigurationWorkflow, ProjectLifecycle, BuildWorkflow):
     def _recheck(self, profile, environment, emit, cancel):
         emit("Rechecking the selected environment before this operation…")
         previous = self.environments.latest(profile["workspace"])
-        result = analyze_environment(profile["workspace"], profile["analysis_options"], environ=environment,
+        if previous and previous.get("status") == "stale":
+            raise ValueError("The environment changed since selection. Analyze again and edit the build configuration, or preview a new application.")
+        options = self.environments.analysis_options(profile["workspace"], profile["analysis_options"])
+        result = analyze_environment(profile["workspace"], options, environ=environment,
                                      emit=emit, cancel=cancel, previous=previous)
         if result["status"] == "stale" or execution_guard(result, profile, cancel=cancel) != profile.get("execution_fingerprint"):
             raise ValueError("The environment changed since selection. Analyze again and edit the build configuration, or preview a new application.")

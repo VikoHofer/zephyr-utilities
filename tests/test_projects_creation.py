@@ -117,6 +117,41 @@ class ProjectCreationTests(unittest.TestCase):
                     self.assertFalse(Path(plan["destination"]).exists())
         self.assertFalse((self.workspace / "applications").exists())
 
+    def test_generic_publication_revalidates_source_after_staging_before_publication(self):
+        destination = self.workspace / "hardware" / "custom"
+        content = "board:\n  name: custom\n"
+        files = [{"path": "boards/vendor/custom/board.yml", "content": content,
+                  "sha256": hashlib.sha256(content.encode()).hexdigest()}]
+        identity = creation._destination_identity(destination)
+        calls = []
+
+        def changed():
+            calls.append(True)
+            self.assertFalse(destination.exists())
+            self.assertEqual(len(list(destination.parent.glob(".zephyr-create-*"))), 1)
+            raise ValueError("Reference changed after review")
+
+        with self.assertRaisesRegex(ValueError, "Reference changed"):
+            creation.publish_files(destination, identity, files, revalidate=changed)
+        self.assertEqual(calls, [True])
+        self.assertFalse(destination.parent.exists())
+
+    def test_generic_publication_keeps_concurrent_destination_created_by_revalidation(self):
+        destination = self.workspace / "custom"
+        content = "custom board source"
+        files = [{"path": "board.txt", "content": content, "sha256": hashlib.sha256(content.encode()).hexdigest()}]
+        identity = creation._destination_identity(destination)
+
+        def competing_creation():
+            destination.mkdir()
+            (destination / "keep.txt").write_text("User content")
+
+        with self.assertRaisesRegex(ValueError, "already exists"):
+            creation.publish_files(destination, identity, files, revalidate=competing_creation)
+        self.assertEqual((destination / "keep.txt").read_text(), "User content")
+        self.assertFalse((destination / "board.txt").exists())
+        self.assertFalse(list(self.workspace.glob(".zephyr-create-*")))
+
     def test_retained_version_one_c_preserves_generated_bytes_and_remains_publishable(self):
         # Recorded before introducing template selection; only the fixture root
         # is normalized so the published version-one README is covered as well.

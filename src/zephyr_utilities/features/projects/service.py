@@ -9,6 +9,7 @@ from threading import RLock
 import uuid
 
 from .analyzer import SCHEMA_VERSION, analyze_environment, digest
+from .custom_board_records import CustomBoardStore
 from .metadata import read_regular
 from .probing import check_cancel
 
@@ -50,6 +51,7 @@ class EnvironmentStore:
     def __init__(self, root):
         self.root = Path(root)
         self.lock = RLock()
+        self.custom_boards = CustomBoardStore(self.root.parent / "custom-boards")
 
     def _read(self, path):
         if self.root.is_symlink() or path.parent.is_symlink():
@@ -64,7 +66,7 @@ class EnvironmentStore:
     def _index_path(self, workspace):
         return self.root / "workspaces" / f"{digest(str(workspace))}.json"
 
-    def latest(self, workspace):
+    def _stored_latest(self, workspace):
         with self.lock:
             index_path = self._index_path(workspace)
             if not index_path.exists():
@@ -79,6 +81,20 @@ class EnvironmentStore:
             if data["workspace"].get("path") != str(workspace):
                 raise ValueError("Saved environment belongs to another workspace.")
             return data
+
+    def latest(self, workspace):
+        data = self._stored_latest(workspace)
+        if data is None:
+            return None
+        signature = self.custom_boards.signature(workspace)
+        if data.get("custom_board_registry") != signature:
+            data["status"] = "stale"
+            data.setdefault("diagnostics", []).append({"severity": "warning", "code": "custom-boards-changed",
+                "message": "Custom board registrations or files changed. Analyze the environment again before selecting or building a target."})
+        return data
+
+    def analysis_options(self, workspace, options):
+        return self.custom_boards.analysis_options(workspace, options)
 
     def _write(self, path, value):
         # Storage only; firmware and toolchain directories are never destinations.
@@ -101,7 +117,7 @@ class EnvironmentStore:
                 raise ValueError("Unsupported environment storage schema. Existing data was preserved.")
             workspace = snapshot["workspace"]["path"]
             # Refuse to overwrite future formats, even when the caller forces a rescan.
-            self.latest(workspace)
+            self._stored_latest(workspace)
             identifier = snapshot["id"]
             if not isinstance(identifier, str) or not re.fullmatch(r"[a-f0-9]{32}", identifier):
                 raise ValueError("Invalid saved environment identity.")
@@ -132,12 +148,20 @@ class ProjectsService:
     def start(self, body):
         workspace = self.context.workspace.get()["path"]
         options = validate_options(body, workspace)
+        selected_options = deepcopy(options)
+        options = self.store.analysis_options(workspace, options)
+        registry_signature = self.store.custom_boards.signature(workspace)
         environment = dict(os.environ)
         previous = self.store.latest(workspace)
 
         def analyze(emit, cancel):
             result = analyze_environment(workspace, options, environ=environment, emit=emit, cancel=cancel, previous=previous)
             check_cancel(cancel)
+            if self.store.custom_boards.signature(workspace) != registry_signature:
+                raise ValueError("Custom board registrations or files changed during analysis. Analyze again.")
+            if registry_signature is not None:
+                result["custom_board_registry"] = registry_signature
+                result["request"] = {key: value for key, value in selected_options.items() if key != "force"}
             if not result["cache"]["hit"]:
                 self.store.save(result)
             return {"snapshot": result}

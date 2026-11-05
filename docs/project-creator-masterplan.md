@@ -6,7 +6,9 @@ explicit configure/build actions are implemented on 2026-11-04. Build Inspector
 and binding/include navigation, including application sources before configuration.
 A verified image handoff to Memory Explorer is also available.
 P4 named configurations and fragment selection, and the first P5 slices (a Minimal C++
-starter and curated local sample cloning), are also available. Further editor work and advanced composition remain
+starter and curated local sample cloning), are also available. The first P7 custom-board
+slice adds persistent root management and reviewed reference-port scaffolding, with a
+supported-SoC filter. Further editor work and advanced composition remain
 planned. The agreed first creation priority is
 **new applications inside the existing `zephyrproject` workspace**.
 
@@ -101,7 +103,7 @@ See [west workspaces](https://docs.zephyrproject.org/latest/develop/west/workspa
 | Toolchains | Discover installed SDKs and other toolchains, identify selection, architecture coverage and effective compiler | P1 inspection; P2 explicit installed selection |
 | Build lifecycle | Configure, compile, logs/cancellation, distinct build directories, artifact handoff | P2 single image; P5 sysbuild creation |
 | Environment evolution | Rescan new boards/chips, compare installed environments, diagnose removed targets/options/bindings, deliberate upgrade trials | P1 refresh; P6 comparison and migration |
-| Custom hardware | Existing custom board support first; later board-port scaffolds using a supported SoC, revision and runner setup | P1/P2 discovery; P7 scaffolding |
+| Custom hardware | Registered custom roots and reviewed reference-port scaffolds; explicit hardware customization remains separate | P1/P2 discovery; first P7 slice available |
 | Testing and devices | Twister recipes, native/simulator builds, build matrices, then runner-specific flash/debug actions | P7, with selected smoke builds earlier |
 | Downstream consumers | Open completed builds in Memory Explorer; later model/run provenance for TinyML | P3 artifact integration; later research work |
 
@@ -433,7 +435,7 @@ expansion based on actual projects.
 | P4 | Reviewable configuration and overlay editing | Named configurations and fragment selection available; source/visual editing deferred | P3 | Large |
 | P5 | Reusable components and advanced project layouts | C++ starter and curated sample cloning available; further composition planned | P2; P4 for integrated editing | Large, split into slices |
 | P6 | Environment comparison and upgrade trials | Planned | P1/P2; later stages for their profiles | Medium to large |
-| P7 | Custom board assistance and testing/device workflows | Planned | P4/P5 | Large, separate workflows |
+| P7 | Custom board assistance and testing/device workflows | Root management and reference scaffolding available; hardware editing, testing/device workflows planned | P4/P5 | Large, separate workflows |
 
 ### P0 Define the first supported contract
 
@@ -625,7 +627,14 @@ from configuration/build success.
 
 ### P7 Assist custom hardware and validation
 
-Add a board-port scaffold using an already supported SoC, with explicit clock, memory,
+The first slice provides persistent custom-root registration, reviewed rename/reconnect
+and removal, automatic root inclusion in analysis, and stale-selection protection.
+The guided creator starts from an eligible local reference, directly or filtered by
+supported SoC. It publishes reviewed board files without replacement and retains source
+and license provenance. Clock, memory, console, pins, revisions and runners are inherited
+from that reference and explicitly require hardware review. See [custom boards](custom-boards.md).
+
+Further work can add board-port customization using an already supported SoC, with explicit clock, memory,
 console, revision, pinctrl and runner choices. Let the editor work on the custom port
 only when that destination is selected. Start from version-matched schemas/reference
 ports and keep all generated files reviewable. A new silicon/SoC port remains an expert
