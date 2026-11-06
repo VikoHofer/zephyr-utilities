@@ -6,7 +6,7 @@ const array = (value) => Array.isArray(value) ? value : [];
 const shown = (value) => typeof value === "string" ? value : JSON.stringify(value);
 const bus = (kind) => ["i2c", "spi"].includes(kind);
 
-export function mountModulePanel(root, {api, state, workspace, drafts, onChange}) {
+export function mountModulePanel(root, {api, state, workspace, drafts, onChange, onRemove}) {
   const document = root.ownerDocument; const lifetime = new AbortController(); const handlers = new WeakMap();
   let disposed = false; let navigation = 0; let data; let rendered; let selected = ""; let detailIdentity = "";
   let positions = {}; let requestedParent = "";
@@ -260,12 +260,26 @@ export function mountModulePanel(root, {api, state, workspace, drafts, onChange}
     }
     collect = fields(node, instance.fields); apply(node, "Apply module properties", instance.editable);
     note(node, instance.reason, "dte-notice");
-    const remove = button("Remove this module from draft", () => {
+    let reviewingRemoval = false;
+    const remove = button(onRemove ? "Review module removal" : "Remove this module from draft", async () => {
       const current = data.instances.find((item) => item.key === selected);
+      if (onRemove && current) {
+        if (reviewingRemoval) return;
+        reviewingRemoval = true; const token = navigation;
+        localActionMessage = "Preparing removal review…"; updateDisabled();
+        try { await onRemove(current.node_id, remove); }
+        catch (error) { if (!disposed && token === navigation) fail(error.message || String(error)); }
+        finally {
+          reviewingRemoval = false;
+          if (!disposed && token === navigation && localActionMessage === "Preparing removal review…") { localActionMessage = ""; updateDisabled(); }
+        }
+        return;
+      }
       if (!current?.removable) { fail(current?.remove_reason || "This module cannot be removed by this form."); return; }
       void submit({kind: "module_remove", node_id: current.node_id}, "");
-    }); permit(remove, instance.removable); detail.append(remove);
-    note(detail, "Removal deletes only this local leaf node. Parent buses, GPIO providers and other source are preserved. Review the resulting diff before Save.");
+    }); permit(remove, onRemove ? Boolean(instance.node_id) : instance.removable); detail.append(remove);
+    note(detail, onRemove ? "Review known dependants, explicit repair choices and the exact source changes before removing this node from the draft."
+      : "Removal deletes only this local leaf node. Parent buses, GPIO providers and other source are preserved. Review the resulting diff before Save.");
     note(detail, instance.remove_reason, "dte-notice");
     for (const match of array(instance.recipe_matches)) {
       const recipe = data.recipes.find((item) => item.id === match.id && item.version === match.version);

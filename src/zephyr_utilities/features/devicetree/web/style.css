@@ -137,6 +137,32 @@
 .dte-workspace .dte-module-layout-actions p { flex-basis:100%; margin:.2rem 0; }
 .dte-workspace .dte-module-software { border-left:3px solid var(--app-blue-border); padding:.2rem .7rem; }
 .dte-workspace .dte-module-status { min-height:1.3em; }
+.dte-workspace .dte-resources { border:1px solid var(--app-border); border-radius:.5rem; padding:1rem; margin:1rem 0 1.4rem; min-width:0; }
+.dte-workspace .dte-resources .dte-section-heading { flex-wrap:wrap; gap:.6rem; }
+.dte-workspace .dte-resources .dte-section-heading h3 { margin:0; margin-right:auto; }
+.dte-workspace .dte-resource-controls, .dte-workspace .dte-resource-list { display:grid; gap:.8rem; min-width:0; }
+.dte-workspace .dte-resource-summary { margin:.3rem 0; font-size:.9rem; font-weight:600; }
+.dte-workspace .dte-resource-list { max-height:30rem; overflow:auto; padding:.25rem; }
+.dte-workspace .dte-resource-diagnostic { border:1px solid var(--app-border); border-left:3px solid var(--app-blue-border); border-radius:.4rem; padding:.75rem; min-width:0; }
+.dte-workspace .dte-resource-diagnostic[data-severity=error] { border-left-color:var(--app-danger); }
+.dte-workspace .dte-resource-diagnostic[data-severity=warning], .dte-workspace .dte-resource-diagnostic[data-severity=unknown] { border-left-color:var(--app-brand); }
+.dte-workspace .dte-resource-diagnostic h4 { margin:0 0 .4rem; font-size:.9rem; overflow-wrap:anywhere; }
+.dte-workspace .dte-resource-diagnostic p { margin:.35rem 0 .6rem; overflow-wrap:anywhere; }
+.dte-workspace .dte-resource-repair { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; margin-top:.5rem; }
+.dte-workspace .dte-resource-repair p { margin:0; }
+.dte-workspace .dte-resource-removal { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:.75rem; align-items:end; border-top:1px solid var(--app-border); padding-top:.85rem; }
+.dte-workspace .dte-resource-removal h4, .dte-workspace .dte-resource-removal > p { grid-column:1 / -1; margin:.2rem 0; }
+.dte-workspace .dte-removal-dependant { border-bottom:1px solid var(--app-border); padding:.4rem 0 .75rem; }
+.dte-workspace .dte-removal-repairs { min-width:0; border:1px solid var(--app-border); border-radius:.4rem; padding:.8rem; margin-top:1rem; }
+.dte-workspace .dte-removal-repairs label { grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:.7rem; }
+.dte-workspace .dte-removal-repairs input[type=checkbox] { width:1rem; height:1rem; accent-color:var(--app-brand); }
+.dte-workspace .dte-removal-review .dte-review-actions { flex-wrap:wrap; }
+.dte-workspace .dte-removal-summary { flex-shrink:0; padding:.7rem 1.2rem; border-bottom:1px solid var(--app-border); overflow-wrap:anywhere; }
+.dte-workspace .dte-removal-summary p { margin:.2rem 0; font-size:.9rem; line-height:1.45; }
+@media (max-width:650px) {
+  .dte-workspace .dte-resource-removal { grid-template-columns:1fr; }
+  .dte-workspace .dte-resource-list { max-height:24rem; }
+}
 @media (max-width:900px) {
   .dte-workspace .dte-module-workspace { grid-template-columns:1fr; }
   .dte-workspace .dte-module-detail { border-left:0; border-top:1px solid var(--app-border); padding:1rem 0 0; }

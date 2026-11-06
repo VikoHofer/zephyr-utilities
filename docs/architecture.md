@@ -7,8 +7,10 @@ HTTP routes and scoped browser modules through an explicit registry.
 Memory Explorer, Project Creator's analyser/creation/build workflow, existing-build
 inspection in Build Inspector and limited Device Tree overlay editing are working features.
 The bounded Nordic pin workflow and local module catalogue/canvas are also implemented.
-The D9 handoff records passed verification. Broader pin adapters, advanced composition
-and TinyML experiments remain planned.
+The D9 handoff records passed verification. D10 resource diagnostics and removal reviews
+are complete within their documented graph limits, with full/browser/package checks passed.
+Broader pin adapters, advanced
+composition and TinyML experiments remain planned.
 
 ## Dependency direction
 
@@ -419,3 +421,20 @@ or worst-case resource demand. The [research roadmap](roadmap.md) and
 The architecture is a maintained contract, not a promise that every future requirement
 is already abstracted. Add shared interfaces for concrete needs and record material
 changes in a short decision note.
+
+D10 adds `ResourceService` and `RemovalService` inside the same feature. Resource
+observations retain exact context/draft guards, the local binding catalogue and optional
+verified pin evidence. `resource_graph.py` indexes literal references, binding path values,
+alias/chosen strings, property-label targets and source containment without preprocessing.
+Ambiguous identities and unresolved external consumers remain distinct. Pin allocations
+are additive structured evidence from the existing `PinService`, not inferred from its
+human-readable messages. Diagnostic observations never become global editing or Save locks.
+
+Removal reviews bind a source candidate and individually selected optional-property repairs
+to the same observation. A confirmed `remove_reviewed` command enters `DraftService.command`
+and creates one source/history change. The application revalidates context, source,
+bindings and available pin evidence before applying it. Existing scoped peripheral/module
+removal commands remain guarded and compatible; the normal UI opens the broader review.
+No shared dependency is silently deleted or reassigned. Unknown or required consumers do
+not receive invented repairs. D10 adds no persistent format, cross-feature dependency or
+process boundary. See the [D10 handoff](device-tree-editor-d10-handoff.md).

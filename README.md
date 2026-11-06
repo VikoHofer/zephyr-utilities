@@ -13,8 +13,10 @@ single-file Save, draft recovery and explicit saved-source Configure. Nordic pin
 supports the exact verified nrf52840dk/nrf52840 profile. A vendor-independent module
 catalogue places BME280 I2C/SPI devices and GPIO indicators/buttons under supported local
 parents. Its logical canvas reconstructs devices from source and saves coordinates
-separately. Broader pin adapters and advanced composition remain planned. See the
-[D9 handoff](docs/device-tree-editor-d9-handoff.md) for verified scope and limitations.
+separately. Resource diagnostics and explicit removal reviews show known consumers,
+source locations and guarded repair choices. Broader pin adapters and advanced composition
+remain planned. See the [D10 handoff](docs/device-tree-editor-d10-handoff.md) for verified
+scope and limitations.
 TinyML model/experiment analysis also remains planned.
 
 ## Start
@@ -379,7 +381,22 @@ positions separately under `.features/devicetree/module-layouts/`; it does not c
 overlay or its history. **Review and Save** still publishes firmware source, from which
 the graph is rebuilt on reopen even without layout data. D9 also retains forms, canvas
 positions and keyboard focus during guarded refreshes. Full checks, actual-binding smoke
-and browser verification passed. D10 resource diagnostics and broader removal planning is next.
+and browser verification passed. D9 is committed as `3cf6db1`.
+
+The [D10 workflow](docs/device-tree-editor-d10-handoff.md) adds **Load diagnostics** for
+known local references, bus addresses, GPIO limits and supported pin/controller conflicts.
+Errors, warnings and unknown evidence are distinct, with source locations for known
+consumers. Shared bus lines are charged to their controller, and alternate pinctrl states
+on that controller are not simultaneous owners. Diagnostics never block Save globally.
+
+**Review removal** shows the selected declaration, its descendants and known consumers
+before any change. Optional literal reference properties and alias/chosen entries may be
+offered as explicit repair choices. Required, mixed, ambiguous and unsafe dependencies
+must be repaired separately. **Apply removal to draft** commits the reviewed candidate as
+one undoable draft action; it does not save or configure. Unknown external or inherited
+consumers outside verified adapter evidence remain visible limitations. D10's full checks,
+browser verification, actual-binding smoke and installed-package checks passed. D11 advanced
+peripherals is next when requested.
 
 Acknowledged drafts are retained under `.features/devicetree/drafts/` in the data directory.
 **Find recoverable drafts** compares retained text with current files before an explicit restore;

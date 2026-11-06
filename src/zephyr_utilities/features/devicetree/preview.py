@@ -9,7 +9,7 @@ from .api import register
 PREVIEW_FEATURE = FeatureDefinition(
     id="devicetree",
     title="Device Tree Editor preview",
-    description="Local module placement, overlay drafts, reviewed single-file Save, recovery and supported pin assignments.",
+    description="Local modules, resource diagnostics, reviewed removals and overlay Save, recovery and supported pin assignments.",
     entry_path="/#/devicetree/editor",
     frontend=FrontendDefinition(Path(__file__).parent / "web"),
     register=register,

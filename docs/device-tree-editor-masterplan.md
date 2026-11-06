@@ -1,6 +1,6 @@
 # Device Tree Editor master plan
 
-Status: limited overlay editor available; D0–D9 implementations complete within their
+Status: limited overlay editor available; D0–D10 implementations complete within their
 staged scopes on 2026-11-06. D6 is committed as `564fcff`; D7 as `4caf359`; D8 as `cfaf10e`.
 D9 local module recipes, logical canvas and separate layout persistence are implemented;
 verification is recorded in the D9 handoff. Current verification and measured limits
@@ -11,7 +11,9 @@ that every advanced item in the Project Creator roadmap is complete. The editor'
 runtime now exposes existing-overlay editing, reviewed Save/recovery and explicit
 saved-source Configure, local binding-aware properties/references and local peripheral
 topology and Nordic pin configuration for the verified nrf52840dk/nrf52840 profile.
-Vendor-independent module placement uses supported local declarations; D10 is next.
+Vendor-independent module placement uses supported local declarations. D9 is committed as
+`3cf6db1`; D10 resource diagnostics/removal reviews passed full checks, browser verification,
+actual-binding smoke and package checks. D11 is next when requested.
 
 Build an offline visual hardware editor inside the existing `zephyr-utils` application.
 Users open a project, select its exact configuration, place hardware modules, connect
@@ -46,7 +48,9 @@ records local peripheral and bus-device forms, real Configure evidence and compl
 The [D8 handoff](device-tree-editor-d8-handoff.md) records the bounded Nordic pin
 adapter, source workflow and current verification. The
 [D9 handoff](device-tree-editor-d9-handoff.md) records local recipes, source-derived module
-graphs, separate layout persistence and passed verification. D10 is next.
+graphs, separate layout persistence and passed verification. The
+[D10 handoff](device-tree-editor-d10-handoff.md) records resource diagnostics/removal reviews
+and passed full/browser/package checks. D11 is next when requested.
 
 ## Product experience
 
@@ -355,7 +359,8 @@ address edits and guarded removal. Its real Configure smoke, full checks and
 browser/package verification passed as recorded in the handoff. D8's bounded Nordic pin
 implementation is **complete** within its published profile; its handoff records verification.
 D9 local recipes, logical placement and separate layout persistence are **complete within
-their scoped limits**, with passed full/browser/package checks. D10–D15 are **not started**.
+their scoped limits**, with passed full/browser/package checks. D10 is **complete within
+its current graph limits**, with passed full/browser/package checks. D11–D15 are **not started**.
 The default order is sequential; shared contracts
 and source safety precede richer visuals. Split a stage further if its exit gate cannot
 be delivered and tested in a reviewable change. Complete the selected slice without
@@ -378,7 +383,7 @@ until D4. This uses the same application/server, not a separate feature launcher
 | D7 | Peripheral and bus configuration | Complete local topology implementation; verification status in D7 handoff |
 | D8 | Nordic pin assignment and pinctrl states | Bounded nrf52840dk profile implemented; verification in D8 handoff |
 | D9 | Module catalogue and visual placement | Local recipe/canvas implementation present; verification in D9 handoff |
-| D10 | Resource diagnostics and removal planning | Reliable multi-device projects |
+| D10 | Resource diagnostics and removal planning | Complete within current graph limits; passed verification in D10 handoff |
 | D11 | Advanced peripheral and system resources | Broader hardware coverage |
 | D12 | Multiple overlays and coordinated source changes | Complete application composition |
 | D13 | Custom board maps and additional pin adapters | Verified cross-family support |
@@ -658,6 +663,16 @@ of hardware source and do not download components or execute recipe code.
 
 ### D10 Resource diagnostics and removal planning
 
+Implementation status: source-linked local diagnostics and explicit removal reviews are
+complete within the current graph limits. Passed verification is recorded in the
+[D10 handoff](device-tree-editor-d10-handoff.md). Known references, aliases/chosen, bus
+addresses, GPIO range/reservation evidence and supported pin/controller allocations are
+checked together. Unknown sharing compatibility is not promoted to an error. Removal
+previews list the selected subtree and all known consumers, offer only individually
+selected safe optional-property repairs, and retain required/mixed/ambiguous dependencies
+as blockers. Applying a review is one canonical draft operation; Save/Configure remain
+separate. Broader inherited resolution and D11 device families are not implied.
+
 Scope: unify graph diagnostics across pins, buses, controllers, references, aliases,
 chosen nodes and supported channel/resource limits. Explain conflicting consumers and
 locations. Preview the consequences of removing a module, pin group or provider; show
@@ -843,7 +858,8 @@ performance claims without measurements.
 
 ## Starting point
 
-The next implementation request should be **D10 only**; D9 verification is complete.
+The next implementation request should be **one bounded D11 slice only**. D10 verification
+is complete within its documented scope.
 D0's contracts/source experiment, D1's read-only context and D2's source operations
 provide the foundation; D3 connects source and visual session drafts. D4 delivers the first small
 usable existing-overlay editor. D5 closes its configure/build loop and D6 adds local

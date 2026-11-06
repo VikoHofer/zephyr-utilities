@@ -11,7 +11,8 @@ export function draftPresentationScope(state, workspace) {
 }
 
 export function createDraftObservationSession({api, state, workspace, drafts, onChange,
-  route, stateKey, labels, validResponse = (data) => Array.isArray(data.nodes) && Array.isArray(data.targets)}) {
+  route, stateKey, labels, allowIncomplete = false,
+  validResponse = (data) => Array.isArray(data.nodes) && Array.isArray(data.targets)}) {
   const view = state[stateKey] = {busy: false, data: null, presentation: null, error: "", message: "", captured: null};
   let disposed = false;
   let generation = 0;
@@ -37,7 +38,7 @@ export function createDraftObservationSession({api, state, workspace, drafts, on
   function ready() {
     const current = entry();
     return Boolean(capture() && !drafts.pending() && !current.flight && !current.historyOperation
-      && !current.externalOperation && !current.uncertain && !current.conflict && !current.server.syntax?.blocked);
+      && !current.externalOperation && !current.uncertain && !current.conflict && (allowIncomplete || !current.server.syntax?.blocked));
   }
   function needsReconcile() { return Boolean(capture() && entry()?.uncertain && !entry()?.conflict); }
   function canReconcile() {
@@ -97,7 +98,7 @@ export function createDraftObservationSession({api, state, workspace, drafts, on
   }
   async function command(command) {
     sync();
-    if (disposed || view.busy || !view.data || !matches(view.captured) || !ready()) return false;
+    if (disposed || view.busy || !view.data || !matches(view.captured) || !ready() || entry()?.server.syntax?.blocked) return false;
     const captured = view.captured; const token = generation; const schema = view.data.schema_id; const request = {};
     applying = request; view.busy = true; view.error = ""; view.message = "Updating the overlay draft…"; publish();
     try {

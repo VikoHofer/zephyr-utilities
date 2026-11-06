@@ -1,9 +1,9 @@
 <section class="dte-workspace" data-dte-root>
   <header class="dte-heading">
     <div><p class="dte-eyebrow">Device Tree Editor</p><h1>Visual overlay editor</h1></div>
-    <span class="dte-badge">Modules, peripherals and pins</span>
+    <span class="dte-badge">Modules, diagnostics and pins</span>
   </header>
-  <p class="dte-intro">Place local modules, configure peripherals and edit an existing application overlay, then review and Save your changes. Pin assignments are available for supported targets. Configure and compilation remain separate actions.</p>
+  <p class="dte-intro">Place local modules, configure peripherals and inspect resource conflicts in an existing overlay. Review removals and Save your changes explicitly. Pin assignments are available for supported targets; Configure and compilation remain separate actions.</p>
 
   <section class="dte-card dte-picker" aria-labelledby="dte-project-heading">
     <div class="dte-section-heading"><h2 id="dte-project-heading">Registered applications</h2><button type="button" data-dte-refresh-catalog>Refresh list</button></div>
@@ -77,6 +77,7 @@
       </section>
       <div class="dte-conflict" data-dte-conflict hidden><p>Your retained text is shown below. Review the server draft before choosing the text to continue with.</p><details><summary>Inspect competing server draft</summary><pre class="dte-source" data-dte-server-source></pre></details><button type="button" data-dte-use-local>Continue with my text</button><button type="button" data-dte-use-server>Use server draft</button></div>
       <section class="dte-modules" data-dte-modules aria-label="Modules and connections"></section>
+      <section class="dte-resources" data-dte-resources aria-label="Resource diagnostics and removal"></section>
       <div class="dte-draft-columns">
         <section class="dte-visual" aria-labelledby="dte-visual-heading">
           <h3 id="dte-visual-heading">Source declarations</h3>

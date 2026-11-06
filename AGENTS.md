@@ -10,10 +10,13 @@ and GPIO topology forms, reviewed Save, draft recovery and explicit saved-source
 through Projects. D8 adds Nordic pin forms for the exact verified nrf52840dk/nrf52840
 profile; other inherited hardware remains unknown. D9 adds vendor-independent local
 module recipes, a logical source-derived canvas and separately saved presentation layout.
-D8 is committed as `cfaf10e`; D0–D9 are implemented within their documented scoped limits.
+D8 is committed as `cfaf10e`; D0–D10 are implemented within their documented scoped limits.
 The D9 handoff records full checks, actual-binding smoke and browser verification.
-D10 resource diagnostics and removal planning is next. Broader pin adapters, advanced
-composition and TinyML experiment analysis remain planned.
+D9 is committed as `3cf6db1`. D10 adds source-linked resource diagnostics and guarded
+removal reviews with explicit optional-property repairs; full checks, browser verification
+and installed-package checks passed as recorded in the D10 handoff. D11 is next when
+requested. Broader pin adapters, advanced composition
+and TinyML experiment analysis remain planned.
 
 ## Start here
 

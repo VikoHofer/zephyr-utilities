@@ -8,7 +8,7 @@ const shown = (value) => typeof value === "string" ? value : JSON.stringify(valu
 const exists = (value) => value !== undefined && value !== null;
 const gpio = (parent) => ["led", "button"].includes(parent.kind);
 
-export function mountPeripheralPanel(root, {api, state, workspace, drafts, reveal, onChange}) {
+export function mountPeripheralPanel(root, {api, state, workspace, drafts, reveal, onChange, onRemove}) {
   const document = root.ownerDocument; const lifetime = new AbortController(); const handlers = new WeakMap();
   let disposed = false; let generation = 0; let rendered; let data; let selectedKey = "";
   const make = (tag, text, className = "") => {
@@ -255,8 +255,19 @@ export function mountPeripheralPanel(root, {api, state, workspace, drafts, revea
     collect = fields(node, child.fields); applyButton(node, "Apply device changes", child.editable);
     note(node, child.reason, "dte-notice");
     if (addressable) note(node, "Address changes update this existing node's unit address and reg together. Collision checks run before the draft changes.");
-    const remove = button("Remove device from draft", () => submit({kind: "peripheral_remove", node_id: child.node_id}, parent.path || parent.name));
-    permitted(remove, child.removable); detail.append(remove); note(detail, child.remove_reason, "dte-notice");
+    let reviewingRemoval = false;
+    const remove = button(onRemove ? "Review device removal" : "Remove device from draft", async () => {
+      if (onRemove) {
+        if (reviewingRemoval) return;
+        reviewingRemoval = true; const token = generation; remove.textContent = "Preparing removal review…";
+        try { await onRemove(child.node_id, remove); }
+        catch (error) { if (!disposed && token === generation) feedback(error.message || String(error)); }
+        finally { reviewingRemoval = false; remove.textContent = "Review device removal"; }
+        return;
+      }
+      return submit({kind: "peripheral_remove", node_id: child.node_id}, parent.path || parent.name);
+    });
+    permitted(remove, onRemove ? Boolean(child.node_id) : child.removable); detail.append(remove); note(detail, child.remove_reason, "dte-notice");
     note(detail, "Removal keeps the parent controller/group and shared providers. Known consumers or unresolved reference safety can prevent removal. Undo restores a removed local device.");
   }
   function renderDetail() {

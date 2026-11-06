@@ -1,11 +1,13 @@
 # Device Tree Editor foundation contract
 
-Status: D0–D9 contracts, 2026-11-06. D4 adds reviewed existing-overlay Save and durable
+Status: D0–D10 contracts, 2026-11-06. D4 adds reviewed existing-overlay Save and durable
 draft recovery; D5 adds explicit saved-source Configure through Projects; D6 adds local
 binding-aware property/reference forms; D7 adds local peripheral and bus-device topology.
 D8 adds Nordic pins for the verified nrf52840dk/nrf52840 profile. D9 adds local module
 recipes, a logical canvas and separately saved layout; its handoff records passed verification.
-Broader adapters remain planned. D6 is committed as `564fcff`; D7 as `4caf359`; D8 as `cfaf10e`.
+D10 adds resource diagnostics and explicit removal reviews; full/browser/package checks passed.
+Broader adapters remain planned. D6 is committed as `564fcff`; D7 as `4caf359`; D8 as `cfaf10e`;
+D9 is committed as `3cf6db1`.
 Full D7 checks and browser/package verification passed as recorded in its handoff.
 The D0 executable evidence is a bounded in-memory source prototype under
 `scripts/prototypes/`, outside the installed application. See the
@@ -878,6 +880,70 @@ records local peripheral topology, real Configure evidence and passed full/brows
 checks. The [D8 handoff](device-tree-editor-d8-handoff.md) records the bounded Nordic pin
 workflow and current verification. D0–D8 are implemented within their scoped boundaries.
 The [D9 handoff](device-tree-editor-d9-handoff.md) records the implemented local module
-catalogue/canvas, separate layout format and passed verification. The next
-implementation stage is D10 only: resource diagnostics and broader removal planning,
+catalogue/canvas, separate layout format and passed verification. The
+[D10 handoff](device-tree-editor-d10-handoff.md) records implemented resource diagnostics and
+removal reviews with passed full checks, browser verification, actual-binding smoke and package
+checks. The next stage is one bounded D11 slice,
 preserving the source command path and separation between source saving and project execution.
+
+## D10 diagnostic observations and removal reviews
+
+`POST /api/devicetree/editor/drafts/resources` accepts the standard exact context/draft
+revision/hash guard. It returns `schema_version: 1`, `schema_id`, catalogue/evidence
+fingerprint, draft identity and source hash. `nodes` mirrors `graph.nodes`; each entry
+has current `node_id`, optional stable path key, source span, labels, parent, local status
+and source-identity uniqueness. A unique source occurrence does not establish effective
+inherited identity. A narrow structural check admits local pin states/groups below one
+unambiguous `&pinctrl`; it rejects reference roots, duplicate ancestors, labels and path
+contributors. Binding forms retain their earlier, stricter inherited-resolution boundary.
+
+`graph.references` records source node/property identities, literal reference spelling,
+kind, byte span, target node/property IDs and `resolved`, `unresolved` or `ambiguous`
+local resolution. It includes node and property labels, alias/chosen path strings and
+binding-typed paths. `unknown_properties`, `external_unknown` and `truncated` disclose
+coverage gaps. Source limits remain 512 visual nodes and 4096 properties; references are
+capped at 4096 and diagnostics at 256. `graph.pin_state_consumers` adds at most 256 known
+controller/state references from the supported pin adapter, matched to local state labels.
+Each records controller, state, reference, target node, origin, evidence and an optional
+source location. Verified inherited references have no invented overlay span; they remain
+dependencies even when signal allocation is unknown or the controller is disabled.
+Truncated dependency evidence prevents reviewed
+removal. Incomplete source is inspectable as unknown evidence with an empty action graph.
+
+Diagnostics have `id`, `code`, `severity` (`error`, `warning`, `unknown`, `info`), message,
+source `locations` and explicit inspection `repair_choices`. Local I2C/SPI address and
+unit-address checks use established declarations; SPI capacity comes only from a resolved
+local chip-select array. GPIO range/reservation checks use literal provider declarations;
+unknown direction/sharing compatibility is not an exclusive-owner error. Verified pin
+allocations retain the existing target adapter's boundaries, controller instance identity,
+reservations and alternate-state sharing. Pin collision materialization itself is bounded,
+not merely its final serialized response. Failure of optional pin inspection leaves local
+diagnostics available. Stale results authorize neither source jumps nor reviewed mutations
+and never globally block a newer draft or Save.
+
+`POST /api/devicetree/editor/drafts/removal/review` accepts the standard guard plus
+`schema_id`, `node_id` and a list of selected `repairs`. It returns `review_id`, exact
+source identity, expiry, target, descendants, known dependants, repair choices, blockers,
+unknowns, `can_apply`, bounded diff and complete candidate text when safely applicable.
+A preview never mutates source. Changing repair choices requests a fresh candidate review.
+
+Only individually selected literal alias/chosen properties or optional binding reference
+properties whose references all resolve exclusively inside the removed subtree are eligible
+for whole-property repair. Required, mixed, ambiguous, opaque, property-label and structural
+consumers remain blockers or explicit uncertainty. Providers and pin groups with consumers
+are not silently detached or rewired. Root/reference blocks and non-unique targets remain
+source-only. Indexed chip-select and pin-state routing require explicit form/source repair
+instead of whole-property deletion. Known inherited pin-state consumers block removal of
+the state or its nested groups; deleting an unrelated alias cannot clear that dependency.
+All known descendant and external consumers are shown; included files, macro-generated
+consumers and inherited data outside the verified adapter remain unknown. Removing an
+override can expose an inherited value.
+
+`remove_reviewed` has exactly `kind` and `review_id` and uses the shared draft command route.
+The review and resource observation have ten-minute expiry, exact source/context guards and
+binding/pin evidence revalidation. There are at most 16 observations and 16 reviews, with
+64 individually selected repair properties. Applying the reviewed candidate is one canonical
+history change and remains unsaved. The source engine preserves unrelated bytes; Undo/Redo,
+recovery, reviewed Save and explicit Configure retain their contracts. Legacy bounded
+module/peripheral leaf-removal commands remain compatible and guarded. No new persistent
+schema, journal or shared process boundary is introduced by D10.

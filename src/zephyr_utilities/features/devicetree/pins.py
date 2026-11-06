@@ -1,6 +1,7 @@
 """Observed Nordic pin assignments use the canonical, guarded overlay draft."""
 
 from copy import deepcopy
+from collections import defaultdict
 from pathlib import Path
 import re
 import time
@@ -128,18 +129,26 @@ def _uses(document, projection, evidence):
 
 def _conflicts(projection, uses):
     messages = []
+    limit = 256
+    truncated = "Pin conflicts exceed the 256-entry inspection limit; remaining conflicts are not listed."
     active = [row for row in projection["controllers"] if row["status"] in {"okay", "ok"}]
     for index, left in enumerate(active):
         for right in active[index + 1:]:
             if left.get("instance") is not None and left["instance"] == right.get("instance"):
                 messages.append(f"{left['id']} and {right['id']} share hardware instance {left['instance']} and are both enabled.")
-    for index, left in enumerate(uses):
-        for right in uses[index + 1:]:
-            if (left["port"], left["pin"]) != (right["port"], right["pin"]):
-                continue
-            if left["kind"] == right["kind"] == "pinctrl" and left["owner"] == right["owner"] and left["state"] != right["state"]:
-                continue
-            messages.append(f"P{left['port']}.{left['pin']:02d} is used concurrently by {left['owner']} {left['role']} and {right['owner']} {right['role']}.")
+                if len(messages) >= limit:
+                    return [*messages[:limit - 1], truncated]
+    pins = defaultdict(list)
+    for use in uses:
+        pins[(use["port"], use["pin"])].append(use)
+    for group in pins.values():
+        for index, left in enumerate(group):
+            for right in group[index + 1:]:
+                if left["kind"] == right["kind"] == "pinctrl" and left["owner"] == right["owner"] and left["state"] != right["state"]:
+                    continue
+                messages.append(f"P{left['port']}.{left['pin']:02d} is used concurrently by {left['owner']} {left['role']} and {right['owner']} {right['role']}.")
+                if len(messages) >= limit:
+                    return [*messages[:limit - 1], truncated]
     return list(dict.fromkeys(messages))
 
 
@@ -163,6 +172,9 @@ class PinService:
         for controller in result["controllers"]:
             controller["aliases"] = next(row.get("aliases", []) for row in evidence.controllers if row["id"] == controller["id"])
         uses, unknown = _uses(document, result, evidence)
+        result["allocations"] = deepcopy(uses)
+        result["allocation_unknown"] = list(unknown)
+        result["reservations"] = deepcopy(evidence.reservations)
         result["conflicts"] = _conflicts(result, uses)
         result["diagnostics"] = list(dict.fromkeys([*evidence.diagnostics, *result.get("diagnostics", []),
                                                    *unknown, *result["conflicts"], SCOPE]))
@@ -195,6 +207,7 @@ class PinService:
             if evidence is None:
                 evidence = NordicEvidence(context)
             payload = {"supported": False, "reason": evidence.reason, "controllers": [], "gpio": [], "pins": [],
+                       "allocations": [], "allocation_unknown": [], "reservations": [],
                        "diagnostics": list(evidence.diagnostics), "gpio_flags": evidence.gpio_flags,
                        "target": (context.get("target") or {}).get("requested"), "adapter": "nrf52840dk-v1"}
             if evidence.supported:

@@ -30,7 +30,7 @@ research master plan, not a general coding-assistant integration.
 | Feature | State | Initial implementation direction |
 | --- | --- | --- |
 | Memory Explorer (`memory`) | Available | Existing-build reports, visualization, snapshots and comparisons |
-| Device Tree Editor (`devicetree`) | Existing-overlay editing, binding/peripheral forms, bounded pins, local module canvas, reviewed Save/recovery and explicit Configure | D0–D9 complete within documented limits; D10 resource diagnostics/removal planning next; broader pin adapters remain later |
+| Device Tree Editor (`devicetree`) | Existing-overlay editing, binding/peripheral forms, bounded pins, local module canvas, resource diagnostics/removal reviews, reviewed Save/recovery and explicit Configure | D0–D10 complete within documented scopes; full/browser/package checks passed; D11 next when requested |
 | Project Creator (`projects`) | Applications, creation/build and environment discovery available | Maintain the delivered everyday workflow and add focused public editor handoffs |
 | Build Inspector (`inspector`) | Advanced build, resolved-tree, current source and binding navigation available | Preserve available inspection; further depth deferred |
 | TinyML Experiments (`tinyml`) | Planned | Connect model/build/run identities and compare imported experiment measurements |
@@ -119,8 +119,16 @@ preserves shared parents and providers. Handwritten nodes are recognized structu
 without conversion. Source and shared Undo/Redo remain canonical, while separately saved
 layout has its own versioned, scoped records. Software requirements are displayed without
 changing Kconfig. D9 implementation and passed verification are recorded in the
-[D9 handoff](device-tree-editor-d9-handoff.md). D10 resource diagnostics and broader removal
-planning is the next stage when requested.
+[D9 handoff](device-tree-editor-d9-handoff.md). D9 is committed as `3cf6db1`.
+
+D10 adds unified source-linked diagnostics for current local resources and supported pin
+evidence, distinguishing conflicts from unknown facts. Reviewed removal lists descendants
+and known consumers, permits individually selected safe optional-property repairs and
+applies one canonical draft command. Required/ambiguous/mixed dependencies need explicit
+source or form repair. Source Save and Configure remain separate. Passed full checks,
+browser verification, actual-binding smoke and package checks are recorded in the
+[D10 handoff](device-tree-editor-d10-handoff.md). D11 advanced peripherals
+and system resources is next when requested, delivered in bounded slices.
 
 The [Project Creator and environment analyser master plan](project-creator-masterplan.md)
 provides the earlier shared-context proposal; the editor master plan now defines its

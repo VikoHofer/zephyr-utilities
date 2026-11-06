@@ -474,7 +474,8 @@ class EditorContextHttpTests(unittest.TestCase):
     def test_draft_routes_share_authentication_and_synchronize_without_writing(self):
         for operation in ("open", "get", "source", "command", "undo", "redo", "review", "save", "compare", "reload",
                           "recovery/list", "recovery/read", "recovery/restore", "recovery/discard",
-                          "validation/review", "validation/submit", "validation/status", "validation/cancel", "validation/handoff", "bindings", "peripherals"):
+                          "validation/review", "validation/submit", "validation/status", "validation/cancel", "validation/handoff", "bindings", "peripherals",
+                          "resources", "removal/review"):
             for authorized, expected in ((False, 403), (True, 400)):
                 with self.subTest(operation=operation, authorized=authorized), self.assertRaises(HTTPError) as error:
                     self.request(PREFIX + "drafts/" + operation, method="POST", body={}, authorized=authorized)
@@ -508,6 +509,53 @@ class EditorContextHttpTests(unittest.TestCase):
         self.assertEqual(original["text"], draft["text"])
         self.assertFalse(original["dirty"])
         self.assertEqual(source_bytes(self.source), before)
+        self.assertEqual(self.server.app.context.jobs.list(), [])
+
+    def test_resource_removal_review_repairs_are_explicit_atomic_and_revision_bound(self):
+        def post(operation, body):
+            with self.request(PREFIX + operation, method="POST", body=body) as response:
+                return json.load(response)
+
+        overlay = self.source / "app.overlay"
+        original = '/ { thing: sensor { status = "okay"; }; aliases { selected-device = &thing; }; };\n'
+        overlay.write_text(original)
+        before = source_bytes(self.source)
+        context = post("open", {"workspace": str(self.root), "application_path": str(self.source)})
+        binding = {"workspace": str(self.root), "context_id": context["id"], "expected_revision": context["revision"]}
+        document = next(item for item in context["documents"] if item["relative_path"] == "app.overlay")
+        draft = post("drafts/open", {**binding, "document_id": document["id"]})
+
+        def guard(value):
+            return {**binding, "draft_id": value["id"], "expected_draft_revision": value["revision"],
+                    "expected_draft_sha256": value["sha256"]}
+
+        observed = post("drafts/resources", guard(draft))
+        target = next(node for node in observed["nodes"] if node["name"] == "sensor")
+        request = {**guard(draft), "schema_id": observed["schema_id"], "node_id": target["node_id"], "repairs": []}
+        blocked = post("drafts/removal/review", request)
+        self.assertFalse(blocked["can_apply"])
+        self.assertEqual(len(blocked["dependants"]), 1)
+        self.assertEqual(len(blocked["repair_choices"]), 1)
+        self.assertEqual(source_bytes(self.source), before)
+        plan = post("drafts/removal/review", {**request, "repairs": [blocked["repair_choices"][0]["id"]]})
+        self.assertTrue(plan["can_apply"], plan)
+        self.assertIn("sensor", plan["diff"]["text"])
+        with self.assertRaises(HTTPError) as error:
+            post("drafts/command", {**guard(draft), "command": {"kind": "remove_reviewed", "review_id": blocked["review_id"]}})
+        self.assertEqual(error.exception.code, 400)
+        error.exception.close()
+        removed = post("drafts/command", {**guard(draft), "command": {"kind": "remove_reviewed", "review_id": plan["review_id"]}})
+        self.assertEqual(removed["revision"], draft["revision"] + 1)
+        self.assertEqual(removed["text"], plan["candidate_text"])
+        self.assertNotIn("selected-device", removed["text"])
+        self.assertNotIn("sensor", removed["text"])
+        self.assertEqual(source_bytes(self.source), before)
+        with self.assertRaises(HTTPError) as stale:
+            post("drafts/command", {**guard(removed), "command": {"kind": "remove_reviewed", "review_id": plan["review_id"]}})
+        self.assertEqual(stale.exception.code, 400)
+        stale.exception.close()
+        restored = post("drafts/undo", guard(removed))
+        self.assertEqual(restored["text"], original)
         self.assertEqual(self.server.app.context.jobs.list(), [])
 
     def test_reviewed_save_reopen_undo_and_recovery_use_the_shared_http_server(self):

@@ -7,6 +7,7 @@ import {mountBindingPanel} from "./binding-view.js";
 import {mountPeripheralPanel} from "./peripheral-view.js";
 import {mountPinPanel} from "./pin-view.js";
 import {mountModulePanel} from "./module-view.js";
+import {mountResourcePanel} from "./resource-view.js";
 import {retainActionFocus} from "./view-focus.js";
 
 const array = (value) => Array.isArray(value) ? value : [];
@@ -33,6 +34,7 @@ export function mount(host, context) {
   let peripherals;
   let pins;
   let modules;
+  let resources;
   let shownReview;
   let reviewTrigger;
   let shownConfigure;
@@ -554,6 +556,7 @@ export function mount(host, context) {
     peripherals?.render();
     pins?.render();
     modules?.render();
+    resources?.render();
   }
   async function action(operation, destination) {
     const captured = ++actionGeneration;
@@ -724,20 +727,31 @@ export function mount(host, context) {
   saving = createSaveSession({api: context.api, state, workspace: () => context.workspace.path, drafts,
     adopt: (data, document) => session.adopt(data, document), onChange: render});
   validation = createValidationSession({api: context.api, state, workspace: () => context.workspace.path, drafts, onChange: render});
+  function resourceSource(location, observation) {
+    const entry = draftEntry(); const current = entry?.server;
+    if (disposed || !current || drafts.pending() || entry.flight || entry.uncertain || entry.conflict
+        || observation?.draft_id !== current.id || observation.revision !== current.revision || observation.sha256 !== current.sha256
+        || !Number.isInteger(location?.start) || !Number.isInteger(location?.end) || location.start < 0 || location.end < location.start) return;
+    const range = sourceSelection(entry.text, location.start, location.end);
+    if (!range) return;
+    context.reveal?.($("source")); $("source").setSelectionRange(...range);
+  }
+  resources = mountResourcePanel($("resources"), {api: context.api, state, workspace: () => context.workspace.path,
+    drafts, reveal: context.reveal, onChange: render, onSource: resourceSource});
   bindings = mountBindingPanel($("bindings"), {api: context.api, state, workspace: () => context.workspace.path,
     drafts, reveal: context.reveal, onChange: render});
   peripherals = mountPeripheralPanel($("peripherals"), {api: context.api, state, workspace: () => context.workspace.path,
-    drafts, reveal: context.reveal, onChange: render});
+    drafts, reveal: context.reveal, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
   pins = mountPinPanel($("pins"), {api: context.api, state, workspace: () => context.workspace.path,
     drafts, reveal: context.reveal, onChange: render});
   modules = mountModulePanel($("modules"), {api: context.api, state, workspace: () => context.workspace.path,
-    drafts, reveal: context.reveal, onChange: render});
+    drafts, reveal: context.reveal, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
   render();
   return {
-    navigate(view) { actionGeneration++; visualMessage(""); saving.cancel(); validation.closeReview(); validation.resume(); bindings.navigate(); peripherals.navigate(); pins.navigate(); modules.navigate(); return session.navigate(view); },
+    navigate(view) { actionGeneration++; visualMessage(""); saving.cancel(); validation.closeReview(); validation.resume(); bindings.navigate(); peripherals.navigate(); pins.navigate(); modules.navigate(); resources.navigate(); return session.navigate(view); },
     dispose() {
       disposed = true; actionGeneration++; lifetime.abort(); saving.dispose(); closeReview({restoreFocus: false});
-      validation.dispose(); closeConfigure({restoreFocus: false}); bindings.dispose(); peripherals.dispose(); pins.dispose(); modules.dispose(); session.dispose(); drafts.dispose();
+      validation.dispose(); closeConfigure({restoreFocus: false}); bindings.dispose(); peripherals.dispose(); pins.dispose(); modules.dispose(); resources.dispose(); session.dispose(); drafts.dispose();
       for (const url of downloadUrls) URL.revokeObjectURL(url);
     },
   };
