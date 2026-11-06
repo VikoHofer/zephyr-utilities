@@ -4,7 +4,9 @@ Status: local peripheral/topology implementation complete on 2026-11-06 within t
 limits below. D6 was committed as `564fcff` before this stage.
 The real Configure smoke, full checks, browser verification and installed-package
 verification passed. D0–D7 are implemented within their scoped boundaries;
-D8 Nordic pin configuration is the next stage.
+D8 Nordic pin configuration has now been implemented separately; its
+[handoff](device-tree-editor-d8-handoff.md) records the supported profile and current
+verification. D9 module recipes and placement follows it.
 
 ## Delivered workflow
 
@@ -119,9 +121,7 @@ operation on hardware.
 
 ## Next stage
 
-Implement **D8 only** from the
-[master plan](device-tree-editor-masterplan.md): the first supported Nordic pin adapter
-and accessible pin assignment workflow for the exact selected target. Reuse canonical
-source commands, actual provider cells, schema observations and separate Save/Configure
-actions. Module recipes, visual module placement and broader cross-file composition
-remain later stages.
+The subsequent [D8 handoff](device-tree-editor-d8-handoff.md) records the bounded Nordic
+pin adapter and accessible assignment workflow. It retains canonical source commands
+and separate Save/Configure actions. D9 module recipes and visual placement is next;
+broader cross-file composition remains a later stage.

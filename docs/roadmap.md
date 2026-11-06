@@ -30,7 +30,7 @@ research master plan, not a general coding-assistant integration.
 | Feature | State | Initial implementation direction |
 | --- | --- | --- |
 | Memory Explorer (`memory`) | Available | Existing-build reports, visualization, snapshots and comparisons |
-| Device Tree Editor (`devicetree`) | Existing-overlay editing, local binding/reference and peripheral topology forms, reviewed Save/recovery and explicit Configure available | D8 Nordic pin configuration next; module placement remains later |
+| Device Tree Editor (`devicetree`) | Existing-overlay editing, local binding/reference and peripheral forms, bounded Nordic pins, reviewed Save/recovery and explicit Configure | D9 module recipes and visual placement next; broader pin adapters remain later |
 | Project Creator (`projects`) | Applications, creation/build and environment discovery available | Maintain the delivered everyday workflow and add focused public editor handoffs |
 | Build Inspector (`inspector`) | Advanced build, resolved-tree, current source and binding navigation available | Preserve available inspection; further depth deferred |
 | TinyML Experiments (`tinyml`) | Planned | Connect model/build/run identities and compare imported experiment measurements |
@@ -58,8 +58,9 @@ include links and direct property summaries do not perform schema resolution or 
 Applications can also be opened before configuration to browse current sources and local
 bindings. Conventional include locations are candidates, not configured search paths.
 The Device Tree Editor now supports existing-overlay source and literal property editing,
-local binding-aware properties/references, UART/I2C/SPI and GPIO topology, reviewed Save and draft recovery. Its broader goal is hardware-module placement and
-pin/signal assignment. Following the delivered everyday
+local binding-aware properties/references, UART/I2C/SPI and GPIO topology, bounded Nordic
+pin/signal assignment, reviewed Save and draft recovery. Its broader goal is hardware-module
+placement and wider target coverage. Following the delivered everyday
 Project Creator workflow, the [Device Tree Editor master plan](device-tree-editor-masterplan.md)
 is the next product direction. It defines D0–D15 with separate implementation prompts
 and exit gates: source-preserving edits and guarded saving first, then peripherals,
@@ -96,7 +97,19 @@ arrays. Required values are explicit; inherited hardware, physical routing and m
 recipes remain unknown or planned. D0–D7 implementations are complete within these
 scoped boundaries. D7's real Configure smoke, full checks,
 browser verification and package verification passed as recorded in the
-[D7 handoff](device-tree-editor-d7-handoff.md). D8 Nordic pin configuration is next.
+[D7 handoff](device-tree-editor-d7-handoff.md).
+
+D8 adds the first Nordic pin adapter for exactly `nrf52840dk/nrf52840` and its supported
+Zephyr 4.4.2 source profile. It revalidates 41 local evidence files and a single selected
+overlay before using inherited board facts. UART/I2C/SPI signals have explicit default/sleep
+state forms; a 48-pin table exposes known connector mappings, reservations and allocations.
+Source commands retain symbolic pin/GPIO constants, copy inherited states, require an
+explicit shared-state split and preserve other consumers. Local direct GPIO entries have
+symbolic flag controls. Known conflicts and shared controller instances are diagnosed;
+read-only PWM/QSPI evidence is retained. No board drawing, package/electrical guarantee,
+custom-board resolver, module recipe or multi-overlay composition is implied. D8's current
+verification is recorded in the [D8 handoff](device-tree-editor-d8-handoff.md). D9 module
+recipes and visual placement is next.
 
 The [Project Creator and environment analyser master plan](project-creator-masterplan.md)
 provides the earlier shared-context proposal; the editor master plan now defines its

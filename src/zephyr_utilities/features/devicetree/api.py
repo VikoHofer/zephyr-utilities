@@ -7,6 +7,7 @@ from .service import EditorService
 from .validation import ValidationService
 from .binding_service import BindingService
 from .peripherals import PeripheralService
+from .pins import PinService
 
 
 def register(router, context):
@@ -29,6 +30,10 @@ def register(router, context):
     drafts.peripherals = peripherals
     context.services["devicetree_peripherals"] = peripherals
     router.add("POST", "/api/devicetree/editor/drafts/peripherals", lambda request: peripherals.inspect(request.body))
+    pins = PinService(drafts)
+    drafts.pins = pins
+    context.services["devicetree_pins"] = pins
+    router.add("POST", "/api/devicetree/editor/drafts/pins", lambda request: pins.inspect(request.body))
     for suffix in ("open", "get", "source", "command", "undo", "redo"):
         router.add("POST", f"/api/devicetree/editor/drafts/{suffix}",
                    lambda request, operation=getattr(drafts, suffix): operation(request.body))

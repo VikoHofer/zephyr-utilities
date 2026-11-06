@@ -1,9 +1,9 @@
 <section class="dte-workspace" data-dte-root>
   <header class="dte-heading">
     <div><p class="dte-eyebrow">Device Tree Editor</p><h1>Visual overlay editor</h1></div>
-    <span class="dte-badge">Properties and references</span>
+    <span class="dte-badge">Properties, peripherals and pins</span>
   </header>
-  <p class="dte-intro">Edit and save an existing application overlay, then explicitly configure it to check the saved source. Compilation is a separate action in Projects. Pin assignment and module placement remain planned.</p>
+  <p class="dte-intro">Edit and save an existing application overlay, then explicitly configure it to check the saved source. Compilation is a separate action in Projects. Pin assignments are available for supported targets; module placement remains planned.</p>
 
   <section class="dte-card dte-picker" aria-labelledby="dte-project-heading">
     <div class="dte-section-heading"><h2 id="dte-project-heading">Registered applications</h2><button type="button" data-dte-refresh-catalog>Refresh list</button></div>
@@ -79,7 +79,7 @@
       <div class="dte-draft-columns">
         <section class="dte-visual" aria-labelledby="dte-visual-heading">
           <h3 id="dte-visual-heading">Source declarations</h3>
-          <p class="dte-muted">These are declarations in this overlay. Inherited hardware and pin configuration are later stages.</p>
+          <p class="dte-muted">These are declarations in this overlay. The pin panel uses separately verified target evidence; other inherited hardware remains unknown.</p>
           <p class="dte-notice" data-dte-visual-notice></p>
           <div data-dte-visual-controls hidden>
             <label>Node occurrence<select size="5" data-dte-node></select></label>
@@ -95,6 +95,7 @@
             </form>
           </div>
           <section class="dte-peripherals" data-dte-peripherals aria-label="Peripherals and bus devices"></section>
+          <section class="dte-pins" data-dte-pins aria-label="Pins and signals"></section>
           <section class="dte-bindings" data-dte-bindings aria-label="Binding properties and references"></section>
         </section>
         <section class="dte-source-panel" aria-labelledby="dte-source-heading" data-dte-source-panel>

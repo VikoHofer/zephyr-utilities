@@ -1,9 +1,10 @@
 # Device Tree Editor foundation contract
 
-Status: D0–D7 contracts, 2026-11-06. D4 adds reviewed existing-overlay Save and durable
+Status: D0–D8 contracts, 2026-11-06. D4 adds reviewed existing-overlay Save and durable
 draft recovery; D5 adds explicit saved-source Configure through Projects; D6 adds local
 binding-aware property/reference forms; D7 adds local peripheral and bus-device topology.
-Hardware modules and pins remain planned. D6 is committed as `564fcff`; D7 is complete within its local-overlay scope.
+D8 adds Nordic pins for the verified nrf52840dk/nrf52840 profile; module placement and
+broader adapters remain planned. D6 is committed as `564fcff`; D7 as `4caf359`.
 Full D7 checks and browser/package verification passed as recorded in its handoff.
 The D0 executable evidence is a bounded in-memory source prototype under
 `scripts/prototypes/`, outside the installed application. See the
@@ -13,7 +14,7 @@ the [D1 handoff](device-tree-editor-d1-handoff.md) and
 [D2 handoff](device-tree-editor-d2-handoff.md), [D3 handoff](device-tree-editor-d3-handoff.md)
 and [D4 handoff](device-tree-editor-d4-handoff.md), followed by the
 [D5 handoff](device-tree-editor-d5-handoff.md), [D6 handoff](device-tree-editor-d6-handoff.md)
-and [D7 handoff](device-tree-editor-d7-handoff.md).
+[D7 handoff](device-tree-editor-d7-handoff.md) and [D8 handoff](device-tree-editor-d8-handoff.md).
 
 ## Ownership and compatibility
 
@@ -703,6 +704,75 @@ existing boundaries. D7 does not add module recipes, inherited-controller resolu
 pin assignment or automatic pinctrl. See the [D7 handoff](device-tree-editor-d7-handoff.md)
 for measured evidence and verification.
 
+## D8 Nordic pin observation and commands
+
+D8 adds a bounded source adapter for the exact official `nrf52840dk/nrf52840` target.
+`NordicEvidence` accepts the versioned `nrf52840dk-zephyr-4.4.2-v1` profile only when
+41 selected local evidence files match their recorded hashes. The set includes the board
+DTS include closure, pin/GPIO encoders and relevant binding/driver evidence. Facts are
+then read from those local files; source contents are not bundled as a substitute for the
+selected checkout. Observed absence of potential shadow files is revalidated as well.
+Missing, changed, shadowed or unsupported evidence leaves the pin forms unavailable.
+
+The context must identify the official board, selected environment and exactly one active
+application overlay matching the draft. Custom board/SoC roots, shields, snippets and
+multi-overlay composition are unsupported. The source profile allows the supported
+GPIO/pinctrl header includes, not arbitrary preprocessing, node deletions, absolute
+reference blocks, overridden provider layouts or changed read-only QSPI/PWM routing.
+These boundaries avoid claiming an effective hardware tree from partial composition.
+Unsupported documents remain available to the existing source editor.
+
+`POST /api/devicetree/editor/drafts/pins` uses the existing context/draft guard and returns
+an expiring observation: `schema_id`, draft revision/hash, evidence fingerprint, support
+state, exact target, controller states, local GPIO rows, symbolic flags, a 48-pin table and
+diagnostics. Loading performs no firmware write or project execution. `PinService` is
+feature-owned and enters the same `DraftService.command` path as D6/D7.
+
+Supported controller roles are `UART_TX`, `UART_RX`, `UART_RTS`, `UART_CTS`, `TWIM_SCL`,
+`TWIM_SDA`, `SPIM_SCK`, `SPIM_MOSI` and `SPIM_MISO`, constrained by the observed controller
+profile. PWM/QSPI routes contribute read-only allocation evidence. Explicit `default`
+and `sleep` states remain separate; identical pins in those two states of one controller
+are not a concurrent conflict. Known enabled consumers, shared hardware instances and
+board reservations constrain assignment. A board reservation may retain its evidenced
+owner; selecting the pin alone does not transfer that ownership. Unknown enabled routes
+prevent proving a new allocation safe. External wiring, package pads, electrical behavior
+and runtime ownership remain unknown.
+
+Commands carry the current `schema_id` and existing exact context/draft guard:
+
+| Command | Additional arguments | Result |
+| --- | --- | --- |
+| `pin_assign` | `controller`, `state`, `role`, `port`, `pin`, `split_shared` | Assign/reassign one symbolic signal in the selected state |
+| `pin_unassign` | `controller`, `state`, `role`, `split_shared` | Remove one signal and supported exclusively owned empty groups |
+| `pin_gpio` | `node_id`, `property`, `index`, `port`, `pin`, `flags` | Update an observed direct GPIO entry with explicit symbolic flags |
+| `pin_gpio_unassign` | `node_id`, `property`, `index` | Remove one GPIO entry; explicitly delete the property when removing its final entry |
+
+`NordicSource` plans one atomic source change. Existing local `NRF_PSEL` expressions retain
+their symbolic roles and surrounding bytes. An inherited state is copied into the overlay
+before modification. A state with other consumers requires explicit `split_shared: true`;
+the original state remains for those consumers. Unsupported expressions, ambiguous local
+contributors and unsafe descendant-label/comment transformations are refused with source
+editing available. Unassign retains unrelated signals and removes only supported exclusive
+groups. An emptied pinctrl state receives an explicit empty reference list so inherited
+pins are not silently restored. Required headers are added only by applicable commands.
+
+GPIO forms cover observed local `gpios` and `*-gpios` properties using direct `gpio0`/
+`gpio1` references, including supported local overrides of inherited consumers. They do
+not enumerate every inherited GPIO device as an editable row. Flags remain explicit
+symbols from the selected header; invalid combinations and opaque values are not
+rewritten. Multi-entry edits preserve the other entries; removal shifts their source
+indices. The final removal uses `/delete-property/` to suppress inheritance. A required
+property can consequently remain absent until the user replaces it before Configure.
+`cs-gpios` entries can be reassigned at their existing indices, but removal remains
+source-only because it could reorder or invalidate a bus device's chip-select index.
+
+The browser uses shared draft-observation invalidation, cancellation and reconciliation.
+Controller/state/role selectors, GPIO forms and a selectable pin table support keyboard
+use. Table selection only fills a form; Apply/Unassign changes the canonical draft. Source,
+Undo/Redo, recovery, reviewed Save and explicit Configure keep their existing boundaries.
+No board drawing, module recipe, automatic controller enablement or multi-file writer is
+introduced. The [D8 handoff](device-tree-editor-d8-handoff.md) records current verification.
+
 ## Verification and next stage
 
 The [D0 handoff](device-tree-editor-d0-handoff.md) records the prototype baseline.
@@ -717,6 +787,7 @@ The [D5 handoff](device-tree-editor-d5-handoff.md) records explicit saved-source
 configuration and Projects handoff. The [D6 handoff](device-tree-editor-d6-handoff.md)
 records local binding-aware properties and references. The [D7 handoff](device-tree-editor-d7-handoff.md)
 records local peripheral topology, real Configure evidence and passed full/browser/package
-checks. D0–D7 are implemented within their scoped boundaries. The next implementation
-stage is D8 only: the first supported Nordic pin adapter, preserving the source command
-path and separation between source saving and project execution.
+checks. The [D8 handoff](device-tree-editor-d8-handoff.md) records the bounded Nordic pin
+workflow and current verification. D0–D8 are implemented within their scoped boundaries.
+The next implementation stage is D9 only: module recipes and visual placement, preserving
+the source command path and separation between source saving and project execution.

@@ -9,8 +9,9 @@ Advanced Build Inspector reads existing outputs, resolved Device Trees, current 
 and bindings, and carries the selected image into Memory Explorer for report generation.
 Device Tree Editor supports visual status/property edits, local binding-aware forms and
 references, local UART/I2C/SPI and GPIO topology, editable overlay source, reviewed
-single-file Save, draft recovery and explicit saved-source Configure. Hardware modules
-and pin configuration remain planned.
+single-file Save, draft recovery and explicit saved-source Configure. Nordic pin assignment
+supports the exact verified nrf52840dk/nrf52840 profile. Hardware modules and broader pin
+adapters remain planned.
 TinyML model/experiment analysis also remains planned.
 
 ## Start
@@ -336,8 +337,31 @@ unknown. Device lists are bounded to 256 compatible candidates with explicit tru
 GPIO fields use actual local provider cells, and new buttons require an explicit input
 code for the selected GPIO-key driver. Loading adds no defaults or required properties.
 Inherited controllers, pin routing and module placement remain outside this stage.
-D0–D7 are implemented within these limits; D8 Nordic pins is next. The D7 handoff records
-full checks, browser/package verification and the real Configure smoke.
+The D7 handoff records full checks, browser/package verification and the real Configure smoke.
+
+The [D8 workflow](docs/device-tree-editor-d8-handoff.md) adds **Load pin assignments** for a
+registered `nrf52840dk/nrf52840` configuration with one selected overlay. This first adapter
+requires the supported Zephyr 4.4.2 source profile: 41 local evidence files are checked by
+hash before board/controller facts are used. Changed or missing evidence, custom board
+roots, shields and unsupported composition leave the forms unavailable with an explanation.
+Opening a directory alone does not establish this exact target.
+
+Choose a UART, I2C or SPI controller, its `default` or `sleep` state and a signal role, then
+assign, reassign or unassign a pin. A pin table shows 48 SoC pins, observed board connector
+names, reservations and uses. Selecting a table row fills the form; applying it updates
+the same overlay draft and Undo/Redo history. Existing inherited states are copied into
+the overlay when changed. A shared state requires an explicit split and retains its other
+consumers. The editor preserves symbolic `NRF_PSEL` calls and GPIO constants, surrounding
+source and required includes. It never enables or relocates a different controller.
+
+GPIO forms edit supported local `gpios`/`*-gpios` entries referring directly to `gpio0`
+or `gpio1`, including explicit symbolic flags. Removing the final entry emits a property
+deletion so an inherited assignment cannot return silently. Read-only PWM/QSPI routes
+contribute evidence, and known pin conflicts, reservations and shared controller instances
+are checked. Package pads, solder bridges, electrical suitability and external wiring
+remain unknown. Other pin encodings and opaque source remain available in the source editor.
+D0–D8 are implemented within these scoped limits; D8 verification is recorded in its
+handoff. D9 module recipes and visual placement is the next stage.
 
 Acknowledged drafts are retained under `.features/devicetree/drafts/` in the data directory.
 **Find recoverable drafts** compares retained text with current files before an explicit restore;

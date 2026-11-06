@@ -70,7 +70,7 @@ def _simple_cmake(content):
         name, args = match[1].lower(), match[2].strip()
         patterns = {"cmake_minimum_required": r"VERSION\s+[0-9.]+",
                     "find_package": r"Zephyr\s+REQUIRED\s+HINTS\s+\$ENV\{ZEPHYR_BASE\}",
-                    "project": r"[A-Za-z_][A-Za-z0-9_]*(?:\s+(?:C|CXX|LANGUAGES))*",
+                    "project": r"[A-Za-z_][A-Za-z0-9_-]*(?:\s+(?:C|CXX|LANGUAGES))*",
                     "target_sources": r"app\s+PRIVATE\s+[A-Za-z0-9_./+\s-]+"}
         if name not in patterns or re.fullmatch(patterns[name], args) is None:
             return False

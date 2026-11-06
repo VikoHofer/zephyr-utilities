@@ -102,6 +102,22 @@
 .dte-workspace .dte-topology li { margin:.4rem 0; }
 .dte-workspace .dte-topology button { max-width:100%; text-align:left; overflow-wrap:anywhere; }
 .dte-workspace .dte-topology button[aria-pressed=true] { background:var(--app-brand-soft); border-color:var(--app-brand); color:var(--app-brand); }
+.dte-workspace .dte-pins { border-top:1px solid var(--app-border); margin-top:1.2rem; padding-top:1rem; }
+.dte-workspace .dte-pins .dte-section-heading { align-items:flex-start; flex-wrap:wrap; gap:.6rem; }
+.dte-workspace .dte-pins .dte-section-heading h3 { margin:0; }
+.dte-workspace .dte-pins h4 { margin:.3rem 0 .7rem; font-size:.9rem; }
+.dte-workspace .dte-pin-controls, .dte-workspace .dte-pin-form { display:grid; gap:.8rem; min-width:0; }
+.dte-workspace .dte-pin-form { border-top:1px solid var(--app-border); padding-top:.85rem; margin-top:.5rem; }
+.dte-workspace .dte-pin-form > label:has(input[type=checkbox]), .dte-workspace .dte-pin-flags label { grid-template-columns:minmax(0,1fr) auto; align-items:center; }
+.dte-workspace .dte-pin-form input[type=checkbox] { width:1rem; height:1rem; accent-color:var(--app-brand); }
+.dte-workspace .dte-pin-flags { display:grid; gap:.5rem; min-width:0; margin:0; padding:.65rem; border:1px solid var(--app-border); border-radius:.4rem; }
+.dte-workspace .dte-pin-flags legend { font-size:.85rem; font-weight:600; }
+.dte-workspace .dte-pin-table-details { border-top:1px solid var(--app-border); padding-top:.75rem; }
+.dte-workspace .dte-pin-table { width:100%; table-layout:fixed; border-collapse:collapse; font-size:.78rem; line-height:1.45; }
+.dte-workspace .dte-pin-table caption { text-align:left; margin-bottom:.6rem; color:var(--app-muted); }
+.dte-workspace .dte-pin-table th, .dte-workspace .dte-pin-table td { text-align:left; vertical-align:top; padding:.55rem .35rem; border-bottom:1px solid var(--app-border); overflow-wrap:anywhere; }
+.dte-workspace .dte-pin-table th:first-child { width:4.7rem; }
+.dte-workspace .dte-pin-table button { padding:.4rem; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:.78rem; white-space:nowrap; }
 @media (min-width:1101px) {
   .dte-workspace .dte-source-panel { position:sticky; top:1rem; max-height:calc(100vh - 2rem); overflow:auto; }
 }

@@ -113,6 +113,16 @@ class OverlayUsageTests(unittest.TestCase):
         for name in ("app.overlay", "boards/other.overlay", "upstream/board.overlay"):
             self.assertEqual(rows[name]["state"], "unknown")
             self.assertIn("Transitive use needs", rows[name]["reason"])
+
+    def test_created_hyphenated_project_name_keeps_standard_overlay_prediction(self):
+        cmake = SIMPLE_CMAKE.replace("project(application)", "project(sensor-node)")
+        result = self.report(self.files("app.overlay", cmake=cmake))
+        self.assertEqual(result["status"], "expected")
+        self.assertEqual(self.rows(result)["app.overlay"]["state"], "expected")
+        self.fragments("replace", ["pins.overlay"])
+        result = self.report(self.files("pins.overlay", cmake=cmake))
+        self.assertEqual(result["status"], "expected")
+        self.assertEqual(self.rows(result)["pins.overlay"]["state"], "expected")
         self.assertNotIn("active", {row["state"] for row in result["files"]})
 
     def test_revision_and_root_fallback_are_expected_without_claiming_confirmation(self):

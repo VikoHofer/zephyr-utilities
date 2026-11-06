@@ -1,14 +1,16 @@
 # Device Tree Editor master plan
 
-Status: limited overlay editor available; D0–D7 implementations complete within their
-staged scopes on 2026-11-06. D6 is committed as `564fcff`; D7 is verified. Verification and measured limits are recorded
+Status: limited overlay editor available; D0–D8 implementations complete within their
+staged scopes on 2026-11-06. D6 is committed as `564fcff`; D7 as `4caf359`. D8 adds the
+bounded Nordic pin workflow; its current verification and measured limits are recorded
 in the stage handoffs. The next product
 priority is the visual Device Tree Editor
 following the delivered everyday Project Creator workflow. This plan does not imply
 that every advanced item in the Project Creator roadmap is complete. The editor's
 runtime now exposes existing-overlay editing, reviewed Save/recovery and explicit
 saved-source Configure, local binding-aware properties/references and local peripheral
-topology. Module placement and pins remain later stages; D8 Nordic pins is next.
+topology and Nordic pin configuration for the verified nrf52840dk/nrf52840 profile.
+Module placement remains planned; D9 is next.
 
 Build an offline visual hardware editor inside the existing `zephyr-utils` application.
 Users open a project, select its exact configuration, place hardware modules, connect
@@ -16,6 +18,15 @@ buses and signals, assign pins, and configure peripherals. **Every hardware chan
 the UI immediately adds, changes, or removes the corresponding overlay source in the
 working draft.** A visible Save action writes the reviewed draft to the project.
 Supported source edits update the visual representation in the other direction.
+
+The product is a vendor-independent Zephyr editor, including custom boards as their
+support is added. Nordic is the first pin adapter, not the product boundary. Common
+overlay, binding and peripheral workflows remain shared; family-specific pin encoders
+and verified board data extend pin support. D13 proves a second family, planned as STM32,
+before further adapters broaden coverage. A new target must establish its capabilities
+and mappings; unsupported hardware stays available through source editing without
+invented pin routes. General interface labels remain vendor-neutral, with the active
+adapter and its support limits shown in the pin panel.
 
 Implementation is divided into D0–D15. Each stage has an independent exit gate and a
 copyable task prompt. Implement one requested stage at a time; this document is not an
@@ -31,7 +42,8 @@ records guarded existing-overlay Save and recovery. The [D5 handoff](device-tree
 records explicit saved-source Configure and Projects handoff. The [D6 handoff](device-tree-editor-d6-handoff.md)
 records local binding-aware property/reference editing. The [D7 handoff](device-tree-editor-d7-handoff.md)
 records local peripheral and bus-device forms, real Configure evidence and completed checks.
-D8 is next.
+The [D8 handoff](device-tree-editor-d8-handoff.md) records the bounded Nordic pin
+adapter, source workflow and current verification. D9 is next.
 
 ## Product experience
 
@@ -337,7 +349,8 @@ forms on the shared draft command path; its handoff records verification. It doe
 not resolve inherited effective hardware or offer label renaming. D7 implementation is
 **complete** for local UART/I2C/SPI topology and GPIO LED/button forms, atomic child
 address edits and guarded removal. Its real Configure smoke, full checks and
-browser/package verification passed as recorded in the handoff. D8–D15 are **not started**.
+browser/package verification passed as recorded in the handoff. D8's bounded Nordic pin
+implementation is **complete** within its published profile; its handoff records verification. D9–D15 are **not started**.
 The default order is sequential; shared contracts
 and source safety precede richer visuals. Split a stage further if its exit gate cannot
 be delivered and tested in a reviewable change. Complete the selected slice without
@@ -358,7 +371,7 @@ until D4. This uses the same application/server, not a separate feature launcher
 | D5 | Explicit validation and build handoff | Complete Save-then-Configure workflow; see D5 handoff |
 | D6 | Binding-aware properties and references | Complete local-overlay implementation; see D6 handoff |
 | D7 | Peripheral and bus configuration | Complete local topology implementation; verification status in D7 handoff |
-| D8 | Nordic pin assignment and pinctrl states | First complete pin workflow |
+| D8 | Nordic pin assignment and pinctrl states | Bounded nrf52840dk profile implemented; verification in D8 handoff |
 | D9 | Module catalogue and visual placement | Main requested visual experience |
 | D10 | Resource diagnostics and removal planning | Reliable multi-device projects |
 | D11 | Advanced peripheral and system resources | Broader hardware coverage |
@@ -586,6 +599,15 @@ Provide pin-table assignment, signal roles, GPIO flags and supported default/sle
 pinctrl groups. Retain symbolic constants/includes. Resolve supported board mappings
 from evidence; a table is sufficient when no verified board drawing exists.
 
+Implemented profile: official `nrf52840dk/nrf52840`, one selected application overlay,
+and 41 matching local evidence hashes from the observed Zephyr 4.4.2 checkout. UART/I2C/SPI
+default/sleep signals and local direct `gpio0`/`gpio1` specifiers share canonical source
+commands. The accessible pin table contains 48 SoC pins with available board connector
+evidence; PWM/QSPI routes are read-only evidence. Shared-state edits require an explicit
+split. Custom boards, shields, changed evidence, other encodings and broader composition
+remain unavailable in these forms. See the [D8 handoff](device-tree-editor-d8-handoff.md)
+for source-preservation limits and current verification.
+
 Exit gate: assigning, reassigning and unassigning signals updates and cleans up source
 correctly. Shared groups are preserved or explicitly split before changing one consumer.
 Known reserved pins, invalid signal routes, shared controller instances and real
@@ -805,12 +827,13 @@ performance claims without measurements.
 
 ## Starting point
 
-The next implementation request should be **D8 only**.
+The next implementation request should be **D9 only**, after D8 verification is complete.
 D0's contracts/source experiment, D1's read-only context and D2's source operations
 provide the foundation; D3 connects source and visual session drafts. D4 delivers the first small
 usable existing-overlay editor. D5 closes its configure/build loop and D6 adds local
-binding-aware properties/references. D7 adds common peripheral topology; D8–D10 deliver the initial complete
-module-and-pin experience. Later stages expand coverage while preserving the same
+binding-aware properties/references. D7 adds common peripheral topology; D8 adds bounded
+Nordic pin editing. D9–D10 deliver module placement and broader resource planning.
+Later stages expand coverage while preserving the same
 source synchronization and save semantics.
 
 This plan supersedes the earlier Project Creator master plan's statement that detailed

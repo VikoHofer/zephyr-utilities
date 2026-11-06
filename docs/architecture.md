@@ -6,7 +6,8 @@ HTTP routes and scoped browser modules through an explicit registry.
 
 Memory Explorer, Project Creator's analyser/creation/build workflow, existing-build
 inspection in Build Inspector and limited Device Tree overlay editing are working features.
-Hardware modules, pin configuration and TinyML experiments remain planned.
+The bounded Nordic pin workflow is also implemented. Hardware modules, broader pin
+adapters and TinyML experiments remain planned.
 
 ## Dependency direction
 
@@ -334,7 +335,30 @@ are explicit; defaults, pinctrl, inherited controller state and module wiring ar
 generated. The browser shares draft-observation lifecycle handling for binding and
 peripheral forms, with late-response invalidation and the same explicit Save/Configure
 boundaries. See the [D7 handoff](device-tree-editor-d7-handoff.md) for supported profiles,
-remaining limits and verification. D8 Nordic pin configuration is next.
+remaining limits and verification.
+
+D8 adds feature-owned `NordicEvidence`, `NordicSource` and `PinService`. The evidence
+adapter accepts the exact official `nrf52840dk/nrf52840` target and a versioned Zephyr
+4.4.2 profile of 41 hashed local files. It reads the matching board/SoC/pinctrl declarations,
+GPIO reservations and connector mappings without running a preprocessor or project tools.
+Present files and absent shadow paths are revalidated before commands. This bounded
+baseline is separate from D6/D7's local declaration model; it is not a general inherited
+tree resolver. Custom board roots, shields and multiple overlays are outside the profile.
+
+`POST /api/devicetree/editor/drafts/pins` observes the guarded canonical draft and returns
+the supported target, pin table, controller states, local GPIO rows and diagnostics.
+`pin_assign`, `pin_unassign`, `pin_gpio` and `pin_gpio_unassign` use the existing draft
+command endpoint and produce one atomic source/history change. The source adapter keeps
+symbolic `NRF_PSEL`/GPIO expressions, preserves inherited/shared states by copying them,
+requires an explicit shared-state split, and cleans up only supported exclusive groups.
+Default and sleep states are distinct allocations for the same controller. Known board
+reservations, GPIO use and shared hardware instances constrain assignments; unavailable
+routes and electrical/package facts remain unknown. No metadata file becomes a build input.
+
+The pin panel reuses the draft-observation lifecycle, with explicit loading/cancellation,
+reconciliation, keyboard forms and a selectable table. Source, Undo/Redo, reviewed Save
+and explicit Configure retain their existing boundaries. The [D8 handoff](device-tree-editor-d8-handoff.md)
+records the exact supported profile and current verification. D9 module placement is next.
 
 ## Measurement boundary
 
