@@ -1,6 +1,6 @@
 import {announceResult} from "./view-feedback.js";
 import {retainActionFocus} from "./view-focus.js";
-import {boardConnection, boardConnections, boardOption, createBoardSession} from "./board.js";
+import {boardAvailability, boardCanConnect, boardConnection, boardConnections, boardConstructionNotice, boardLoadedMessage, boardOption, createBoardSession} from "./board.js";
 
 const array = (value) => Array.isArray(value) ? value : [];
 const recipeNames = {i2c: "BME280 sensor", "gpio-led": "LED"};
@@ -38,6 +38,11 @@ export function mountBoardPanel(root, {api, state, workspace, drafts, notify, on
   const boardCard = make("article", undefined, "dte-board-card");
   const boardName = make("h4"); const boardTarget = make("p", "", "dte-path"); const boardState = make("p", "", "dte-muted");
   const projects = button("Open Projects", () => onOpenProjects?.()); boardCard.append(boardName, boardTarget, boardState, projects);
+  const availability = make("section", undefined, "dte-board-blocker"); availability.setAttribute("aria-label", "Visual connection availability");
+  availability.setAttribute("aria-live", "polite"); availability.setAttribute("aria-atomic", "true");
+  const availabilityHeading = make("h4"); const availabilityReason = make("p");
+  availability.append(availabilityHeading, make("p", boardConstructionNotice), availabilityReason);
+  note(availability, "Open Projects to choose another board configuration, or load board hardware again after updating your setup.");
   const recovery = make("div"); const reconcile = button("Reconcile hardware draft", () => run(() => session.reconcile())); recovery.append(reconcile);
   const recipeBar = make("div", undefined, "dte-node-actions dte-board-recipes"); const recipeButtons = new Map();
   const inspectAll = button("All hardware", () => {
@@ -56,13 +61,14 @@ export function mountBoardPanel(root, {api, state, workspace, drafts, notify, on
     }); recipeButtons.set(kind, choose); recipeBar.append(choose);
   }
   const guidance = make("p", "", "dte-muted"); guidance.setAttribute("role", "status");
+  const recipeAvailability = make("div", undefined, "dte-notice");
   const workspaceView = make("div", undefined, "dte-board-workspace");
   const connections = make("ul", undefined, "dte-topology dte-board-connections"); connections.setAttribute("aria-label", "Board hardware connections");
   const detail = make("div", undefined, "dte-peripheral-detail dte-board-detail");
   workspaceView.append(connections, detail);
   const diagnostics = make("details"); diagnostics.append(make("summary", "Discovery details")); const diagnosticList = make("div"); diagnostics.append(diagnosticList);
   root.append(heading); note(root, "Choose a sensor or LED and connect it to your board. Changes go into the overlay draft.");
-  root.append(boardCard, status, error, recovery, recipeBar, guidance, workspaceView, diagnostics);
+  root.append(boardCard, availability, status, error, recovery, recipeBar, recipeAvailability, guidance, workspaceView, diagnostics);
   const localFeedback = make("p"); localFeedback.setAttribute("role", "status");
   const session = createBoardSession({api, state, workspace, drafts, onChange() { render(); onChange?.(); }});
   function currentAction() {
@@ -72,12 +78,14 @@ export function mountBoardPanel(root, {api, state, workspace, drafts, notify, on
       && revision === state.data?.revision && draft === state.draftView?.entry?.server?.id && generation === state.draftView?.entry?.generation;
   }
   function announceFeedback() {
-    announceResult(feedbackHost ? localFeedback : state.boardView.error ? error : status, notify, {error: Boolean(state.boardView.error)});
+    const view = state.boardView;
+    const destination = feedbackHost && localFeedback.parentNode ? localFeedback : view.error ? error : status.hidden ? availability : status;
+    announceResult(destination, notify, {error: Boolean(view.error), message: destination === availability ? view.message : undefined});
   }
   function run(operation) {
     const current = currentAction();
     return retainActionFocus(root, async () => {
-      const result = await operation(); if (current()) announceFeedback(); return result;
+      const result = await operation(); if (current() && (result !== false || state.boardView.error)) announceFeedback(); return result;
     }, current, lifetime.signal);
   }
   function renderFeedback() {
@@ -152,6 +160,10 @@ export function mountBoardPanel(root, {api, state, workspace, drafts, notify, on
     });
     if (routes.length) note(detail, "Existing board pin routing — " + routes.join("; ") + ".", "dte-notice");
   }
+  function connectionUnavailable(reason) {
+    const notice = make("section", undefined, "dte-board-blocker"); notice.setAttribute("aria-label", "Connection unavailable");
+    notice.append(make("h5", "This connection is not supported yet"), make("p", boardConstructionNotice), make("p", reason)); detail.append(notice);
+  }
   function connectionForm(controller, capability) {
     const kind = selectedKind; const form = make("form", undefined, "dte-peripheral-form dte-board-form");
     form.append(make("h4", `Connect ${recipeNames[kind]}`)); detail.append(form);
@@ -208,16 +220,22 @@ export function mountBoardPanel(root, {api, state, workspace, drafts, notify, on
     if (!controller) { note(detail, selectedKind ? "Select a connection card to choose its settings." : "Select a connection card to see its devices and routing."); return; }
     detail.append(make("h4", controller.labels?.[0] || controller.name)); note(detail, controller.path, "dte-path");
     routing(controller); connectedDevices(controller);
-    if (!selectedKind) { note(detail, "Choose Add BME280 sensor or Add LED above to connect a device."); return; }
+    if (!selectedKind) {
+      const available = Object.entries(recipeNames).filter(([kind]) => boardOption(data, controller.id, kind)?.addable === true);
+      if (available.length) note(detail, "Choose " + available.map(([, title]) => "Add " + title).join(" or ") + " above to connect a device.");
+      else connectionUnavailable([...new Set(Object.keys(recipeNames).map((kind) => boardOption(data, controller.id, kind)?.reason).filter(Boolean))].join(" ")
+        || controller.reason || "No supported visual device connection is available for this controller.");
+      return;
+    }
     const capability = boardOption(data, controller.id, selectedKind);
-    if (!data.supported || capability?.addable !== true) { note(detail, capability?.reason || controller.reason || "This connection is not available for the selected device.", "dte-notice"); return; }
+    if (!data.supported || capability?.addable !== true) { connectionUnavailable(capability?.reason || controller.reason || "This connection is not available for the selected device."); return; }
     connectionForm(controller, capability);
   }
   function updateDisabled() {
     const view = state.boardView; const blocked = view.busy || !session.ready() || !view.data;
     for (const node of workspaceView.querySelectorAll("input, select, textarea, button")) node.disabled = blocked;
     inspectAll.disabled = blocked || view.data?.supported !== true;
-    for (const node of recipeButtons.values()) node.disabled = blocked || view.data?.supported !== true;
+    for (const [kind, node] of recipeButtons) node.disabled = blocked || !boardCanConnect(view.data, kind);
     load.disabled = view.busy || !session.ready() || !state.data?.target?.requested;
     load.textContent = view.busy ? "Loading board hardware…" : "Load board hardware";
     cancel.hidden = !session.scanning(); recovery.hidden = !session.needsReconcile() && !session.reconciling();
@@ -229,21 +247,33 @@ export function mountBoardPanel(root, {api, state, workspace, drafts, notify, on
     boardName.textContent = view.presentation?.board?.full_name || view.presentation?.board?.name || target || "Choose your board";
     boardTarget.textContent = target || "No board configuration selected";
     boardState.textContent = !target ? "Open an application with a board configuration and overlay to see its hardware."
-      : view.presentation?.supported === false ? view.presentation.reason || "Hardware discovery is unavailable for this board configuration."
+      : view.presentation?.supported === false ? "Visual connections are unavailable for this configuration."
         : view.presentation ? "Board and selected overlay hardware" : "Load the selected board's controllers and connections.";
-    projects.hidden = Boolean(target) || !onOpenProjects;
+    const unavailable = target && boardAvailability(view.presentation);
+    projects.hidden = Boolean(target) && !unavailable || !onOpenProjects;
+    availability.hidden = !unavailable;
+    if (availabilityHeading.textContent !== (unavailable?.heading || "")) availabilityHeading.textContent = unavailable?.heading || "";
+    if (availabilityReason.textContent !== (unavailable?.reason || "")) availabilityReason.textContent = unavailable?.reason || "";
     status.textContent = view.message || (view.busy ? "Reading the board and selected overlay. This may take a few seconds…" : "");
+    status.hidden = Boolean(unavailable && view.data === view.presentation && view.data && !view.busy && !view.error
+      && view.message === boardLoadedMessage(view.data));
     error.hidden = !view.error; error.textContent = view.error;
     if (rendered !== view.presentation) {
-      rendered = data = view.presentation; diagnosticList.replaceChildren();
+      rendered = data = view.presentation; diagnosticList.replaceChildren(); recipeAvailability.replaceChildren();
       if (!data) { selectedId = ""; feedbackHost = null; connections.replaceChildren(); detail.replaceChildren(); }
       else {
         for (const item of array(data.diagnostics)) note(diagnosticList, item.message || item);
+        if (selectedKind && !boardCanConnect(data, selectedKind)) selectedKind = "";
+        if (data.supported) for (const [kind, title] of Object.entries(recipeNames)) if (!boardCanConnect(data, kind)) {
+          const reasons = [...new Set(boardConnections(data, kind).map((node) => boardOption(data, node.id, kind)?.reason).filter(Boolean))];
+          note(recipeAvailability, `${title}: ${reasons.join(" ") || "No supported connection was identified for this device."}`);
+        }
         if (!boardConnections(data).some((node) => node.id === selectedId)) selectedId = "";
         renderConnections(); renderDetail();
       }
     }
-    guidance.hidden = !data; workspaceView.hidden = !data || data.supported === false;
+    recipeAvailability.hidden = !recipeAvailability.textContent;
+    guidance.hidden = !data || !data.supported; workspaceView.hidden = !data || data.supported === false;
     diagnostics.hidden = !data || !array(data.diagnostics).length;
     renderFeedback(); updateDisabled();
   }

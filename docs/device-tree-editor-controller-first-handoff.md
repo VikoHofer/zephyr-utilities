@@ -96,6 +96,11 @@ Local verification evidence:
 
 ## Remaining work in priority order
 
+Historical queue below: exact CPU/core and nested-variant discovery was subsequently
+completed in `cc32fb1`. The user's MVP revision then moved the integrated visual
+workspace ahead of exhaustive revision/composition coverage. Follow the current
+[controller-first plan](device-tree-editor-controller-first-plan.md) for delivery order.
+
 1. Extend the shared discovery path to board revisions/extensions, multi-part qualifiers,
    overlays, shields/snippets and additional preprocessor cases. Current discovery needs
    one exact SoC qualifier, unambiguous HWMv2 source, one selected overlay and recorded

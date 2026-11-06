@@ -1,6 +1,7 @@
 # Controller-first qualified-target handoff
 
 Date: 2026-11-06. Implemented and verified; delivered as the qualified-target continuation.
+Committed as `cc32fb1`.
 The previous foundation, priority revision, visual connections and retained D11d work
 were committed as `a0fa84b` at the user's request before this continuation.
 
@@ -89,12 +90,8 @@ folder. These local fixtures/logs are not repository artifacts.
 
 ## Next steps
 
-1. Extend exact discovery to board revisions/extensions and ordered overlay composition,
-   with current metadata/source provenance and reviewable failure cases. Shields/snippets
-   still need explicit support. Captured metadata is not proof of complete build composition.
-2. Expand verified pin-routing and board/header mappings without restricting generic
-   controller discovery. Non-STM32 pin allocations can remain unknown; the corresponding
-   GPIO actions stay withheld when conflicts cannot be assessed.
-3. Deliver the integrated module library/canvas/inspector workspace and broader common
-   modules. Arbitrary pin rewiring and drag-to-wire connections are not implemented.
-4. Resume deeper D11 families after the basic controller and visual connection gates.
+The user's subsequent MVP revision supersedes the original discovery-expansion queue.
+Focus on ST/STM32, Nordic, Espressif, NXP and Raspberry Pi, show clear blockers for
+unsupported controllers/connections, then deliver the integrated module library,
+canvas and inspector. Revisions/extensions, broader composition and deeper D11 work
+are later targeted additions. See the [active plan](device-tree-editor-controller-first-plan.md).

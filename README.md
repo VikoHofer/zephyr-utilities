@@ -301,6 +301,11 @@ CPU/core and nested-variant targets now use current board/SoC metadata for exact
 selection, including single-SoC shortened filenames. The
 [qualified-target handoff](docs/device-tree-editor-controller-targets-handoff.md) records
 ten real-source discovery cases and an ESP32 sensor connection/Save/reopen check.
+The MVP prioritizes ST/STM32, Nordic, Espressif, NXP and Raspberry Pi. Unsupported
+controller/configuration or connection workflows show an under-construction notice
+and their specific reason. Support is checked per capability; the brand focus does
+not guarantee every feature on every controller. The integrated visual workspace is
+the next development priority, ahead of exhaustive controller coverage.
 
 Its [D0 foundation](docs/device-tree-editor-d0-handoff.md) defines the contracts and
 tests a bounded source-edit prototype.

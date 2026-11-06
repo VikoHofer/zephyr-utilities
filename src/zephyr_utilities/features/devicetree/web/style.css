@@ -212,6 +212,9 @@
 .dte-workspace .dte-board h4 { margin:.2rem 0 .6rem; font-size:.95rem; overflow-wrap:anywhere; }
 .dte-workspace .dte-board-card { border:1px solid var(--app-brand-border); border-radius:.55rem; padding:1rem; background:var(--app-brand-soft); margin:.7rem 0; min-width:0; }
 .dte-workspace .dte-board-card p { margin:.35rem 0; overflow-wrap:anywhere; }
+.dte-workspace .dte-board-blocker { border:1px solid var(--app-brand-border); border-left:4px solid var(--app-brand); border-radius:.4rem; background:var(--app-brand-soft); padding:1rem; margin:.8rem 0; overflow-wrap:anywhere; }
+.dte-workspace .dte-board-blocker h4, .dte-workspace .dte-board-blocker h5 { margin:0 0 .5rem; }
+.dte-workspace .dte-board-blocker p { margin:.5rem 0 0; line-height:1.5; }
 .dte-workspace .dte-board-recipes { display:flex; flex-wrap:wrap; gap:.65rem; margin:.85rem 0; }
 .dte-workspace .dte-board-recipes button { flex:1 1 10rem; max-width:18rem; text-align:left; }
 .dte-workspace .dte-board button[aria-pressed=true] { border-color:var(--app-brand); background:var(--app-brand-soft); color:var(--app-brand); box-shadow:0 0 0 1px var(--app-brand-border); }

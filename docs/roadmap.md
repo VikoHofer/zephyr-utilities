@@ -27,10 +27,11 @@ research master plan, not a general coding-assistant integration.
 
 ## Feature ownership and next useful slices
 
-Device Tree Editor's immediate priority is now cross-vendor board/controller discovery
-and a usable visual add/connect workflow, starting with the user's `nucleo_f446re`.
-An empty overlay must show the board's inherited hardware. Further D11 feature depth
-follows these foundations; see the [controller-first plan](device-tree-editor-controller-first-plan.md).
+Device Tree Editor's MVP focuses on ST/STM32, Nordic, Espressif, NXP and Raspberry Pi.
+Generic discovery and initial connections are delivered; unsupported capabilities get
+an under-construction blocker with their reason. The integrated visual workspace is
+the next feature priority. Exhaustive controller, revision/composition support and
+further D11 depth are deferred; see the [controller-first plan](device-tree-editor-controller-first-plan.md).
 
 | Feature | State | Initial implementation direction |
 | --- | --- | --- |

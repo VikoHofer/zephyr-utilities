@@ -28,6 +28,10 @@ Exact CPU/core and nested-variant resolution uses the same pure bounded metadata
 helpers in `core/hardware_metadata.py` as Projects discovery. Features retain ownership
 of source reading, provenance, filesystem guards and tool execution; the shared helper
 does not import features or execute checkout code.
+The MVP now prioritizes five major controller brands and the integrated visual workspace.
+Observed controller/connection capabilities remain the support boundary. A visible
+under-construction blocker explains unavailable actions; the server independently
+rejects unsupported commands. Brand names do not grant mutation authority.
 
 ## Dependency direction
 

@@ -4,6 +4,13 @@
 
 The user's 2026-11-06 direction supersedes the old sequential D-stage order:
 **board/controller support and the beginner visual connection workflow come first**.
+The subsequent MVP decision focuses delivery/testing on ST/STM32, Nordic, Espressif,
+NXP and Raspberry Pi. The existing generic discovery foundation is sufficient to move
+to the integrated visual workspace; do not delay it for exhaustive vendor, revision or
+composition coverage. Add discovery depth when it blocks a concrete MVP workflow.
+Unsupported controllers/configurations or connections must show a visible under-construction
+notice, the specific reason and unavailable actions. Support is determined by observed
+capabilities, not a blanket brand guarantee or a board-vendor blacklist.
 Start from the selected board/SoC DTS, included sources, module/custom roots and
 bindings across vendors. An empty application overlay must not imply empty hardware;
 aliases such as `led0` are optional annotations, never discovery prerequisites.
@@ -24,6 +31,10 @@ The foundation is committed as `a0fa84b`, including previously verified D11d wor
 The qualified-target continuation shares pure metadata parsing with Projects and supports
 CPU/core and nested-variant DTS resolution; see the
 [qualified-target handoff](docs/device-tree-editor-controller-targets-handoff.md).
+It is committed as `cc32fb1`. The next feature priority is the integrated module
+library, connection canvas and inspector with live source, under the scoped MVP plan.
+The [MVP support handoff](docs/device-tree-editor-mvp-support-handoff.md) records the
+implemented construction notices, capability blockers and complete/browser/package checks.
 
 Zephyr Utilities is one local application with a Python backend and an English,
 offline browser interface. `zephyr-utils` starts the entire application. Memory

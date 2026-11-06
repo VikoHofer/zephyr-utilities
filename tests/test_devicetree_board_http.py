@@ -102,7 +102,8 @@ class BoardConnectionHttpTests(unittest.TestCase):
         captured = self.editor.contexts[self.context['id']].payload
         captured['board'] = None
         captured['environment'] = None
-        original = self.draft['text']
+        original = self.post('get', {**self.binding(), 'draft_id': self.draft['id']})
+        board_bytes, overlay_bytes = self.board_file.read_bytes(), self.overlay.read_bytes()
         with patch.object(BoardSources, 'run', side_effect=AssertionError('No environment means no worker')):
             observed = self.post('board', self.guard())
         self.assertFalse(observed['supported'])
@@ -114,6 +115,58 @@ class BoardConnectionHttpTests(unittest.TestCase):
             self.post('command', self.guard(command=self.command(observed)))
         self.assertEqual(error.exception.code, 400)
         error.exception.close()
-        self.assertEqual(self.post('get', {**self.binding(), 'draft_id': self.draft['id']})['text'], original)
-        self.assertEqual(self.overlay.read_text(), original)
+        self.assertEqual(self.post('get', {**self.binding(), 'draft_id': self.draft['id']}), original)
+        self.assertEqual(self.board_file.read_bytes(), board_bytes)
+        self.assertEqual(self.overlay.read_bytes(), overlay_bytes)
+        self.assertEqual(self.app.context.jobs.list(), [])
+
+    def test_unmodeled_pin_routing_blocks_gpio_commands_without_blocking_i2c(self):
+        tree = topology_fixture.TREE.replace('status = "disabled"', 'status = "okay"')
+        tree = tree.replace('compatible = "test,board";',
+                            'compatible = "test,board"; pinctrl-0 = <&routing>; routing: pin-state { pinmux = <1>; };')
+        original = self.post('get', {**self.binding(), 'draft_id': self.draft['id']})
+        board_bytes, overlay_bytes = self.board_file.read_bytes(), self.overlay.read_bytes()
+        with patch.object(BoardSources, 'run', return_value=self.worker(tree)), \
+                patch.object(self.app.context.jobs, 'submit', side_effect=AssertionError('No Configure or build jobs')):
+            observed = self.post('board', self.guard())
+            self.assertTrue(observed['supported'], observed['reason'])
+            self.assertFalse(observed['pin_routing_complete'])
+            gpio_option = next(option for option in observed['connection_options']['hardware:/gpio']
+                               if option['kind'] == 'gpio-led')
+            self.assertFalse(gpio_option['addable'])
+            self.assertIn('pin routing', gpio_option['reason'])
+            self.assertTrue(observed['connection_options']['hardware:/i2c'][0]['addable'])
+
+            command = {'kind': 'board_module_add', 'observation_id': observed['observation_id'],
+                       'connection': {'kind': 'gpio-led', 'controller_id': 'hardware:/gpio',
+                                      'pin': 3, 'flags': 0, 'name': 'led', 'label': 'indicator'}}
+            with self.assertRaises(HTTPError) as error:
+                self.post('command', self.guard(command=command))
+            self.assertEqual(error.exception.code, 400)
+            self.assertIn('pin routing', json.load(error.exception)['error'])
+            error.exception.close()
+            self.assertEqual(self.post('get', {**self.binding(), 'draft_id': self.draft['id']}), original)
+
+            self.draft = self.post('command', self.guard(command=self.command(observed)))
+            self.assertEqual(self.draft['revision'], original['revision'] + 1)
+            self.assertIn('environment: bme280@76', self.draft['text'])
+            connected = self.draft['text']
+            self.draft = self.post('undo', self.guard())
+            self.assertEqual(self.draft['text'], original['text'])
+            self.assertFalse(self.draft['can_undo'])
+            self.assertTrue(self.draft['can_redo'])
+
+            # A rejected placement must retain an existing redo branch as well.
+            observed = self.post('board', self.guard())
+            command['observation_id'] = observed['observation_id']
+            undone = self.post('get', {**self.binding(), 'draft_id': self.draft['id']})
+            with self.assertRaises(HTTPError) as error:
+                self.post('command', self.guard(command=command))
+            self.assertEqual(error.exception.code, 400)
+            error.exception.close()
+            self.assertEqual(self.post('get', {**self.binding(), 'draft_id': self.draft['id']}), undone)
+            self.draft = self.post('redo', self.guard())
+            self.assertEqual(self.draft['text'], connected)
+        self.assertEqual(self.board_file.read_bytes(), board_bytes)
+        self.assertEqual(self.overlay.read_bytes(), overlay_bytes)
         self.assertEqual(self.app.context.jobs.list(), [])

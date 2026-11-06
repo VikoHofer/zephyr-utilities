@@ -1,6 +1,24 @@
 import {createDraftObservationSession} from "./draft-observation.js";
 import {unsignedCells} from "./bindings.js";
 
+export const boardConstructionNotice = "Device Tree Editor is under construction. More controller support will be added over time.";
+
+export function boardCanConnect(data, kind) {
+  return data?.supported === true && boardConnections(data, kind).some((node) => boardOption(data, node.id, kind)?.addable === true);
+}
+
+export function boardAvailability(data) {
+  if (!data) return null;
+  if (!data.supported) return {heading: "Controller/configuration unavailable", reason: data.reason || "Hardware discovery is unavailable for this board configuration."};
+  if (["i2c", "gpio-led"].some((kind) => boardCanConnect(data, kind))) return null;
+  return {heading: "No visual connections available yet", reason: "Board hardware is available for inspection, but this configuration has no supported BME280 or LED connection yet."};
+}
+
+export function boardLoadedMessage(data) {
+  const unavailable = boardAvailability(data);
+  return unavailable ? `${unavailable.heading}. ${boardConstructionNotice} ${unavailable.reason}` : "Board hardware inspection complete.";
+}
+
 export function createBoardSession({api, drafts, ...options}) {
   return createDraftObservationSession({...options, route: "board", stateKey: "boardView",
     api: async (...args) => {
@@ -18,7 +36,7 @@ export function createBoardSession({api, drafts, ...options}) {
       blocked: "Open an application and overlay, and finish or reconcile the draft request before loading board hardware.",
       mismatch: "The board hardware response does not match this draft. Load board hardware again.",
       updated: "Device added to the draft and shown on its connection. Review and Save the overlay separately.",
-      loaded: "Board hardware inspection complete.",
+      get loaded() { return boardLoadedMessage(options.state.boardView.data); },
       rejected: "The device could not be added. Reconcile the draft or load board hardware again.",
       pending: "Draft reconciled. Sync retained source before loading board hardware.",
       reconciled: "Draft reconciled. Load board hardware again before adding a device.",

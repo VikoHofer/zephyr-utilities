@@ -1,5 +1,12 @@
 # Device Tree Editor master plan
 
+**MVP scope revision, 2026-11-06:** prioritize ST/STM32, Nordic, Espressif, NXP and
+Raspberry Pi, using the shared discovery path and observed capabilities. Unsupported
+controllers/configurations and connections get an under-construction blocker with a
+specific reason. The next feature is the integrated visual workspace; exhaustive
+controller, revision and composition coverage is deferred unless needed by an MVP case.
+The brand focus is not a promise that every controller or feature from a brand works.
+
 **Priority revision, 2026-11-06:** controller/board support and the beginner visual
 workspace now take precedence over further advanced D11 families. The previous D0–D15
 sequence below records delivered foundations and future capabilities; it is no longer
@@ -12,8 +19,9 @@ committed as `a0fa84b`. The next discovery slice now resolves exact CPU/core and
 variant targets from current metadata. Ten real source targets across STM32, Nordic,
 Espressif and Raspberry Pi passed discovery checks; ESP32 sensor connection/Save/reopen
 passed browser verification. See the [qualified-target handoff](device-tree-editor-controller-targets-handoff.md).
-Board revisions/extensions and ordered source composition remain the next discovery
-gaps. Full pin rewiring and the final integrated canvas remain separate open gates.
+The qualified-target slice is committed as `cc32fb1`. Board revisions/extensions and
+ordered source composition remain gaps for later targeted expansion. The integrated
+canvas, module library and inspector now take priority under the MVP scope above.
 
 Status: limited overlay editor available; D0–D10 implementations complete within their
 staged scopes on 2026-11-06. D6 is committed as `564fcff`; D7 as `4caf359`; D8 as `cfaf10e`.

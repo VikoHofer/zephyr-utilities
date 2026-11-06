@@ -1199,3 +1199,13 @@ The primary hardware workspace shows board/controller/device cards and connectio
 followed by live source. Older local forms are under Advanced overlay tools. Ordinary
 actions retain scroll/focus and report results beside their trigger; stale/late responses
 cannot authorize edits in another context. Save and Configure remain separate reviews.
+
+MVP support follows the observed capabilities, not a board-vendor allowlist. Unsupported
+controller/configuration observations retain board identity, show a prominent construction
+notice and the concrete reason, and disable visual placement. Supported observations with
+no addable visual recipes keep hardware inspection available and explain that connections
+are unavailable. An unsupported individual connection shows the same notice and its own
+reason without blocking independently usable connections. Retry and Open Projects provide
+next actions; blocked discovery must not announce a successful inspection. Missing setup
+remains a distinct state. These notices preserve source editing, draft history and recovery,
+and do not relax the server-side observation or per-connection checks.

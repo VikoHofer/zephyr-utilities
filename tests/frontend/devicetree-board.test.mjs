@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {boardConnection, boardConnections, boardOption, createBoardSession} from "../../src/zephyr_utilities/features/devicetree/web/board.js";
+import {boardAvailability, boardCanConnect, boardConnection, boardConnections, boardConstructionNotice, boardOption, createBoardSession} from "../../src/zephyr_utilities/features/devicetree/web/board.js";
 import {mountBoardPanel} from "../../src/zephyr_utilities/features/devicetree/web/board-view.js";
 
 const source = "/ { };\n";
@@ -74,6 +74,7 @@ class Element {
   getBoundingClientRect() {
     return this.className?.includes("dte-board-detail") && this.ownerDocument.detailBounds
       || this.className?.includes("dte-board-workspace") && this.ownerDocument.workspaceBounds
+      || this.className?.includes("dte-board-blocker") && this.ownerDocument.availabilityBounds
       || this.attributes.role === "status" && this.ownerDocument.feedbackBounds
       || {top: 20, bottom: 40, left: 0, right: 400};
   }
@@ -159,7 +160,10 @@ test("GPIO placement validates known bounds, reservations and observed allocatio
 
 test("a board card and Projects action remain visible before hardware or target selection", async () => {
   const app = harness({mount: true}); assert.match(app.root.textContent, /nucleo_f446re/); assert.equal(app.calls.length, 0);
+  const availability = Array.from(app.root.querySelectorAll("section")).find((node) => node.attributes["aria-label"] === "Visual connection availability");
+  assert.equal(availability.hidden, true);
   app.state.data.target = null; app.panel.render(); assert.match(app.root.textContent, /Choose your board/);
+  assert.equal(availability.hidden, true); assert.equal(app.state.boardView.message, "");
   assert.equal(named(app.root, "button", "Load board hardware").disabled, true); await click(app.root, "Open Projects"); assert.equal(app.projects(), 1);
   assert.equal(app.calls.length, 0); app.dispose();
 });
@@ -168,6 +172,76 @@ test("unsupported discovery keeps the board and its reason instead of an empty w
   const app = harness({mount: true}); Object.assign(app.model, {supported: false, reason: "This board's source is unavailable in the selected checkout.", nodes: [], controllers: [], gpio_providers: [], connection_options: {}});
   await click(app.root, "Load board hardware"); assert.match(app.root.textContent, /Nucleo F446RE/); assert.match(app.root.textContent, /source is unavailable/);
   assert.equal(named(app.root, "button", "Add BME280 sensor").disabled, true); assert.equal(app.commands.length, 0); app.dispose();
+});
+
+test("unsupported discovery announces construction and a specific reason with Projects and retry available", async () => {
+  const app = harness({mount: true}); app.model.supported = false; app.model.reason = "The selected controller source cannot be resolved.";
+  app.root.ownerDocument.availabilityBounds = {top: 900, bottom: 1300, left: 0, right: 400}; app.root.scrollTop = 650;
+  const trigger = await click(app.root, "Load board hardware");
+  const blocker = named(app.root, "h4", "Controller/configuration unavailable").parentNode;
+  assert.equal(blocker.hidden, false); assert.equal(blocker.attributes["aria-label"], "Visual connection availability");
+  assert.ok(blocker.textContent.includes(boardConstructionNotice)); assert.match(blocker.textContent, /controller source cannot be resolved/);
+  assert.equal(app.root.children.find((node) => node.attributes.role === "status").hidden, true);
+  assert.doesNotMatch(named(app.root, "article", "Nucleo F446RE").textContent, /controller source cannot be resolved/);
+  assert.equal(app.toasts.length, 1); assert.ok(app.toasts[0].message.includes(boardConstructionNotice));
+  assert.doesNotMatch(app.toasts[0].message, /inspection complete/); assert.equal(app.root.querySelectorAll("form").length, 0);
+  assert.equal(named(app.root, "button", "Add LED").disabled, true); assert.equal(trigger.disabled, false);
+  assert.equal(named(app.root, "button", "Open Projects").hidden, false); assert.equal(app.root.ownerDocument.activeElement, trigger);
+  app.panel.render(); app.panel.render(); assert.equal(app.toasts.length, 1); assert.equal(app.root.scrollTop, 650); assert.deepEqual(app.reveals, []);
+  await click(app.root, "Open Projects"); assert.equal(app.projects(), 1); assert.equal(app.commands.length, 0); app.dispose();
+});
+
+test("a visible construction banner needs no duplicate status or notification, while later lifecycle messages remain visible", async () => {
+  const wait = deferred(); let reads = 0;
+  const app = harness({mount: true, wrap: (api) => async (...args) => { const result = await api(...args); if (++reads === 2) await wait.promise; return result; }});
+  app.model.supported = false; app.model.reason = "The selected revision is unavailable.";
+  app.root.ownerDocument.feedbackBounds = {top: 900, bottom: 1300, left: 0, right: 400};
+  await click(app.root, "Load board hardware"); const status = app.root.children.find((node) => node.attributes.role === "status");
+  assert.equal(status.hidden, true); assert.deepEqual(app.toasts, []);
+  await click(app.root, "Load board hardware"); assert.equal(status.hidden, false); assert.match(status.textContent, /Reading the board/);
+  await click(app.root, "Cancel discovery"); assert.equal(status.hidden, false); assert.match(status.textContent, /cancelled/);
+  wait.resolve(); await settle(); assert.equal(status.hidden, false); assert.match(status.textContent, /cancelled/);
+  await click(app.root, "Load board hardware"); assert.equal(status.hidden, true);
+  app.type(source + "/* pending */"); assert.equal(status.hidden, false); assert.match(status.textContent, /changed/);
+  assert.deepEqual(app.toasts, []); assert.deepEqual(app.reveals, []); app.dispose();
+});
+
+test("support follows capabilities through supported, unsupported and supported board contexts", async () => {
+  const app = harness({mount: true}); await choose(app);
+  const form = named(app.root, "form", "Connect BME280 sensor"); change(field(form, "I2C address"), "119");
+  app.state.data = {...app.state.data, id: "unsupported-context", target: {requested: "unknown-controller"}};
+  Object.assign(app.model, {supported: false, reason: "No source is available for this configuration."}); app.panel.render();
+  assert.equal(app.root.querySelectorAll("form").length, 0); assert.equal(app.state.boardView.presentation, null);
+  assert.equal(named(app.root, "button", "Add LED").disabled, true);
+  await click(app.root, "Load board hardware"); assert.match(app.state.boardView.message, /Controller\/configuration unavailable/);
+  app.state.data = {...app.state.data, id: "supported-context", target: {requested: "custom-board"}};
+  Object.assign(app.model, fixture()); app.model.board.vendor = "custom-vendor"; app.panel.render();
+  await click(app.root, "Load board hardware"); assert.equal(named(app.root, "button", "Add LED").disabled, false);
+  const availability = Array.from(app.root.querySelectorAll("section")).find((node) => node.attributes["aria-label"] === "Visual connection availability");
+  assert.equal(availability.hidden, true); assert.equal(named(app.root, "button", "Open Projects").hidden, true);
+  assert.match(app.state.boardView.message, /inspection complete/); assert.equal(app.commands.length, 0); app.dispose();
+});
+
+test("no addable recipes preserve inspection but block dead add actions and explain the unavailable capabilities", async () => {
+  const app = harness({mount: true});
+  app.model.connection_options[i2cId][0] = {...app.model.connection_options[i2cId][0], addable: false, reason: "No verified I2C routing."};
+  app.model.connection_options[gpioId][0] = {...app.model.connection_options[gpioId][0], addable: false, reason: "GPIO pin bounds are unknown."};
+  await click(app.root, "Load board hardware");
+  const blocker = named(app.root, "h4", "No visual connections available yet").parentNode;
+  assert.equal(blocker.hidden, false); assert.ok(blocker.textContent.includes(boardConstructionNotice));
+  assert.equal(named(app.root, "button", "Add BME280 sensor").disabled, true); assert.equal(named(app.root, "button", "Add LED").disabled, true);
+  assert.equal(named(app.root, "button", "All hardware").disabled, false); assert.equal(named(app.root, "button", "Open Projects").hidden, false);
+  await click(app.root, "i2c1"); assert.match(app.root.textContent, /No verified I2C routing/); assert.equal(app.root.querySelectorAll("form").length, 0);
+  await click(app.root, "gpioa"); assert.match(app.root.textContent, /GPIO pin bounds are unknown/);
+  assert.equal(app.commands.length, 0); assert.equal(app.state.draftView.entry.text, source); app.dispose();
+});
+
+test("support classification uses observed recipes, not board brand or unrelated addable options", () => {
+  const data = fixture(); data.board.vendor = "unknown-vendor";
+  assert.equal(boardAvailability(data), null); assert.equal(boardCanConnect(data, "i2c"), true);
+  data.connection_options[i2cId][0].compatible = "other,sensor"; data.connection_options[gpioId][0].addable = false;
+  assert.equal(boardCanConnect(data, "i2c"), false); assert.match(boardAvailability(data).heading, /No visual connections/);
+  data.supported = false; assert.match(boardAvailability(data).heading, /Controller\/configuration unavailable/);
 });
 
 test("the primary connection canvas shows bus children and GPIO consumers as nested device cards", async () => {
@@ -206,9 +280,50 @@ test("LED placement offers mapped GPIO choices first and requires an explicit ac
 
 test("unavailable connections show the backend reason without a misleading creation form", async () => {
   const app = harness({mount: true}); app.model.connection_options[i2cId][0].addable = false;
-  app.model.connection_options[i2cId][0].reason = "The controller has no verified default routing."; await choose(app);
+  app.model.connection_options[i2cId][0].reason = "The controller has no verified default routing.";
+  await click(app.root, "Load board hardware"); await click(app.root, "i2c1");
   assert.match(app.root.textContent, /no verified default routing/); assert.equal(app.root.querySelectorAll("form").length, 0);
+  assert.ok(named(app.root, "h5", "This connection is not supported yet").parentNode.textContent.includes(boardConstructionNotice));
+  assert.equal(named(app.root, "button", "Add BME280 sensor").disabled, true);
+  assert.equal(named(app.root, "button", "Add LED").disabled, false);
   assert.equal(app.commands.length, 0); app.dispose();
+});
+
+test("a blocked connection shows its construction notice while another connection of the same kind works", async () => {
+  const app = harness({mount: true}); const second = {...app.model.controllers[0], id: "hardware:/soc/i2c2", path: "/soc/i2c2", labels: ["i2c2"], children: []};
+  app.model.controllers.push(second); app.model.nodes.push(second);
+  app.model.connection_options[second.id] = structuredClone(app.model.connection_options[i2cId]);
+  app.model.connection_options[i2cId][0].addable = false; app.model.connection_options[i2cId][0].reason = "Routing is unsupported for i2c1.";
+  await choose(app); assert.equal(app.root.querySelectorAll("form").length, 0);
+  const notice = named(app.root, "h5", "This connection is not supported yet").parentNode;
+  assert.ok(notice.textContent.includes(boardConstructionNotice)); assert.match(notice.textContent, /Routing is unsupported for i2c1/);
+  await click(app.root, "i2c2"); const form = named(app.root, "form", "Connect BME280 sensor");
+  change(field(form, "I2C address"), "119"); enable(form); await click(app.root, "Add BME280 sensor to draft");
+  assert.equal(app.commands.length, 1); assert.equal(app.commands[0].connection.controller_id, second.id); app.dispose();
+});
+
+test("late unsupported observations cannot publish a blocker into another context or during source edits", async () => {
+  for (const action of ["source", "context", "workspace", "navigation", "dispose"]) {
+    const wait = deferred(); const app = harness({mount: true, wrap: (api) => async (...args) => { const result = await api(...args); await wait.promise; return result; }});
+    app.model.supported = false; app.model.reason = "Unsupported old configuration.";
+    app.root.ownerDocument.feedbackBounds = {top: 900, bottom: 1300, left: 0, right: 400};
+    await click(app.root, "Load board hardware");
+    if (action === "source") app.type(source + "/* pending */");
+    if (action === "context") { app.state.data.id = "another-context"; app.panel.render(); }
+    if (action === "workspace") app.workspace("/other");
+    if (action === "navigation") app.panel.navigate();
+    if (action === "dispose") app.dispose();
+    wait.resolve(); await settle(); assert.equal(app.state.boardView.presentation, null, action);
+    assert.deepEqual(app.toasts, [], action); assert.equal(app.commands.length, 0); app.dispose();
+  }
+});
+
+test("a no-op stale submission never announces the preceding load as a successful action", async () => {
+  const app = harness({mount: true}); await choose(app); const form = named(app.root, "form", "Connect BME280 sensor");
+  change(field(form, "I2C address"), "119"); enable(form);
+  app.root.ownerDocument.feedbackBounds = {top: 900, bottom: 1300, left: 0, right: 400}; app.state.data.revision++;
+  form.dispatch("submit"); await settle(); assert.equal(app.commands.length, 0); assert.deepEqual(app.toasts, []);
+  assert.equal(app.state.boardView.data, null); assert.match(app.state.boardView.message, /changed/); app.dispose();
 });
 
 test("board discovery exposes busy and cancel without publishing a late result", async () => {
