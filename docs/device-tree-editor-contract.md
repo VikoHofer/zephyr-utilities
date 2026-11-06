@@ -1,6 +1,6 @@
 # Device Tree Editor foundation contract
 
-Status: D0–D11b contracts, 2026-11-06. D4 adds reviewed existing-overlay Save and durable
+Status: D0–D11c contracts, 2026-11-06. D4 adds reviewed existing-overlay Save and durable
 draft recovery; D5 adds explicit saved-source Configure through Projects; D6 adds local
 binding-aware property/reference forms; D7 adds local peripheral and bus-device topology.
 D8 adds Nordic pins for the verified nrf52840dk/nrf52840 profile. D9 adds local module
@@ -9,7 +9,9 @@ D10 adds resource diagnostics and explicit removal reviews; full/browser/package
 Broader adapters remain planned. D6 is committed as `564fcff`; D7 as `4caf359`; D8 as `cfaf10e`;
 D9 is committed as `3cf6db1`; D10 as `6403e43`. D11a adds local PWM consumers/LEDs
 and D11b adds local ADC consumers/common channel configuration;
-full/browser/package checks passed and the full D11 matrix remains incomplete.
+full/browser/package checks passed. D11c adds three interrupt GPIO signal profiles;
+its full/browser/package checks passed within the handoff's scoped limits. The full D11
+matrix remains incomplete.
 Full D7 checks and browser/package verification passed as recorded in its handoff.
 The D0 executable evidence is a bounded in-memory source prototype under
 `scripts/prototypes/`, outside the installed application. See the
@@ -78,6 +80,11 @@ revalidate(selection: ProjectSelection) -> ProjectSelection
 
 `catalog` lists explicit Original/named configurations and retains unavailable
 registrations with their availability; unreadable entries produce visible diagnostics.
+The editor's Registered applications picker selects only entries explicitly marked
+available. Missing, replaced and unknown registrations are excluded from its choices
+and count, with a nearby link to Project Creator for reconnect/removal. Refreshing the
+picker does not discard an already-open context or draft. Saved records and historical
+capture behavior are unchanged; reading the catalogue never deletes registrations.
 `capture` takes identifiers, validates their relationship and directory identities, and
 returns detached data. `None` selects the original configuration; it never means the
 most recent build. `revalidate` either returns an equivalent current selection or raises
@@ -1018,3 +1025,55 @@ require explicit source repair, and shared providers are preserved. Resource dia
 remain bounded and source-linked, without claiming physical input mappings, voltage
 suitability, runtime sampling or universal hardware support. See the
 [D11b handoff](device-tree-editor-d11b-handoff.md) for verification and remaining work.
+
+
+## D11c local interrupt GPIO consumers
+
+`POST /api/devicetree/editor/drafts/interrupt-gpios` uses the standard
+workspace/context/draft revision/hash guard and expiring binding observation.
+`InterruptGPIOService` returns the base binding projection plus provider and consumer
+rows. Each consumer identifies its node, exact property, profile, signal, parsed single
+entry and editing capability/reason. The supported profiles are:
+
+| Compatible | Property | Signal |
+| --- | --- | --- |
+| `bosch,bmi270` | `irq-gpios` | INT1; the additional INT2 specifier is outside this form |
+| `ti,hdc2010` | `int-gpios` | DRDY/INT |
+| `adi,max30210` | `interrupt-gpios` | INT1 |
+
+Profile identity does not replace binding validation. The consumer must explicitly
+declare a literal compatible matching the selected profile; inherited child-binding
+metadata alone does not establish that identity. A unique local matched binding must
+support the selected phandle-array property in GPIO specifier space. The form
+edits one literal specifier or adds the property if absent and permitted by that
+binding. It does not classify other properties by name, create consumers/providers,
+or evaluate macros. Multiple/opaque specifiers and ambiguous/inherited declarations
+remain source or generic-binding workflows.
+
+Providers need a unique local matched binding, a binding-valid `gpio-controller`
+boolean, explicit `#gpio-cells = <2>`, and the ordered cells `pin, flags`. Pin IDs fit
+0–31 and devicetree flags fit 0–65535. A valid explicit `ngpios` further bounds the pin;
+valid local `gpio-reserved-ranges` exclude their literal start/count ranges. Missing
+range evidence stays unknown. Opaque, invalid or unsupported local range declarations
+withhold mutation; direct child `gpio-hog` allocations also remain outside the profile.
+Valid comma-separated cell groups such as `<3 1>, <7 1>` are outside the current literal
+array parser and remain preserved in source; this specialized form is withheld.
+These representation/source checks do not establish physical interrupt capability.
+
+The draft command `interrupt_gpio_set` accepts exactly `kind`, `schema_id`, `node_id`,
+`property` and `entry`, where `entry` is `{reference, cells: [pin, flags]}`. The chosen
+consumer/property and provider must belong to the same retained observation. Local
+bindings are revalidated before and after planning. Each accepted action updates only
+the selected property in one canonical source/history change. Logical active high/low
+modifies bit 0 only; it does not set interrupt edge/level, enable a trigger, configure
+Kconfig or establish electrical suitability. Other numeric flag bits are preserved.
+
+Existing D10 literal-reference diagnostics/removal reviews cover these properties.
+Shared inputs do not establish an exclusive conflict; disabled consumers do not prove
+simultaneous use. Provider removal requires individually selected existing optional
+repairs where safe; required, mixed or ambiguous dependencies need explicit repair.
+Removing a consumer node retains its shared provider. The panel makes whole-node
+removal scope explicit, retains forms during refresh, restores action focus and reveals
+offscreen results only for the current explicit action. Save/Configure remain separate;
+no persistent schema changes. See the [D11c handoff](device-tree-editor-d11c-handoff.md)
+for current verification and remaining work.

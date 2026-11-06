@@ -301,6 +301,10 @@ in the normal application. Open a project/configuration or application directory
 an existing overlay, edit it, then use **Review and Save**. The review shows the destination,
 source diff and unresolved validation before writing. Saving does not configure, build,
 activate the overlay or change a recipe. Undo after Save produces another unsaved draft.
+The **Registered applications** picker shows available applications only. If saved
+locations are missing or replaced, **Manage saved applications** opens Project Creator
+to reconnect or remove those entries. Refreshing the picker preserves the open draft
+and never deletes saved history.
 
 The [D5 workflow](docs/device-tree-editor-d5-handoff.md) adds **Review Configure** for
 a saved overlay in a registered project/configuration. Review the candidate, selected
@@ -428,6 +432,27 @@ electrical suitability, gain/reference support and physical routing remain unkno
 Inherited providers, unbound `/zephyr,user` consumers, macros and multiple specifiers
 remain source/generic-binding workflows. Other advanced peripheral families and
 system resources remain planned; D11 is partial.
+
+The [D11c slice](docs/device-tree-editor-d11c-handoff.md) adds **Load interrupt GPIOs**
+for three explicit signal profiles: `bosch,bmi270` / `irq-gpios` (INT1),
+`ti,hdc2010` / `int-gpios` (DRDY/INT), and `adi,max30210` / `interrupt-gpios`
+(INT1). Edit one literal specifier or assign an absent property supported by the local
+binding. The consumer must explicitly declare its literal compatible; child-binding
+metadata alone does not establish a signal profile. Select a unique local GPIO provider,
+pin and numeric flags explicitly.
+Changing logical active high/low changes only flag bit 0 and preserves the remaining
+numeric flags. GPIO polarity does not select the driver's interrupt edge or level.
+
+Providers need a matched local binding, `gpio-controller`, explicit `#gpio-cells = <2>`
+and ordered `pin, flags` cells. The form checks pin IDs 0–31, flags 0–65535, and any
+known local `ngpios` or reserved ranges. Missing range evidence remains unknown;
+malformed ranges, opaque/multiple specifiers, inherited providers and local GPIO hogs
+withhold the specialized form. Other GPIO properties remain available through binding
+or source editing. Driver triggers, Kconfig, physical routing, pull resistors and
+electrical suitability remain unverified. Each edit is one undoable draft change;
+reviewed Save and Configure stay separate. D11c full checks, browser verification,
+actual-binding smoke and installed-package checks passed within this scope; the wider
+D11 stage remains partial.
 
 Acknowledged drafts are retained under `.features/devicetree/drafts/` in the data directory.
 **Find recoverable drafts** compares retained text with current files before an explicit restore;

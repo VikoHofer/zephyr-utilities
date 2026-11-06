@@ -35,7 +35,7 @@ export function createEditorSession({api, state, workspace, onChange}) {
     request?.abort(); catalogRequest?.abort();
     Object.assign(state, {workspace: path, selection: null, contextRef: null, data: null,
       document: null, catalog: null, loading: false, documentLoading: false, catalogLoading: false,
-      error: "", documentError: "", catalogError: ""});
+      error: "", documentError: "", catalogError: "", formProjectId: "", formConfigurationId: null});
     initialized = false;
     return true;
   }
@@ -56,7 +56,14 @@ export function createEditorSession({api, state, workspace, onChange}) {
       const data = await api(PREFIX + "catalog", {method: "POST", signal: catalogRequest.signal, body: {workspace: path}});
       if (!active()) return false;
       if (data.workspace !== path || !Array.isArray(data.projects)) throw new Error("The application catalogue changed. Refresh it again.");
-      state.catalog = data;
+      const available = data.projects.filter((project) => project?.availability?.state === "available");
+      state.catalog = {...data, projects: available,
+        unavailableProjects: data.projects.filter((project) => project?.availability?.state !== "available")};
+      const selected = available.find((project) => project.id === state.formProjectId);
+      if (!selected) { state.formProjectId = ""; state.formConfigurationId = null; }
+      else if (!array(selected.configurations).some((configuration) => configuration.id === (state.formConfigurationId ?? null))) {
+        state.formConfigurationId = null;
+      }
     } catch (error) {
       if (active() && error.name !== "AbortError") state.catalogError = error.message || String(error);
     } finally {
@@ -139,8 +146,11 @@ export function createEditorSession({api, state, workspace, onChange}) {
     if (disposed) return Promise.resolve(false);
     followWorkspace();
     const project = array(state.catalog?.projects).find((item) => item.id === projectId);
-    if (!project || !array(project.configurations).some((item) => item.id === configurationId)) {
-      return invalid("Choose an application and configuration from the current catalogue.");
+    if (!project || project.availability?.state !== "available"
+        || !array(project.configurations).some((item) => item.id === configurationId)) {
+      state.error = "Choose an application and configuration from the current available catalogue.";
+      publish();
+      return Promise.resolve(false);
     }
     return load("open", {project_id: projectId, configuration_id: configurationId},
       {intent: {kind: "project", project_id: projectId, configuration_id: configurationId}});

@@ -10,6 +10,7 @@ import {mountModulePanel} from "./module-view.js";
 import {mountResourcePanel} from "./resource-view.js";
 import {mountPWMPanel} from "./pwm-view.js";
 import {mountADCPanel} from "./adc-view.js";
+import {mountInterruptGPIOPanel} from "./interrupt-gpio-view.js";
 import {retainActionFocus} from "./view-focus.js";
 
 const array = (value) => Array.isArray(value) ? value : [];
@@ -39,6 +40,7 @@ export function mount(host, context) {
   let resources;
   let pwm;
   let adc;
+  let interruptGPIO;
   let shownReview;
   let reviewTrigger;
   let shownConfigure;
@@ -87,10 +89,9 @@ export function mount(host, context) {
       const select = $("project"); select.replaceChildren();
       option(select, "", "Choose an application");
       for (const project of array(state.catalog?.projects)) {
-        const unavailable = project.availability?.state && project.availability.state !== "available";
-        option(select, project.id, `${project.name || project.path}${unavailable ? " · Unavailable" : ""}`);
+        option(select, project.id, project.name || project.path);
       }
-      const desired = state.formProjectId || state.selection?.project_id || "";
+      const desired = state.formProjectId || "";
       if (array(state.catalog?.projects).some((item) => item.id === desired)) select.value = desired;
       configurations();
       const diagnostics = $("catalog-diagnostics"); diagnostics.replaceChildren();
@@ -104,8 +105,11 @@ export function mount(host, context) {
     $("refresh-catalog").textContent = state.catalogLoading ? "Refreshing…" : "Refresh list";
     const count = array(state.catalog?.projects).length;
     $("catalog-status").textContent = state.catalogLoading ? "Loading registered applications…"
-      : !state.catalogError ? count ? `${count} registered application${count === 1 ? "" : "s"} in this workspace.`
-        : "No registered applications in this workspace. You can open an application directory below." : "";
+      : !state.catalogError ? count ? `${count} available registered application${count === 1 ? "" : "s"} in this workspace.`
+        : "No available registered applications in this workspace. You can open an application directory below." : "";
+    const unavailableCount = array(state.catalog?.unavailableProjects).length;
+    $("unavailable-projects").hidden = !unavailableCount;
+    $("unavailable-projects-summary").textContent = `${unavailableCount} unavailable saved application${unavailableCount === 1 ? " is" : "s are"} hidden from this picker. Reconnect or remove saved entries in Projects.`;
     $("catalog-error").hidden = !state.catalogError;
     $("catalog-error").textContent = state.catalogError || "";
   }
@@ -562,6 +566,7 @@ export function mount(host, context) {
     modules?.render();
     pwm?.render();
     adc?.render();
+    interruptGPIO?.render();
     resources?.render();
   }
   async function action(operation, destination) {
@@ -752,16 +757,18 @@ export function mount(host, context) {
     drafts, reveal: context.reveal, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
   adc = mountADCPanel($("adc"), {api: context.api, state, workspace: () => context.workspace.path,
     drafts, reveal: context.reveal, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
+  interruptGPIO = mountInterruptGPIOPanel($("interrupt-gpio"), {api: context.api, state, workspace: () => context.workspace.path,
+    drafts, reveal: context.reveal, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
   pins = mountPinPanel($("pins"), {api: context.api, state, workspace: () => context.workspace.path,
     drafts, reveal: context.reveal, onChange: render});
   modules = mountModulePanel($("modules"), {api: context.api, state, workspace: () => context.workspace.path,
     drafts, reveal: context.reveal, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
   render();
   return {
-    navigate(view) { actionGeneration++; visualMessage(""); saving.cancel(); validation.closeReview(); validation.resume(); bindings.navigate(); peripherals.navigate(); pins.navigate(); modules.navigate(); resources.navigate(); pwm.navigate(); adc.navigate(); return session.navigate(view); },
+    navigate(view) { actionGeneration++; visualMessage(""); saving.cancel(); validation.closeReview(); validation.resume(); bindings.navigate(); peripherals.navigate(); pins.navigate(); modules.navigate(); resources.navigate(); pwm.navigate(); adc.navigate(); interruptGPIO.navigate(); return session.navigate(view); },
     dispose() {
       disposed = true; actionGeneration++; lifetime.abort(); saving.dispose(); closeReview({restoreFocus: false});
-      validation.dispose(); closeConfigure({restoreFocus: false}); bindings.dispose(); peripherals.dispose(); pins.dispose(); modules.dispose(); resources.dispose(); pwm.dispose(); adc.dispose(); session.dispose(); drafts.dispose();
+      validation.dispose(); closeConfigure({restoreFocus: false}); bindings.dispose(); peripherals.dispose(); pins.dispose(); modules.dispose(); resources.dispose(); pwm.dispose(); adc.dispose(); interruptGPIO.dispose(); session.dispose(); drafts.dispose();
       for (const url of downloadUrls) URL.revokeObjectURL(url);
     },
   };

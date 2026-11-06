@@ -30,7 +30,7 @@ research master plan, not a general coding-assistant integration.
 | Feature | State | Initial implementation direction |
 | --- | --- | --- |
 | Memory Explorer (`memory`) | Available | Existing-build reports, visualization, snapshots and comparisons |
-| Device Tree Editor (`devicetree`) | Existing-overlay editing, binding/peripheral forms, bounded pins, local module canvas, resource diagnostics/removal reviews, reviewed Save/recovery and explicit Configure | D0–D10 complete within documented scopes; D11a PWM and D11b local ADC forms delivered within scoped limits; D11 remains partial |
+| Device Tree Editor (`devicetree`) | Existing-overlay editing, binding/peripheral forms, bounded pins, local module canvas, resource diagnostics/removal reviews, reviewed Save/recovery and explicit Configure | D0–D10 complete within documented scopes; D11a PWM and D11b local ADC forms delivered; D11c interrupt GPIO forms complete within scoped limits with passed checks; D11 remains partial |
 | Project Creator (`projects`) | Applications, creation/build and environment discovery available | Maintain the delivered everyday workflow and add focused public editor handoffs |
 | Build Inspector (`inspector`) | Advanced build, resolved-tree, current source and binding navigation available | Preserve available inspection; further depth deferred |
 | TinyML Experiments (`tinyml`) | Planned | Connect model/build/run identities and compare imported experiment measurements |
@@ -133,7 +133,13 @@ vendor-independent local single-specifier PWM consumer/LED forms and PWM diagnos
 coverage, with passed full checks, browser verification, actual-binding smoke and package checks in the
 [D11 handoff](device-tree-editor-d11-handoff.md). D11b adds single-specifier local ADC
 consumers and common ADC channel configuration, with implicit consumer removal guards;
-see the [D11b handoff](device-tree-editor-d11b-handoff.md). The remaining family matrix stays planned.
+see the [D11b handoff](device-tree-editor-d11b-handoff.md). D11c adds exact interrupt GPIO
+profiles for BMI270 INT1, HDC2010 DRDY/INT and MAX30210 INT1, using literal local GPIO
+provider evidence and preserved numeric flags. Trigger mode, software enablement and
+physical suitability remain unknown. Full checks, browser verification, actual-binding
+smoke and installed-package checks passed as recorded in the
+[D11c handoff](device-tree-editor-d11c-handoff.md). Broader signal profiles and the
+remaining family matrix stay planned.
 
 The [Project Creator and environment analyser master plan](project-creator-masterplan.md)
 provides the earlier shared-context proposal; the editor master plan now defines its

@@ -18,8 +18,11 @@ and installed-package checks passed as recorded in the D10 handoff. D10 is commi
 `6403e43`. D11a local single-specifier PWM consumers and PWM LED forms are complete
 within their scoped limits; full/browser/package checks passed in the D11 handoff.
 D11a is committed as `24e79e6`. D11b adds bounded local ADC consumers and common channel
-configuration; full/browser/package checks passed in the D11b handoff. D11 remains partial; its
-remaining family matrix is in the master plan. Broader pin adapters, advanced composition
+configuration; full/browser/package checks passed in the D11b handoff. D11b is committed as
+`2f070ad`. D11c adds three explicit interrupt GPIO consumer profiles; full/browser/package
+checks passed as recorded in the D11c handoff. The editor application picker excludes unavailable
+registrations while Projects retains them for reconnect/removal. D11 remains partial;
+its remaining family matrix is in the master plan. Broader pin adapters, advanced composition
 and TinyML experiment analysis remain planned.
 
 ## Start here

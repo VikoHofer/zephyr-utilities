@@ -475,7 +475,7 @@ class EditorContextHttpTests(unittest.TestCase):
         for operation in ("open", "get", "source", "command", "undo", "redo", "review", "save", "compare", "reload",
                           "recovery/list", "recovery/read", "recovery/restore", "recovery/discard",
                           "validation/review", "validation/submit", "validation/status", "validation/cancel", "validation/handoff", "bindings", "peripherals",
-                          "resources", "removal/review", "pwm", "adc"):
+                          "resources", "removal/review", "pwm", "adc", "interrupt-gpios"):
             for authorized, expected in ((False, 403), (True, 400)):
                 with self.subTest(operation=operation, authorized=authorized), self.assertRaises(HTTPError) as error:
                     self.request(PREFIX + "drafts/" + operation, method="POST", body={}, authorized=authorized)
@@ -637,6 +637,73 @@ properties:
         observed = post("drafts/adc", guard(reopened))
         self.assertEqual(observed["consumers"][0]["entry"], {"reference": "&adc0", "cells": [3]})
         self.assertEqual(observed["channels"][0]["gain"], "ADC_GAIN_1")
+        self.assertEqual(self.server.app.context.jobs.list(), [])
+
+    def test_interrupt_gpio_edit_add_undo_save_and_reopen_use_the_http_draft(self):
+        def post(operation, body):
+            with self.request(PREFIX + operation, method="POST", body=body) as response:
+                return json.load(response)
+
+        overlay = self.source / "app.overlay"
+        original = '''/ {
+    gpio0: gpio { compatible = "test,gpio"; gpio-controller; #gpio-cells = <2>; ngpios = <8>; gpio-reserved-ranges = <3 1>; };
+    sensor { compatible = "bosch,bmi270"; irq-gpios = <&gpio0 1 256>; keep = <HANDWRITTEN(1)>; };
+    unconnected { compatible = "bosch,bmi270"; };
+};
+'''
+        overlay.write_text(original)
+        bindings = self.source / "dts/bindings"
+        bindings.mkdir(parents=True)
+        (bindings / "gpio.yaml").write_text('''compatible: test,gpio
+gpio-cells: [pin, flags]
+properties:
+  gpio-controller: {type: boolean, required: true}
+  "#gpio-cells": {type: int, const: 2, required: true}
+  ngpios: {type: int}
+  gpio-reserved-ranges: {type: array}
+''')
+        (bindings / "consumer.yaml").write_text('''compatible: bosch,bmi270
+properties:
+  irq-gpios: {type: phandle-array}
+''')
+        context = post("open", {"workspace": str(self.root), "application_path": str(self.source)})
+        binding = {"workspace": str(self.root), "context_id": context["id"], "expected_revision": context["revision"]}
+        document = next(item for item in context["documents"] if item["relative_path"] == "app.overlay")
+        draft = post("drafts/open", {**binding, "document_id": document["id"]})
+
+        def guard(value):
+            return {**binding, "draft_id": value["id"], "expected_draft_revision": value["revision"],
+                    "expected_draft_sha256": value["sha256"]}
+
+        observed = post("drafts/interrupt-gpios", guard(draft))
+        consumer = next(row for row in observed["consumers"] if row["path"] == "/sensor")
+        command = {"kind": "interrupt_gpio_set", "schema_id": observed["schema_id"], "node_id": consumer["node_id"],
+                   "property": "irq-gpios", "entry": {"reference": "&gpio0", "cells": [2, 257]}}
+        draft = post("drafts/command", {**guard(draft), "command": command})
+        changed = draft["text"]
+        self.assertEqual(changed, original.replace("<&gpio0 1 256>", "<&gpio0 2 257>"))
+        self.assertEqual(overlay.read_text(), original)
+        with self.assertRaises(HTTPError) as stale:
+            post("drafts/command", {**guard(draft), "command": command})
+        self.assertEqual(stale.exception.code, 400)
+        stale.exception.close()
+        observed = post("drafts/interrupt-gpios", guard(draft))
+        unconnected = next(row for row in observed["consumers"] if row["path"] == "/unconnected")
+        added = post("drafts/command", {**guard(draft), "command": {
+            "kind": "interrupt_gpio_set", "schema_id": observed["schema_id"], "node_id": unconnected["node_id"],
+            "property": "irq-gpios", "entry": {"reference": "&gpio0", "cells": [4, 1]}}})
+        self.assertIn("irq-gpios = <&gpio0 4 1>", added["text"])
+        restored = post("drafts/undo", guard(added))
+        self.assertEqual(restored["text"], changed)
+        review = post("drafts/review", guard(restored))
+        saved = post("drafts/save", {**guard(restored), "plan_id": review["plan"]["id"]})
+        self.assertEqual(saved["status"], "saved")
+        self.assertEqual(overlay.read_text(), changed)
+        binding.update(context_id=saved["context"]["id"], expected_revision=saved["context"]["revision"])
+        reopened = post("drafts/open", {**binding, "document_id": saved["draft"]["document_id"]})
+        observed = post("drafts/interrupt-gpios", guard(reopened))
+        self.assertEqual(next(row for row in observed["consumers"] if row["path"] == "/sensor")["entry"],
+                         {"reference": "&gpio0", "cells": [2, 257]})
         self.assertEqual(self.server.app.context.jobs.list(), [])
 
     def test_resource_removal_review_repairs_are_explicit_atomic_and_revision_bound(self):

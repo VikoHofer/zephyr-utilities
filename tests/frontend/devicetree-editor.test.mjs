@@ -257,3 +257,102 @@ test("empty and failed catalogues have explicit outcomes and invalid selections 
   assert.equal(failing.state.catalogError, "Catalogue unavailable");
   failing.session.dispose();
 });
+
+test("registered application choices include only explicitly available records while retaining unavailable metadata", async () => {
+  const available = structuredClone(projects[0]);
+  const missing = {...structuredClone(projects[0]), id: "missing", availability: {state: "missing", reason: "Directory moved"}};
+  const replaced = {...structuredClone(projects[0]), id: "replaced", availability: {state: "replaced"}};
+  const unknown = {...structuredClone(projects[0]), id: "unknown", availability: {state: "unknown"}};
+  const undeclared = {...structuredClone(projects[0]), id: "undeclared"}; delete undeclared.availability;
+  const response = {workspace, projects: [missing, available, replaced, unknown, undeclared], diagnostics: ["Saved registrations retained."]};
+  const app = harness(async () => response);
+  await app.session.navigate();
+  assert.deepEqual(app.state.catalog.projects, [available]);
+  assert.deepEqual(app.state.catalog.unavailableProjects, [missing, replaced, unknown, undeclared]);
+  assert.deepEqual(app.state.catalog.diagnostics, response.diagnostics);
+  assert.equal(response.projects.length, 5, "normalization does not remove saved records from the response");
+  app.session.dispose();
+});
+
+test("an all-unavailable catalogue provides no selectable applications or configurations", async () => {
+  const unavailable = ["missing", "replaced", "unknown"].map((status) => ({...structuredClone(projects[0]), id: status, availability: {state: status}}));
+  const calls = [];
+  const app = harness(async (path) => { calls.push(path); return {workspace, projects: unavailable, diagnostics: []}; });
+  await app.session.navigate();
+  assert.deepEqual(app.state.catalog.projects, []); assert.equal(app.state.catalog.unavailableProjects.length, 3);
+  assert.equal(app.state.formProjectId, ""); assert.equal(app.state.formConfigurationId, null);
+  for (const project of unavailable) {
+    assert.equal(await app.session.openProject(project.id, configurationId), false);
+    assert.match(app.state.error, /current available catalogue/);
+  }
+  assert.deepEqual(calls, ["/api/devicetree/editor/catalog"]);
+  app.session.dispose();
+});
+
+test("refreshing away a selected registration clears only its picker state and preserves the active draft", async () => {
+  let response = catalog(); const selected = context({editing_document: overlay()}); const calls = [];
+  const app = harness(async (path) => {
+    calls.push(path); return path.endsWith("/catalog") ? response : path.endsWith("/document") ? document(selected) : selected;
+  });
+  await app.session.navigate(); await app.session.openProject(projectId);
+  app.state.formProjectId = projectId; app.state.formConfigurationId = configurationId;
+  const retained = {data: app.state.data, document: app.state.document, contextRef: app.state.contextRef, selection: app.state.selection,
+    draftView: {entry: {text: "unsaved overlay", history: ["previous source"]}}, draftCache: {draft: {text: "unsaved overlay"}}};
+  Object.assign(app.state, retained);
+  response = {workspace, projects: [{...structuredClone(projects[0]), availability: {state: "missing"}}], diagnostics: []};
+  await app.session.catalog();
+  assert.equal(app.state.formProjectId, ""); assert.equal(app.state.formConfigurationId, null);
+  for (const [key, value] of Object.entries(retained)) assert.equal(app.state[key], value, key);
+  const before = calls.length;
+  assert.equal(await app.session.openProject(projectId, configurationId), false);
+  assert.equal(calls.length, before, "a stale picker request cannot open an unavailable record");
+  for (const [key, value] of Object.entries(retained)) assert.equal(app.state[key], value, key + " after stale open");
+  app.session.dispose();
+});
+
+test("catalogue refresh clears removed configuration choices without changing an active named context", async () => {
+  let response = catalog(); const selected = context({configuration: {id: configurationId, name: "Debug", revision: 2}});
+  const app = harness(async (path) => path.endsWith("/catalog") ? response : selected);
+  await app.session.navigate(); await app.session.openProject(projectId, configurationId);
+  app.state.formProjectId = projectId; app.state.formConfigurationId = configurationId;
+  await app.session.catalog();
+  assert.equal(app.state.formProjectId, projectId); assert.equal(app.state.formConfigurationId, configurationId);
+  response = {workspace, projects: [{...structuredClone(projects[0]), configurations: [{id: null, name: "Original", revision: 0}]}], diagnostics: []};
+  await app.session.catalog();
+  assert.equal(app.state.formProjectId, projectId); assert.equal(app.state.formConfigurationId, null);
+  assert.equal(app.state.data, selected); assert.equal(app.state.selection.configuration_id, configurationId);
+  assert.equal(await app.session.openProject(projectId, configurationId), false);
+  assert.equal(app.state.data, selected);
+  app.session.dispose();
+});
+
+test("restored applications return on explicit refresh without silently reopening or reselecting them", async () => {
+  let available = false; const calls = [];
+  const app = harness(async (path) => {
+    calls.push(path);
+    return path.endsWith("/catalog") ? {workspace, projects: [{...structuredClone(projects[0]), availability: {state: available ? "available" : "missing"}}], diagnostics: []} : context();
+  });
+  await app.session.navigate(); assert.deepEqual(app.state.catalog.projects, []);
+  available = true; await app.session.catalog();
+  assert.equal(app.state.catalog.projects.length, 1); assert.deepEqual(app.state.catalog.unavailableProjects, []);
+  assert.equal(app.state.formProjectId, ""); assert.equal(app.state.data, null);
+  assert.equal(calls.filter((path) => path.endsWith("/open")).length, 0);
+  await app.session.openProject(projectId);
+  assert.equal(app.state.data.project.id, projectId);
+  app.session.dispose();
+});
+
+test("a late catalogue cannot restore records hidden by a newer refresh", async () => {
+  const pending = deferred(); let reads = 0; let signal;
+  const app = harness(async (_path, options) => {
+    if (++reads === 2) { signal = options.signal; return pending.promise; }
+    return reads === 1 ? catalog() : {workspace, projects: [{...structuredClone(projects[0]), availability: {state: "missing"}}], diagnostics: []};
+  });
+  await app.session.navigate(); app.state.formProjectId = projectId; app.state.formConfigurationId = configurationId;
+  const older = app.session.catalog(); await app.session.catalog();
+  pending.resolve(catalog()); await older;
+  assert.equal(signal.aborted, true); assert.deepEqual(app.state.catalog.projects, []);
+  assert.equal(app.state.catalog.unavailableProjects.length, 1);
+  assert.equal(app.state.formProjectId, ""); assert.equal(app.state.formConfigurationId, null);
+  app.session.dispose();
+});

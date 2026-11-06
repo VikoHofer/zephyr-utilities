@@ -12,7 +12,8 @@ are complete within their documented graph limits, with full/browser/package che
 D11a local single-specifier PWM consumers and PWM LED forms are complete within their
 scoped limits, with full/browser/package checks passed. D11b adds local ADC consumers
 and common channel configuration; its verification is recorded in the D11b handoff.
-D11 remains partial.
+D11c adds three explicit interrupt GPIO signal profiles; full/browser/package checks
+passed as recorded in the D11c handoff. D11 remains partial.
 Broader pin adapters, advanced composition and TinyML experiments remain planned.
 
 ## Dependency direction
@@ -467,3 +468,23 @@ that lack a direct child phandle. Optional settings, shared providers, source/hi
 reviewed Save and explicit Configure retain their existing boundaries. No storage schema,
 process boundary or cross-feature dependency changes. See the
 [D11b handoff](device-tree-editor-d11b-handoff.md).
+
+
+D11c adds feature-owned `InterruptGPIOService` and a data-only signal profile table.
+The profile selects an exact compatible/property pair: BMI270 `irq-gpios`, HDC2010
+`int-gpios` or MAX30210 `interrupt-gpios`. The service reuses local binding observation,
+canonical commands and source/history; a GPIO-looking suffix or matched child binding
+alone establishes no interrupt semantics. The consumer must explicitly declare its
+literal compatible. Providers require supported local `pin, flags` cells, matching
+explicit cell count and `gpio-controller`. Known local count/reservations constrain pin
+selection; absent evidence stays unknown, and malformed ranges or local GPIO hogs
+withhold mutation. Logical polarity changes preserve other numeric bits without
+selecting a driver trigger. Existing resource diagnostics and D10 removal reviews
+retain literal provider dependencies and optional-property repair boundaries. No new
+storage schema, cross-feature dependency or process boundary is introduced. See the
+[D11c handoff](device-tree-editor-d11c-handoff.md).
+
+The editor's browser catalogue filters available registrations for its picker and
+reconciles stale picker choices independently of the active context/draft. The shared
+Projects catalogue still retains unavailable registrations and historical selection
+evidence; a nearby Projects link offers its existing reconnect/removal workflow.

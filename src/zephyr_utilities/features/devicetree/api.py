@@ -14,6 +14,7 @@ from .resources import ResourceService
 from .removal import RemovalService
 from .pwm import PWMService
 from .adc import ADCService
+from .interrupt_gpio import InterruptGPIOService
 
 
 def register(router, context):
@@ -44,6 +45,10 @@ def register(router, context):
     drafts.adc = adc
     context.services["devicetree_adc"] = adc
     router.add("POST", "/api/devicetree/editor/drafts/adc", lambda request: adc.inspect(request.body))
+    interrupt_gpio = InterruptGPIOService(drafts)
+    drafts.interrupt_gpio = interrupt_gpio
+    context.services["devicetree_interrupt_gpio"] = interrupt_gpio
+    router.add("POST", "/api/devicetree/editor/drafts/interrupt-gpios", lambda request: interrupt_gpio.inspect(request.body))
     pins = PinService(drafts)
     drafts.pins = pins
     context.services["devicetree_pins"] = pins
