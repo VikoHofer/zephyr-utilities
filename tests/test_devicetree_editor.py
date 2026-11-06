@@ -475,7 +475,7 @@ class EditorContextHttpTests(unittest.TestCase):
         for operation in ("open", "get", "source", "command", "undo", "redo", "review", "save", "compare", "reload",
                           "recovery/list", "recovery/read", "recovery/restore", "recovery/discard",
                           "validation/review", "validation/submit", "validation/status", "validation/cancel", "validation/handoff", "bindings", "peripherals",
-                          "resources", "removal/review", "pwm"):
+                          "resources", "removal/review", "pwm", "adc"):
             for authorized, expected in ((False, 403), (True, 400)):
                 with self.subTest(operation=operation, authorized=authorized), self.assertRaises(HTTPError) as error:
                     self.request(PREFIX + "drafts/" + operation, method="POST", body={}, authorized=authorized)
@@ -561,6 +561,82 @@ class EditorContextHttpTests(unittest.TestCase):
         reopened = post("drafts/open", {**binding, "document_id": saved["draft"]["document_id"]})
         observed = post("drafts/pwm", guard(reopened))
         self.assertEqual(observed["consumers"][0]["entry"], {"reference": "&pwm0", "cells": [2, 20000000, 256]})
+        self.assertEqual(self.server.app.context.jobs.list(), [])
+
+    def test_adc_channel_create_assign_edit_undo_save_and_reopen(self):
+        def post(operation, body):
+            with self.request(PREFIX + operation, method="POST", body=body) as response:
+                return json.load(response)
+
+        overlay = self.source / "app.overlay"
+        original = '''/ {
+    adc0: adc { compatible = "test,adc"; #io-channel-cells = <1>; #address-cells = <1>; #size-cells = <0>; };
+    consumer { compatible = "test,adc-consumer"; io-channels = <&adc0 0>; keep = <HANDWRITTEN(1)>; };
+};
+'''
+        overlay.write_text(original)
+        bindings = self.source / "dts/bindings"
+        bindings.mkdir(parents=True)
+        (bindings / "adc.yaml").write_text('''compatible: test,adc
+io-channel-cells: [input]
+properties:
+  "#io-channel-cells": {type: int, const: 1, required: true}
+  "#address-cells": {type: int, const: 1}
+  "#size-cells": {type: int, const: 0}
+child-binding:
+  properties:
+    reg: {type: array, required: true}
+    zephyr,gain: {type: string, required: true, enum: [ADC_GAIN_1, ADC_GAIN_1_2]}
+    zephyr,reference: {type: string, required: true, enum: [ADC_REF_INTERNAL]}
+    zephyr,acquisition-time: {type: int, required: true}
+''')
+        (bindings / "consumer.yaml").write_text('''compatible: test,adc-consumer
+properties:
+  io-channels: {type: phandle-array, required: true}
+''')
+        context = post("open", {"workspace": str(self.root), "application_path": str(self.source)})
+        binding = {"workspace": str(self.root), "context_id": context["id"], "expected_revision": context["revision"]}
+        document = next(item for item in context["documents"] if item["relative_path"] == "app.overlay")
+        draft = post("drafts/open", {**binding, "document_id": document["id"]})
+
+        def guard(value):
+            return {**binding, "draft_id": value["id"], "expected_draft_revision": value["revision"],
+                    "expected_draft_sha256": value["sha256"]}
+
+        observed = post("drafts/adc", guard(draft))
+        draft = post("drafts/command", {**guard(draft), "command": {
+            "kind": "adc_channel_add", "schema_id": observed["schema_id"], "parent_id": observed["providers"][0]["id"],
+            "channel": 3, "gain": "ADC_GAIN_1", "reference": "ADC_REF_INTERNAL", "acquisition_time": 0}})
+        self.assertEqual(overlay.read_text(), original)
+        self.assertIn("channel@3", draft["text"])
+        observed = post("drafts/adc", guard(draft))
+        draft = post("drafts/command", {**guard(draft), "command": {
+            "kind": "adc_set", "schema_id": observed["schema_id"], "node_id": observed["consumers"][0]["node_id"],
+            "entry": {"reference": "&adc0", "cells": [3]}}})
+        assigned = draft["text"]
+        self.assertIn("io-channels = <&adc0 3>", assigned)
+        self.assertIn("keep = <HANDWRITTEN(1)>", assigned)
+        observed = post("drafts/adc", guard(draft))
+        command = {"kind": "adc_channel_set", "schema_id": observed["schema_id"], "node_id": observed["channels"][0]["node_id"],
+                   "gain": "ADC_GAIN_1_2", "reference": "ADC_REF_INTERNAL", "acquisition_time": 16385}
+        changed = post("drafts/command", {**guard(draft), "command": command})
+        self.assertEqual(changed["revision"], draft["revision"] + 1)
+        self.assertIn('zephyr,gain = "ADC_GAIN_1_2"', changed["text"])
+        with self.assertRaises(HTTPError) as stale:
+            post("drafts/command", {**guard(changed), "command": command})
+        self.assertEqual(stale.exception.code, 400)
+        stale.exception.close()
+        restored = post("drafts/undo", guard(changed))
+        self.assertEqual(restored["text"], assigned)
+        review = post("drafts/review", guard(restored))
+        saved = post("drafts/save", {**guard(restored), "plan_id": review["plan"]["id"]})
+        self.assertEqual(saved["status"], "saved")
+        self.assertEqual(overlay.read_text(), assigned)
+        binding.update(context_id=saved["context"]["id"], expected_revision=saved["context"]["revision"])
+        reopened = post("drafts/open", {**binding, "document_id": saved["draft"]["document_id"]})
+        observed = post("drafts/adc", guard(reopened))
+        self.assertEqual(observed["consumers"][0]["entry"], {"reference": "&adc0", "cells": [3]})
+        self.assertEqual(observed["channels"][0]["gain"], "ADC_GAIN_1")
         self.assertEqual(self.server.app.context.jobs.list(), [])
 
     def test_resource_removal_review_repairs_are_explicit_atomic_and_revision_bound(self):

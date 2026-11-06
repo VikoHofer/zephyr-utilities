@@ -138,6 +138,7 @@ class DraftService:
         self.modules = None
         self.removal = None
         self.pwm = None
+        self.adc = None
 
     def _capture(self, context):
         captured = deepcopy(context)
@@ -385,7 +386,8 @@ class DraftService:
         module_command = self.modules is not None and kind in self.modules.commands
         removal_command = self.removal is not None and kind in self.removal.commands
         pwm_command = self.pwm is not None and kind in self.pwm.commands
-        if not any((binding_command, peripheral_command, pin_command, module_command, removal_command, pwm_command)) and (fields is None or not fields <= set(command) or set(command) - fields - optional):
+        adc_command = self.adc is not None and kind in self.adc.commands
+        if not any((binding_command, peripheral_command, pin_command, module_command, removal_command, pwm_command, adc_command)) and (fields is None or not fields <= set(command) or set(command) - fields - optional):
             raise ValueError("Choose the exact supported visual command fields.")
         with self.editor.lock, self.lock:
             context = self._context(binding)
@@ -398,6 +400,8 @@ class DraftService:
                 change = self.removal.plan(body, context, draft)
             elif pwm_command:
                 change = self.pwm.plan(body, context, draft)
+            elif adc_command:
+                change = self.adc.plan(body, context, draft)
             elif module_command:
                 change = self.modules.plan(body, context, draft)
             elif pin_command:

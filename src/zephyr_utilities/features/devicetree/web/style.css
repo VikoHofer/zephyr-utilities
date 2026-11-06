@@ -91,10 +91,10 @@
 .dte-workspace .dte-peripherals .dte-section-heading { align-items:flex-start; flex-wrap:wrap; gap:.6rem; }
 .dte-workspace .dte-peripherals .dte-section-heading h3 { margin:0; }
 .dte-workspace .dte-peripherals h4 { margin:.3rem 0 .7rem; font-size:.9rem; overflow-wrap:anywhere; }
-.dte-workspace .dte-pwm { border-top:1px solid var(--app-border); margin-top:1.2rem; padding-top:1rem; min-width:0; }
-.dte-workspace .dte-pwm .dte-section-heading { align-items:flex-start; flex-wrap:wrap; gap:.6rem; }
-.dte-workspace .dte-pwm .dte-section-heading h3 { margin:0; }
-.dte-workspace .dte-pwm h4 { margin:.3rem 0 .7rem; font-size:.9rem; overflow-wrap:anywhere; }
+.dte-workspace .dte-pwm, .dte-workspace .dte-adc { border-top:1px solid var(--app-border); margin-top:1.2rem; padding-top:1rem; min-width:0; }
+.dte-workspace :is(.dte-pwm, .dte-adc) .dte-section-heading { align-items:flex-start; flex-wrap:wrap; gap:.6rem; }
+.dte-workspace :is(.dte-pwm, .dte-adc) .dte-section-heading h3 { margin:0; }
+.dte-workspace :is(.dte-pwm, .dte-adc) h4 { margin:.3rem 0 .7rem; font-size:.9rem; overflow-wrap:anywhere; }
 .dte-workspace .dte-peripheral-controls, .dte-workspace .dte-peripheral-form { display:grid; gap:.8rem; }
 .dte-workspace .dte-peripheral-form { border-top:1px solid var(--app-border); padding-top:.85rem; margin-top:1rem; }
 .dte-workspace .dte-peripheral-field { min-width:0; margin:0; padding:.65rem; border:1px solid var(--app-border); border-radius:.4rem; }

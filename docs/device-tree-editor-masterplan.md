@@ -15,7 +15,8 @@ Vendor-independent module placement uses supported local declarations. D9 is com
 `3cf6db1`; D10 resource diagnostics/removal reviews passed full checks, browser verification,
 actual-binding smoke and package checks and is committed as `6403e43`. D11a local PWM
 consumer/LED forms are complete within their scoped limits, with full/browser/package
-checks passed; D11 remains partial.
+checks passed. D11b local ADC consumers/channel forms extend that slice; verification is
+recorded in the [D11b handoff](device-tree-editor-d11b-handoff.md). D11 remains partial.
 
 Build an offline visual hardware editor inside the existing `zephyr-utils` application.
 Users open a project, select its exact configuration, place hardware modules, connect
@@ -53,7 +54,8 @@ adapter, source workflow and current verification. The
 graphs, separate layout persistence and passed verification. The
 [D10 handoff](device-tree-editor-d10-handoff.md) records resource diagnostics/removal reviews
 and passed full/browser/package checks. The [D11 handoff](device-tree-editor-d11-handoff.md)
-records the PWM slice; subsequent D11 requests select another bounded family.
+records the PWM slice; the [D11b handoff](device-tree-editor-d11b-handoff.md) records
+the ADC slice. Subsequent D11 requests select another bounded family.
 
 ## Product experience
 
@@ -119,7 +121,7 @@ or that arbitrary preprocessor code can be edited graphically.
 | Durable source | One selected application overlay, preserving handwritten content | Coordinated multiple application fragments in D12 |
 | Source constructs | Literals, nodes, label/path references and precisely attributable overrides | Preserve macros/includes/conditionals; restrict only edits whose meaning or span is ambiguous |
 | Properties | Status and simple properties, then binding-aware types and references | Generic source editing for unsupported forms |
-| Buses and devices | UART, I2C, SPI, GPIO LEDs/buttons, local single-specifier PWM consumers/LEDs and binding-selected child devices | Remaining peripheral families in D11 |
+| Buses and devices | UART, I2C, SPI, GPIO LEDs/buttons, local single-specifier PWM/ADC consumers, PWM LEDs, ADC channels and binding-selected child devices | Remaining peripheral families in D11 |
 | Pins | Generic GPIO specifiers; one tested Nordic pinctrl adapter in D8 | Verified connector maps and a second family in D13; no invented maps |
 | Hardware modules | Local versioned recipes for a small tested set of devices | Data-only custom recipes; no automatic downloads or executable recipe hooks |
 | Validation | Local syntax/structural checks, then explicit selected-environment configuration | Compilation through Projects; hardware operation is separately established |
@@ -365,7 +367,8 @@ D9 local recipes, logical placement and separate layout persistence are **comple
 their scoped limits**, with passed full/browser/package checks. D10 is **complete within
 its current graph limits**, with passed full/browser/package checks. D11 is **partial**:
 D11a PWM consumer/LED forms are **complete within their scoped limits**, with passed
-full/browser/package checks. D12–D15 are **not started**.
+full/browser/package checks. D11b bounded local ADC consumers/channels are **complete
+within their scoped limits**, with passed full/browser/package checks. D12–D15 are **not started**.
 The default order is sequential; shared contracts
 and source safety precede richer visuals. Split a stage further if its exit gate cannot
 be delivered and tested in a reviewable change. Complete the selected slice without
@@ -389,7 +392,7 @@ until D4. This uses the same application/server, not a separate feature launcher
 | D8 | Nordic pin assignment and pinctrl states | Bounded nrf52840dk profile implemented; verification in D8 handoff |
 | D9 | Module catalogue and visual placement | Local recipe/canvas implementation present; verification in D9 handoff |
 | D10 | Resource diagnostics and removal planning | Complete within current graph limits; passed verification in D10 handoff |
-| D11 | Advanced peripheral and system resources | Partial: D11a local PWM consumer/LED forms complete with passed checks; remaining families planned |
+| D11 | Advanced peripheral and system resources | Partial: D11a PWM and D11b local ADC forms delivered within scoped limits; remaining families planned |
 | D12 | Multiple overlays and coordinated source changes | Complete application composition |
 | D13 | Custom board maps and additional pin adapters | Verified cross-family support |
 | D14 | Multiple images and domains | Explicit advanced build contexts |
@@ -708,14 +711,16 @@ generic cell metadata. Current verification is in the [D11 handoff](device-tree-
 | --- | --- |
 | Single-specifier local PWM consumers and PWM LEDs | D11a complete within its scoped limits; full/browser/package checks passed |
 | PWM inherited providers, symbolic/multi-specifier forms and target limits | Planned |
-| ADC channels and interrupt GPIOs | Planned; select one bounded next slice |
+| Single-specifier local ADC consumers and common channel configuration | D11b complete within its scoped limits; full/browser/package checks passed |
+| ADC inherited providers, symbolic/multi-specifier and optional configuration forms | Planned |
+| Interrupt GPIO consumers | Planned; next bounded family |
 | CAN, I2S/audio and USB | Planned |
 | Clocks, resets, DMA and regulators/power domains | Planned |
 | Fixed memory partitions with known range/alignment constraints | Planned |
 | Provider disabling and console/chosen impact review | Planned beyond existing D10 removal reviews |
 
 The matrix keeps the full D11 stage incomplete. Each later request selects one family;
-finishing D11a does not authorize all remaining entries.
+finishing a slice does not authorize all remaining entries.
 
 Scope: extend binding-driven forms and tested adapters to PWM, ADC channels, interrupt
 GPIOs, CAN, I2S/audio, USB and other selected locally supported devices. Add clocks,
@@ -883,8 +888,9 @@ performance claims without measurements.
 
 ## Starting point
 
-The current implementation is **D11a PWM only**. The next request should select another
-bounded D11 family, preferably ADC channels. D10 verification is complete within its
+The current D11 implementation includes **D11a PWM and D11b local ADC** within their
+documented limits. The next request should select another bounded D11 family, preferably
+interrupt GPIO consumers. D10 verification is complete within its
 documented scope; D11 remains incomplete until its matrix is met.
 D0's contracts/source experiment, D1's read-only context and D2's source operations
 provide the foundation; D3 connects source and visual session drafts. D4 delivers the first small

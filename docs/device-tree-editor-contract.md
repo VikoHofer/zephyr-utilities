@@ -1,13 +1,14 @@
 # Device Tree Editor foundation contract
 
-Status: D0–D11a contracts, 2026-11-06. D4 adds reviewed existing-overlay Save and durable
+Status: D0–D11b contracts, 2026-11-06. D4 adds reviewed existing-overlay Save and durable
 draft recovery; D5 adds explicit saved-source Configure through Projects; D6 adds local
 binding-aware property/reference forms; D7 adds local peripheral and bus-device topology.
 D8 adds Nordic pins for the verified nrf52840dk/nrf52840 profile. D9 adds local module
 recipes, a logical canvas and separately saved layout; its handoff records passed verification.
 D10 adds resource diagnostics and explicit removal reviews; full/browser/package checks passed.
 Broader adapters remain planned. D6 is committed as `564fcff`; D7 as `4caf359`; D8 as `cfaf10e`;
-D9 is committed as `3cf6db1`; D10 as `6403e43`. D11a adds local PWM consumers/LEDs;
+D9 is committed as `3cf6db1`; D10 as `6403e43`. D11a adds local PWM consumers/LEDs
+and D11b adds local ADC consumers/common channel configuration;
 full/browser/package checks passed and the full D11 matrix remains incomplete.
 Full D7 checks and browser/package verification passed as recorded in its handoff.
 The D0 executable evidence is a bounded in-memory source prototype under
@@ -983,3 +984,37 @@ channel numbering, available channels and shared timer constraints. Multi-specif
 symbolic, inherited and ambiguous sources keep generic/source access. D10 reviews still
 protect consumers when removing a provider. Save, recovery and Configure semantics and
 persistent schemas are unchanged. D11 remains partial beyond this PWM slice.
+
+
+## D11b local ADC consumers and channels
+
+`POST /api/devicetree/editor/drafts/adc` uses the same exact canonical context/draft
+guard and expiring binding observation as D11a. `ADCService` exposes provider, consumer
+and channel rows. Provider evidence requires matched common ADC child-binding fields,
+one `input` cell and a binding-valid explicit `#io-channel-cells = <1>`. Generic I/O
+providers without the ADC schema retain unknown capability. The same `adc_providers()`
+evidence is included in resource observations and used for ADC diagnostics.
+
+`adc_set` changes one literal `io-channels` entry. `adc_channel_add` creates a
+`channel@<hex-id>` child under a supported local provider; `adc_channel_set` changes
+only gain, reference and encoded acquisition time. Gain/reference choices satisfy local
+binding enums and constants. Channel IDs must fit 0–31, acquisition values 0–65535.
+These are ADC API representation limits; narrower hardware/driver capabilities remain
+unknown. Existing channel IDs are immutable through this form. Creation requires local
+address/size cell counts 1/0, matching unit-address/reg values, unambiguous sibling IDs
+and no additional required child properties outside the form. Optional fields are
+preserved. Unsupported declarations remain source/generic-binding-only.
+
+Consumers with incompatible `io-channel-names`, multiple or opaque specifiers, inherited
+providers or unresolved bindings cannot be changed through this form. Unbound
+`/zephyr,user` declarations are outside its profile. Accepted commands revalidate binding
+and source evidence, enter one canonical history change and never automatically Save
+or Configure.
+
+Removal reviews include implicit dependencies from provider/input pairs to channel
+children, including unsafe or ambiguous cases. Companion `io-channel-names` prevents
+whole-property deletion as an automatic provider-removal repair. Unknown consumers
+require explicit source repair, and shared providers are preserved. Resource diagnostics
+remain bounded and source-linked, without claiming physical input mappings, voltage
+suitability, runtime sampling or universal hardware support. See the
+[D11b handoff](device-tree-editor-d11b-handoff.md) for verification and remaining work.

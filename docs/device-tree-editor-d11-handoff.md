@@ -102,7 +102,8 @@ No Configure, build, flash or physical hardware validation is claimed for D11a.
 
 ## Remaining D11 work
 
-The next slice should be a bounded ADC channel workflow. Interrupt GPIOs, CAN, I2S/audio,
+The next bounded ADC channel workflow is recorded in the
+[D11b handoff](device-tree-editor-d11b-handoff.md). Interrupt GPIOs, CAN, I2S/audio,
 USB, clock/reset/DMA providers, power resources, memory partitions and broader provider
 impact review remain planned. Expanded PWM source and inherited-target coverage also
 remain planned. Continue to state the selected family's support boundary and leave D11

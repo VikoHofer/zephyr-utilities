@@ -410,8 +410,24 @@ available through source or the applicable generic binding form. Channel numberi
 shared timer restrictions are not inferred from a channel count. D11a full checks,
 browser verification, actual-binding smoke and installed-package checks passed. Removal of a provider
 with named PWM consumers requires explicit consumer repair so companion `pwm-names`
-cannot silently lose their entries. ADC, other advanced peripherals and system resources
-remain planned.
+cannot silently lose their entries.
+
+The [D11b slice](docs/device-tree-editor-d11b-handoff.md) adds **Load ADC channels**.
+Assign one literal `io-channels` specifier on a binding-matched consumer, or add and edit
+local ADC channel children. Choose gain and reference from the local binding and enter
+the encoded acquisition time explicitly. Existing channel IDs stay fixed so their
+consumers retain the same configuration. Optional settings and handwritten content are
+preserved. Removal reviews protect implicit channel consumers and companion
+`io-channel-names`.
+
+ADC providers require a unique local binding with the common ADC channel schema,
+`io-channel-cells: [input]` and explicit matching cell counts. Channel creation also
+requires explicit address/size cells. The forms check API representation limits
+(channel IDs 0–31 and acquisition values 0–65535); hardware channel availability,
+electrical suitability, gain/reference support and physical routing remain unknown.
+Inherited providers, unbound `/zephyr,user` consumers, macros and multiple specifiers
+remain source/generic-binding workflows. Other advanced peripheral families and
+system resources remain planned; D11 is partial.
 
 Acknowledged drafts are retained under `.features/devicetree/drafts/` in the data directory.
 **Find recoverable drafts** compares retained text with current files before an explicit restore;

@@ -30,7 +30,7 @@ research master plan, not a general coding-assistant integration.
 | Feature | State | Initial implementation direction |
 | --- | --- | --- |
 | Memory Explorer (`memory`) | Available | Existing-build reports, visualization, snapshots and comparisons |
-| Device Tree Editor (`devicetree`) | Existing-overlay editing, binding/peripheral forms, bounded pins, local module canvas, resource diagnostics/removal reviews, reviewed Save/recovery and explicit Configure | D0–D10 complete within documented scopes; D11a local PWM forms complete with passed checks; D11 remains partial |
+| Device Tree Editor (`devicetree`) | Existing-overlay editing, binding/peripheral forms, bounded pins, local module canvas, resource diagnostics/removal reviews, reviewed Save/recovery and explicit Configure | D0–D10 complete within documented scopes; D11a PWM and D11b local ADC forms delivered within scoped limits; D11 remains partial |
 | Project Creator (`projects`) | Applications, creation/build and environment discovery available | Maintain the delivered everyday workflow and add focused public editor handoffs |
 | Build Inspector (`inspector`) | Advanced build, resolved-tree, current source and binding navigation available | Preserve available inspection; further depth deferred |
 | TinyML Experiments (`tinyml`) | Planned | Connect model/build/run identities and compare imported experiment measurements |
@@ -131,7 +131,9 @@ browser verification, actual-binding smoke and package checks are recorded in th
 D11 advanced peripherals and system resources is delivered in bounded slices. D11a adds
 vendor-independent local single-specifier PWM consumer/LED forms and PWM diagnostic
 coverage, with passed full checks, browser verification, actual-binding smoke and package checks in the
-[D11 handoff](device-tree-editor-d11-handoff.md). The remaining family matrix stays planned.
+[D11 handoff](device-tree-editor-d11-handoff.md). D11b adds single-specifier local ADC
+consumers and common ADC channel configuration, with implicit consumer removal guards;
+see the [D11b handoff](device-tree-editor-d11b-handoff.md). The remaining family matrix stays planned.
 
 The [Project Creator and environment analyser master plan](project-creator-masterplan.md)
 provides the earlier shared-context proposal; the editor master plan now defines its

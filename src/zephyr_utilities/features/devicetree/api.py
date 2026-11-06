@@ -13,6 +13,7 @@ from .layout import LayoutService
 from .resources import ResourceService
 from .removal import RemovalService
 from .pwm import PWMService
+from .adc import ADCService
 
 
 def register(router, context):
@@ -39,6 +40,10 @@ def register(router, context):
     drafts.pwm = pwm
     context.services["devicetree_pwm"] = pwm
     router.add("POST", "/api/devicetree/editor/drafts/pwm", lambda request: pwm.inspect(request.body))
+    adc = ADCService(drafts)
+    drafts.adc = adc
+    context.services["devicetree_adc"] = adc
+    router.add("POST", "/api/devicetree/editor/drafts/adc", lambda request: adc.inspect(request.body))
     pins = PinService(drafts)
     drafts.pins = pins
     context.services["devicetree_pins"] = pins

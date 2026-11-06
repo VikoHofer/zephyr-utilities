@@ -9,6 +9,7 @@ import {mountPinPanel} from "./pin-view.js";
 import {mountModulePanel} from "./module-view.js";
 import {mountResourcePanel} from "./resource-view.js";
 import {mountPWMPanel} from "./pwm-view.js";
+import {mountADCPanel} from "./adc-view.js";
 import {retainActionFocus} from "./view-focus.js";
 
 const array = (value) => Array.isArray(value) ? value : [];
@@ -37,6 +38,7 @@ export function mount(host, context) {
   let modules;
   let resources;
   let pwm;
+  let adc;
   let shownReview;
   let reviewTrigger;
   let shownConfigure;
@@ -559,6 +561,7 @@ export function mount(host, context) {
     pins?.render();
     modules?.render();
     pwm?.render();
+    adc?.render();
     resources?.render();
   }
   async function action(operation, destination) {
@@ -747,16 +750,18 @@ export function mount(host, context) {
     drafts, reveal: context.reveal, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
   pwm = mountPWMPanel($("pwm"), {api: context.api, state, workspace: () => context.workspace.path,
     drafts, reveal: context.reveal, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
+  adc = mountADCPanel($("adc"), {api: context.api, state, workspace: () => context.workspace.path,
+    drafts, reveal: context.reveal, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
   pins = mountPinPanel($("pins"), {api: context.api, state, workspace: () => context.workspace.path,
     drafts, reveal: context.reveal, onChange: render});
   modules = mountModulePanel($("modules"), {api: context.api, state, workspace: () => context.workspace.path,
     drafts, reveal: context.reveal, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
   render();
   return {
-    navigate(view) { actionGeneration++; visualMessage(""); saving.cancel(); validation.closeReview(); validation.resume(); bindings.navigate(); peripherals.navigate(); pins.navigate(); modules.navigate(); resources.navigate(); pwm.navigate(); return session.navigate(view); },
+    navigate(view) { actionGeneration++; visualMessage(""); saving.cancel(); validation.closeReview(); validation.resume(); bindings.navigate(); peripherals.navigate(); pins.navigate(); modules.navigate(); resources.navigate(); pwm.navigate(); adc.navigate(); return session.navigate(view); },
     dispose() {
       disposed = true; actionGeneration++; lifetime.abort(); saving.dispose(); closeReview({restoreFocus: false});
-      validation.dispose(); closeConfigure({restoreFocus: false}); bindings.dispose(); peripherals.dispose(); pins.dispose(); modules.dispose(); resources.dispose(); pwm.dispose(); session.dispose(); drafts.dispose();
+      validation.dispose(); closeConfigure({restoreFocus: false}); bindings.dispose(); peripherals.dispose(); pins.dispose(); modules.dispose(); resources.dispose(); pwm.dispose(); adc.dispose(); session.dispose(); drafts.dispose();
       for (const url of downloadUrls) URL.revokeObjectURL(url);
     },
   };

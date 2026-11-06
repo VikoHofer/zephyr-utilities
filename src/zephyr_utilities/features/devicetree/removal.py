@@ -6,6 +6,7 @@ import re
 import time
 import uuid
 
+from .adc_resources import adc_channel_dependants
 from .drafts import _GUARD_FIELDS, _diff
 from .source_syntax import SourceError
 
@@ -145,6 +146,12 @@ class RemovalService:
                                "message": f"{reference['reference']} selects a pin state containing {target.name}; removing this group changes that controller's state."})
             block("This nested pin group belongs to a state still used by a controller. Repair the pins or state references explicitly before removing the group.", consumer, prop)
 
+        for dependant in adc_channel_dependants(document, observed["bindings"], graph, removed_ids):
+            consumer, prop = document._property(dependant["property_id"])
+            dependant["location"] = _location(document, consumer, prop)
+            dependants.append(dependant)
+            block("An io-channels consumer selects or may select this channel configuration. Repair its input or channel configuration explicitly before removing the child; deleting the whole consumer property is not an automatic repair.", consumer, prop)
+
         for consumer in graph.get("pin_state_consumers", []):
             if consumer["target_node_id"] not in removed_ids | ancestors:
                 continue
@@ -198,7 +205,8 @@ class RemovalService:
             optional = field and field["type"] in REFERENCE_TYPES and not field["required"] and field["editable"]
             routing = prop.name == "cs-gpios" or re.fullmatch(r"pinctrl-[0-9]+", prop.name)
             pwm_names = prop.name == "pwms" and any(item.name == "pwm-names" for item in consumer.properties)
-            safe = bool(not routing and not pwm_names and exclusive and literal and (named or optional) and consumer.id in unique_ids and document.can_edit_node(consumer.id)
+            io_names = prop.name == "io-channels" and any(item.name == "io-channel-names" for item in consumer.properties)
+            safe = bool(not routing and not pwm_names and not io_names and exclusive and literal and (named or optional) and consumer.id in unique_ids and document.can_edit_node(consumer.id)
                         and len([item for item in consumer.properties if item.name == prop.name]) == 1)
             if safe and len(choices) >= MAX_REPAIRS:
                 block("This removal exceeds the 64-repair review limit. Repair some consumers explicitly before reviewing again.", consumer, prop)
@@ -221,6 +229,8 @@ class RemovalService:
             else:
                 reason = ("PWM specifiers with pwm-names require explicit consumer repair; removing pwms alone could leave companion names without their entries."
                           if pwm_names else
+                          "I/O channel specifiers with io-channel-names require explicit consumer repair; removing io-channels alone could leave companion names without their entries."
+                          if io_names else
                           "Indexed chip-select or pin-state routing requires explicit source or pin-form repair; removing the property could change index or companion-state semantics."
                           if routing else
                           "A required reference must be repaired explicitly in source or its supported form before removal."

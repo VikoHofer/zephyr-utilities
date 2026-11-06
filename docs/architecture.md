@@ -10,7 +10,9 @@ The bounded Nordic pin workflow and local module catalogue/canvas are also imple
 The D9 handoff records passed verification. D10 resource diagnostics and removal reviews
 are complete within their documented graph limits, with full/browser/package checks passed.
 D11a local single-specifier PWM consumers and PWM LED forms are complete within their
-scoped limits, with full/browser/package checks passed. D11 remains partial.
+scoped limits, with full/browser/package checks passed. D11b adds local ADC consumers
+and common channel configuration; its verification is recorded in the D11b handoff.
+D11 remains partial.
 Broader pin adapters, advanced composition and TinyML experiments remain planned.
 
 ## Dependency direction
@@ -453,3 +455,15 @@ inherited hardware remain unknown unless separately established. Named PWM consu
 explicit repair before provider removal; removing `pwms` alone must not leave companion
 `pwm-names` behind. No persistent schema or
 shared process boundary changes. See the [D11 handoff](device-tree-editor-d11-handoff.md).
+
+
+D11b adds feature-owned `ADCService` using the same observation and canonical command
+path. Common ADC child-binding evidence distinguishes ADCs from generic I/O channel
+providers. Single literal consumer assignments and common channel configuration use
+explicit binding-valid values and ADC API representation bounds. Channel identities
+stay fixed during configuration edits. `adc_providers()` shares that evidence with
+resource diagnostics, while removal reviews protect numeric provider/channel dependencies
+that lack a direct child phandle. Optional settings, shared providers, source/history,
+reviewed Save and explicit Configure retain their existing boundaries. No storage schema,
+process boundary or cross-feature dependency changes. See the
+[D11b handoff](device-tree-editor-d11b-handoff.md).
