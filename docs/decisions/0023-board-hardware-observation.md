@@ -37,6 +37,18 @@ process time/output and retained observations. Fingerprint source/binding closur
 selection and relevant tooling; revalidate authority before and after connection plans.
 Incomplete composition is reported as incomplete rather than silently ignored.
 
+Projects discovery and editor selection share the pure bounded hardware metadata parser
+in `core/hardware_metadata.py`. It accepts data only, expands SoC CPU clusters and
+nested variants, and has no feature imports, filesystem access or tool execution.
+Each feature retains its own input reading, provenance and observation lifecycle.
+The editor recomputes qualifiers from current recorded board/SoC metadata and requires
+them to match the captured selection before resolving the complete DTS filename.
+It never falls back from a missing variant/core to a parent target. Platform metadata
+selects the exact target architecture; a board-wide fallback requires one current,
+unambiguous architecture. Relevant source and platform inventories are guarded against
+later changes. This extends the existing observation contract without migrating saved
+profiles or observations.
+
 The hardware projection has stable effective-path identities, source origins, compatible
 and bus/provider evidence, status, existing children and available pin/connector facts.
 Disabled controllers are still visible. Aliases may annotate a device but do not select

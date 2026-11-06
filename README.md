@@ -297,6 +297,10 @@ The source appears directly below the hardware workspace; older local forms rema
 under **Advanced overlay tools**. Discovery and connections use the same path across
 vendors. Board composition and pin-routing coverage still have explicit limits; see
 the [controller-first handoff](docs/device-tree-editor-controller-first-handoff.md).
+CPU/core and nested-variant targets now use current board/SoC metadata for exact DTS
+selection, including single-SoC shortened filenames. The
+[qualified-target handoff](docs/device-tree-editor-controller-targets-handoff.md) records
+ten real-source discovery cases and an ESP32 sensor connection/Save/reopen check.
 
 Its [D0 foundation](docs/device-tree-editor-d0-handoff.md) defines the contracts and
 tests a bounded source-edit prototype.

@@ -20,6 +20,10 @@ F446RE, nRF52840 DK and FRDM-K64F; Nucleo connections and browser Save/reopen pa
 This is not universal pin routing. See the
 [controller-first handoff](docs/device-tree-editor-controller-first-handoff.md) for limits
 and the next acceptance gates.
+The foundation is committed as `a0fa84b`, including previously verified D11d work.
+The qualified-target continuation shares pure metadata parsing with Projects and supports
+CPU/core and nested-variant DTS resolution; see the
+[qualified-target handoff](docs/device-tree-editor-controller-targets-handoff.md).
 
 Zephyr Utilities is one local application with a Python backend and an English,
 offline browser interface. `zephyr-utils` starts the entire application. Memory

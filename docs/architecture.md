@@ -24,6 +24,10 @@ module canvas is not sufficient for a new empty overlay.
 The first board observation and inherited I2C/GPIO connection slice is implemented;
 its [handoff](device-tree-editor-controller-first-handoff.md) records cross-vendor
 discovery, Nucleo connection/browser checks and remaining composition/routing limits.
+Exact CPU/core and nested-variant resolution uses the same pure bounded metadata
+helpers in `core/hardware_metadata.py` as Projects discovery. Features retain ownership
+of source reading, provenance, filesystem guards and tool execution; the shared helper
+does not import features or execute checkout code.
 
 ## Dependency direction
 

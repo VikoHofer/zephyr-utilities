@@ -11,7 +11,7 @@ import sys
 import tempfile
 
 from ...core.source_files import WorkspaceSourceReader
-from .bindings import binding_mapping
+from .board_selection import resolve_board_selection
 
 
 MAX_FILES = 1000
@@ -69,17 +69,8 @@ class BoardSources:
         environment = context.get("environment") or {}
         self.zephyr = self.reader.path((environment.get("zephyr") or {}).get("path"))
         self.directory = self.reader.path(self.board["directories"][0])
-        current = binding_mapping(self.read(self.directory / "board.yml"))
-        records = [current["board"]] if isinstance(current.get("board"), dict) else current.get("boards", [])
-        selected_board = [record for record in records if isinstance(record, dict) and record.get("name") == self.board["name"]]
-        qualifiers = target.get("qualifiers") or []
-        if len(selected_board) != 1:
-            raise ValueError("The current board.yml no longer uniquely declares the captured board. Analyze the environment again.")
-        socs = selected_board[0].get("socs", [])
-        soc_names = [soc.get("name") for soc in socs if isinstance(soc, dict)]
-        if (set(soc_names) != set(self.board.get("socs", [])) or len(qualifiers) != 1 or qualifiers[0] not in soc_names
-                or selected_board[0].get("revision") is not None):
-            raise ValueError("Current board SoC/revision/qualifier declarations differ from this supported selection. Analyze the environment or choose a supported unqualified SoC target.")
+        self.selection = resolve_board_selection(self, context, self.board, self.directory)
+        self.board_file = Path(self.selection["board_source"])
         application = self.reader.path(context["application"]["path"])
         if any(context.get(key) for key in ("shields", "snippets")):
             raise ValueError("Shield and snippet composition is outside this board observation.")
@@ -92,22 +83,10 @@ class BoardSources:
                             if item.get("state") in {"active", "expected", "selected"})
         if selected != [Path(draft.path)]:
             raise ValueError("Board hardware discovery currently requires this draft to be the only selected application overlay.")
-        for path in self.board.get("source_files", []):
-            self.read(path)
-        full = "_".join([self.board["name"], *qualifiers])
-        short = "_".join([self.board["name"], *qualifiers[1:]])
-        candidates = list(dict.fromkeys(self.directory / (name + ".dts") for name in (full, short)))
-        found = [path for path in candidates if self.exists(path)]
-        if len(found) != 1 or found[0] == self.directory / (short + ".dts") and full != short and len(self.board.get("socs", [])) != 1:
-            raise ValueError("The exact board DTS filename is missing or ambiguous; no filename fallback is guessed.")
-        self.board_file = found[0]
-        for name in {full, short}:
-            if self.exists(self.directory / (name + ".overlay")):
-                raise ValueError("An additional board overlay needs explicit composition support before hardware discovery.")
         roots = [self.reader.path(item["path"]) for item in context.get("roots", []) if item.get("kind") == "dts"]
         roots += [application, self.directory, self.zephyr]
         self.roots = list(dict.fromkeys(roots))
-        arches = self.board.get("architectures") or []
+        arches = [self.selection["architecture"]]
         self.include_dirs = [root / suffix for root in self.roots
                              for suffix in ["include", "include/zephyr", "dts/common", "dts/vendor", *["dts/" + arch for arch in arches], "dts"]
                              if self.exists(root / suffix, directory=True)]
@@ -153,6 +132,9 @@ class BoardSources:
         return value["text"]
 
     def revalidate(self):
+        if self.reader.list_files(self.directory, {".yaml"}, max_files=1000, max_dirs=1,
+                                  exclude_prefixes=("",)) != self.platform_files:
+            raise ValueError("The board platform metadata catalogue changed. Load board hardware again.")
         if self.reader.list_files(self.library / "devicetree", {".py"}, max_files=32, max_dirs=16,
                                   exclude_dirs={"__pycache__"}) != self.parser_files:
             raise ValueError("The selected parser source catalogue changed. Load board hardware again.")

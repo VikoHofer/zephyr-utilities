@@ -12,38 +12,24 @@ import re
 
 import yaml
 
+from ...core.hardware_metadata import (MetadataError, UniqueHardwareLoader,
+                                      board_qualifiers, parse_hardware_metadata,
+                                      soc_entries as _soc_entries)
 from .metadata import read_regular
 
 
-ADAPTER_VERSION = "hwm-v2-metadata/1"
+ADAPTER_VERSION = "hwm-v2-metadata/2"
 MAX_DIRECTORIES = 16000
 MAX_FILES = 12000
 MAX_FILE_BYTES = 2 * 1024 * 1024
-MAX_EVENTS = 40000
 MAX_DEPTH = 24
 MAX_RECORDS = 20000
 MAX_QUALIFIERS = 2000
 MAX_TARGETS = 40000
 _IDENTIFIER = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.+-]*\Z")
 _SKIP = {".git", ".venv", "build", "__pycache__", "node_modules"}
-_Loader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
-
-
-class MetadataError(ValueError):
-    pass
-
-
-class _UniqueLoader(_Loader):
-    """Reject duplicate YAML keys instead of silently discarding evidence."""
-
-    def construct_mapping(self, node, deep=False):
-        keys = set()
-        for key, _ in node.value:
-            value = self.construct_object(key, deep=deep)
-            if not isinstance(value, str) or value in keys:
-                raise MetadataError("Metadata keys must be unique strings.")
-            keys.add(value)
-        return super().construct_mapping(node, deep=deep)
+# Retain the scaffold's existing local loader import while sharing parser semantics.
+_UniqueLoader = UniqueHardwareLoader
 
 
 def _check_cancel(cancel):
@@ -83,19 +69,7 @@ def _read(path):
         text = read_regular(path, MAX_FILE_BYTES).decode("utf-8")
     except ValueError as exc:
         raise MetadataError(str(exc)) from exc
-    depth = 0
-    for count, event in enumerate(yaml.parse(text, Loader=_Loader), 1):
-        if count > MAX_EVENTS:
-            raise MetadataError("Metadata has too many YAML entries.")
-        if isinstance(event, yaml.events.AliasEvent):
-            raise MetadataError("YAML aliases are unsupported in hardware metadata.")
-        if isinstance(event, yaml.events.CollectionStartEvent):
-            depth += 1
-        elif isinstance(event, yaml.events.CollectionEndEvent):
-            depth -= 1
-        if depth > MAX_DEPTH:
-            raise MetadataError("Metadata nesting exceeds the supported limit.")
-    return yaml.load(text, Loader=_UniqueLoader)
+    return parse_hardware_metadata(text)
 
 
 def _diagnostic(result, code, message, path=None, severity="warning"):
@@ -165,51 +139,6 @@ def _scan(roots, subdir, filename, result, cancel):
                 _diagnostic(result, "legacy-board", "Board directory has no board.yml; legacy hardware metadata is unsupported.", path)
 
 
-def _clusters(value):
-    clusters = []
-    for cluster in _sequence(value, "CPU clusters"):
-        _mapping(cluster, {"name"}, "CPU cluster")
-        clusters.append(_name(cluster.get("name"), "CPU cluster"))
-    if len(set(clusters)) != len(clusters):
-        raise MetadataError("CPU cluster names are duplicated.")
-    return clusters
-
-
-def _soc_entries(data):
-    _mapping(data, {"family", "series", "socs", "vendor", "comment", "runners"}, "SoC document")
-    _optional_text(data.get("vendor"), "Vendor")
-    _optional_text(data.get("comment"), "Comment")
-    if "runners" in data and not isinstance(data["runners"], dict):
-        raise MetadataError("Runner metadata must be a mapping.")
-    records = []
-
-    def add(socs, family=None, series=None, extensions=False):
-        for soc in _sequence(socs, "SoCs"):
-            _mapping(soc, {"name", "cpuclusters", "extend"} if extensions else {"name", "cpuclusters"}, "SoC")
-            if ("name" in soc) == ("extend" in soc):
-                raise MetadataError("A SoC needs either name or extend.")
-            records.append({"name": _name(soc.get("name", soc.get("extend")), "SoC"),
-                            "family": family, "series": series,
-                            "cpuclusters": _clusters(soc.get("cpuclusters", [])),
-                            "extension": "extend" in soc})
-
-    def add_series(items, family=None):
-        for series in _sequence(items, "SoC series"):
-            _mapping(series, {"name", "socs"}, "SoC series")
-            add(series.get("socs", []), family, _name(series.get("name"), "SoC series"))
-
-    for family in _sequence(data.get("family", []), "SoC families"):
-        _mapping(family, {"name", "series", "socs"}, "SoC family")
-        name = _name(family.get("name"), "SoC family")
-        add_series(family.get("series", []), name)
-        add(family.get("socs", []), name)
-    add_series(data.get("series", []))
-    add(data.get("socs", []), extensions=True)
-    if not any(key in data for key in ("family", "series", "socs")):
-        raise MetadataError("SoC document has no supported hardware definitions.")
-    return records
-
-
 def _provenance(record, path, origin):
     record["source_files"] = list(dict.fromkeys([*record.get("source_files", []), str(path)]))
     record["origins"] = list(dict.fromkeys([*record.get("origins", []), origin]))
@@ -253,22 +182,6 @@ def _read_socs(roots, result, cancel):
     return records
 
 
-def _variants(items, parent, qualifiers, *, depth=0):
-    if depth > MAX_DEPTH:
-        raise MetadataError("Variant nesting exceeds the supported limit.")
-    for variant in _sequence(items, "Variants"):
-        _mapping(variant, {"name", "variants", "cpucluster"}, "Variant")
-        name = _name(variant.get("name"), "Variant")
-        _optional_text(variant.get("cpucluster"), "CPU cluster")
-        qualifier = f"{parent}/{name}"
-        if len(qualifiers) >= MAX_QUALIFIERS:
-            raise MetadataError("Board exceeds the supported qualifier limit.")
-        if qualifier in qualifiers:
-            raise MetadataError(f"Duplicate qualifier {qualifier}.")
-        qualifiers.append(qualifier)
-        _variants(variant.get("variants", []), qualifier, qualifiers, depth=depth + 1)
-
-
 def _revisions(value):
     if value is None:
         return [], None, None, False
@@ -306,34 +219,12 @@ def _board_record(data, path, origin, systems):
               "directories": [str(path.parent)], "evidence": "declared", "status": "discovered"}
     _provenance(record, path, origin)
     record["revisions"], record["default_revision"], record["revision_format"], record["revision_exact"] = _revisions(data.get("revision"))
-    for soc in _sequence(data.get("socs"), "Board SoCs"):
-        _mapping(soc, {"name", "variants"}, "Board SoC")
-        soc_name = _name(soc.get("name"), "Board SoC")
-        if soc_name in record["socs"]:
-            raise MetadataError(f"Duplicate SoC {soc_name} in board.")
+    record["qualifiers"] = board_qualifiers(data, systems)
+    for soc in data["socs"]:
+        soc_name = soc["name"]
         record["socs"].append(soc_name)
-        system = systems.get(soc_name)
-        if system is None:
-            raise MetadataError(f"SoC {soc_name} is missing from the selected roots.")
-        if system["status"] != "discovered":
-            raise MetadataError(f"SoC {soc_name} has conflicting definitions.")
+        system = systems[soc_name]
         record["source_files"].extend(source for source in system["source_files"] if source not in record["source_files"])
-        variants = _sequence(soc.get("variants", []), "Variants")
-        if system["cpuclusters"]:
-            for variant in variants:
-                if not isinstance(variant, dict) or variant.get("cpucluster") not in system["cpuclusters"]:
-                    raise MetadataError(f"Variant needs a known CPU cluster of {soc_name}.")
-            for cluster in system["cpuclusters"]:
-                base = f"{soc_name}/{cluster}"
-                record["qualifiers"].append(base)
-                _variants([variant for variant in variants if variant["cpucluster"] == cluster], base, record["qualifiers"])
-        else:
-            if any(isinstance(variant, dict) and "cpucluster" in variant for variant in variants):
-                raise MetadataError(f"SoC {soc_name} declares no CPU clusters for these variants.")
-            record["qualifiers"].append(soc_name)
-            _variants(variants, soc_name, record["qualifiers"])
-    if not record["socs"]:
-        raise MetadataError("Board declares no SoCs.")
     return record
 
 

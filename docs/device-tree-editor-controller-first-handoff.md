@@ -3,6 +3,9 @@
 Date: 2026-11-06. First bounded slice implemented and verified; broader controller,
 pin-routing and integrated visual-workspace gates remain open. This delivery includes
 the previously verified D11d work alongside the controller-first foundation.
+Committed as `a0fa84b`. The subsequent
+[qualified-target slice](device-tree-editor-controller-targets-handoff.md) supersedes
+the single-SoC-qualifier restriction recorded below.
 
 ## Accepted direction
 

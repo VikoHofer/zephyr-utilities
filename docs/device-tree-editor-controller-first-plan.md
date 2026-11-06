@@ -69,6 +69,9 @@ The current implementation task adds read-only selected-board topology and inher
 GPIO LED / I2C sensor connections, along with the Place module feedback correction.
 The [handoff](device-tree-editor-controller-first-handoff.md) records the implemented
 first slice and its verification. The broader acceptance gates above remain open.
+The foundation is committed as `a0fa84b`. The next discovery slice adds exact CPU/core
+and nested-variant target resolution from current SoC/board metadata; its evidence and
+remaining gates are tracked in the [qualified-target handoff](device-tree-editor-controller-targets-handoff.md).
 No automatic Configure/build or firmware write is implied by discovery or connection.
 Known board-defined bus pins may be shown; a generic GPIO index or default `ngpios`
 does not establish a bonded package pin or accessible header location.

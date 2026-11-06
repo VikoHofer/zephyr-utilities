@@ -59,6 +59,11 @@ class BoardTopologyTests(unittest.TestCase):
         self.board_file = self.board_dir / 'demo_chip.dts'
         self.board_file.write_text(TREE)
         (self.board_dir / 'board.yml').write_text('board: {name: demo, socs: [{name: chip}]}\n')
+        self.soc_file = self.zephyr / 'soc/vendor/chip/soc.yml'
+        self.soc_file.parent.mkdir(parents=True)
+        self.soc_file.write_text('socs: [{name: chip}]\n')
+        self.platform_file = self.board_dir / 'demo_chip.yaml'
+        self.platform_file.write_text('identifier: demo/chip\narch: arm\n')
         library = self.zephyr / 'scripts/dts/python-devicetree/src/devicetree'
         library.mkdir(parents=True)
         (library / 'dtlib.py').write_text('# Parser fixture fingerprint only; never executed.\n')
@@ -74,7 +79,9 @@ class BoardTopologyTests(unittest.TestCase):
         self.context = self.editor.open({'workspace': str(self.workspace), 'application_path': str(self.application)})
         self.context.update(target={'requested': 'demo/chip', 'board': 'demo', 'revision': None, 'qualifiers': ['chip']},
                             board={'id': 'demo', 'name': 'demo', 'vendor': 'vendor', 'socs': ['chip'], 'status': 'discovered',
-                                   'directories': [str(self.board_dir)], 'source_files': [str(self.board_dir / 'board.yml')],
+                                   'directories': [str(self.board_dir)], 'source_files': [str(self.board_dir / 'board.yml'), str(self.soc_file), str(self.platform_file)],
+                                   'qualifiers': ['chip'],
+                                   'platforms': [{'target': 'demo/chip', 'architecture': 'arm', 'source_file': str(self.platform_file)}],
                                    'architectures': ['arm'], 'targets': ['demo/chip'], 'default_revision': None},
                             environment={'zephyr': {'path': str(self.zephyr)}, 'tools': [{'name': 'Python', 'path': sys.executable}],
                                          'sdk': {'toolchains': [{'family': 'GNU', 'compiler': sys.executable}]}},

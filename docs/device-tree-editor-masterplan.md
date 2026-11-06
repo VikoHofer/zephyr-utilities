@@ -7,6 +7,14 @@ the next-work ordering. The [controller-first plan](device-tree-editor-controlle
 defines the active acceptance gates, beginning with `nucleo_f446re` and cross-vendor
 board/SoC discovery. A local-overlay-only canvas does not satisfy this product goal.
 
+**Controller-first progress:** foundation and basic inherited I2C/GPIO connections are
+committed as `a0fa84b`. The next discovery slice now resolves exact CPU/core and nested
+variant targets from current metadata. Ten real source targets across STM32, Nordic,
+Espressif and Raspberry Pi passed discovery checks; ESP32 sensor connection/Save/reopen
+passed browser verification. See the [qualified-target handoff](device-tree-editor-controller-targets-handoff.md).
+Board revisions/extensions and ordered source composition remain the next discovery
+gaps. Full pin rewiring and the final integrated canvas remain separate open gates.
+
 Status: limited overlay editor available; D0–D10 implementations complete within their
 staged scopes on 2026-11-06. D6 is committed as `564fcff`; D7 as `4caf359`; D8 as `cfaf10e`.
 D9 local module recipes, logical canvas and separate layout persistence are implemented;

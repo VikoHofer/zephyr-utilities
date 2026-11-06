@@ -72,7 +72,10 @@ discovery paths in this release.
 
 ## Hardware support and interpretation
 
-The metadata adapter is `hwm-v2-metadata/1`. Synthetic tests cover shapes used by Zephyr
+The metadata adapter is `hwm-v2-metadata/2`. Version 2 shares pure SoC/qualifier parsing
+with board observation and applies the qualifier limit to bare CPU-cluster expansion
+as well as variants. The adapter version invalidates analysis caches; saved observation
+schemas remain unchanged. Synthetic tests cover shapes used by Zephyr
 3.7 and 4.4, including a backported extension case, unknown metadata and conflicting
 definitions. The current local Zephyr checkout is an integration reference. This is
 metadata-shape coverage, not a claim that every release, vendor fork or target builds.

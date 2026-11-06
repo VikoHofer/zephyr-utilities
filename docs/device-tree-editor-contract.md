@@ -1165,9 +1165,17 @@ an explanation. It does not change the draft or saved source.
 
 Discovery uses captured board metadata and selected DTS roots, a bounded literal include
 closure, GNU preprocessing and the selected Zephyr `dtlib` parser. No CMake, Configure
-or build runs. It supports an exact single-SoC qualifier, one selected application
-overlay and unambiguous board source. Revisions, board extensions, shields/snippets and
-broader overlay composition need further support. Current board metadata, source and
+or build runs. It supports exact SoC, CPU/core and nested-variant qualifiers, one selected
+application overlay and unambiguous board source. Current board/SoC declarations must
+reproduce the captured qualifiers; existing filenames alone cannot authorize a target.
+Full filenames retain every qualifier, and the single-SoC shortened spelling drops only
+the SoC segment. Missing variants never fall back to a parent target. Source selection
+is returned in `selection` with target, qualifier, board source, architecture/origin and
+metadata paths; the readable source/architecture summary appears in Discovery details.
+The exact target's platform architecture is preferred; a fallback needs one current
+board-wide architecture. Relevant platform inventory and source changes invalidate the
+observation. Revisions, board extensions, shields/snippets and broader overlay composition
+need further support. Current board metadata, source and
 binding contents, tool identity and draft guards must still match before an observation
 can authorize an edit. Retention is bounded to sixteen observations for thirty minutes.
 

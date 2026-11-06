@@ -156,7 +156,8 @@ class BoardTopologyService:
                     raise ValueError("The resolved board exceeds the supported editable topology syntax; its source remains available.")
                 catalog = BindingCatalog(context["workspace"], sources.binding_roots)
                 projection, topology = _projection(document, catalog, worker, draft.path)
-                payload.update(topology, supported=True)
+                payload.update(topology, supported=True, selection=deepcopy(sources.selection))
+                payload["diagnostics"].append(f"Board source: {sources.selection['board_source']}; target architecture: {sources.selection['architecture']}.")
                 payload["diagnostics"].extend(catalog.diagnostics)
                 payload["fingerprint"] = hashlib.sha256(json.dumps({"files": {key: value["sha256"] for key, value in sources.files.items()},
                     "absent": sorted(sources.absent), "tools": sources.tools, "bindings": catalog.fingerprint,
