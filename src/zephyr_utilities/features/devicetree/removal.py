@@ -197,7 +197,8 @@ class RemovalService:
             literal = value is not None and value.kind in {"reference", "phandles", "phandle-array", "string", "path"}
             optional = field and field["type"] in REFERENCE_TYPES and not field["required"] and field["editable"]
             routing = prop.name == "cs-gpios" or re.fullmatch(r"pinctrl-[0-9]+", prop.name)
-            safe = bool(not routing and exclusive and literal and (named or optional) and consumer.id in unique_ids and document.can_edit_node(consumer.id)
+            pwm_names = prop.name == "pwms" and any(item.name == "pwm-names" for item in consumer.properties)
+            safe = bool(not routing and not pwm_names and exclusive and literal and (named or optional) and consumer.id in unique_ids and document.can_edit_node(consumer.id)
                         and len([item for item in consumer.properties if item.name == prop.name]) == 1)
             if safe and len(choices) >= MAX_REPAIRS:
                 block("This removal exceeds the 64-repair review limit. Repair some consumers explicitly before reviewing again.", consumer, prop)
@@ -218,7 +219,9 @@ class RemovalService:
                     if item["property_id"] == property_id:
                         item["repair_id"] = repair_id
             else:
-                reason = ("Indexed chip-select or pin-state routing requires explicit source or pin-form repair; removing the property could change index or companion-state semantics."
+                reason = ("PWM specifiers with pwm-names require explicit consumer repair; removing pwms alone could leave companion names without their entries."
+                          if pwm_names else
+                          "Indexed chip-select or pin-state routing requires explicit source or pin-form repair; removing the property could change index or companion-state semantics."
                           if routing else
                           "A required reference must be repaired explicitly in source or its supported form before removal."
                           if field and field["required"] else

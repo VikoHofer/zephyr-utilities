@@ -1,13 +1,14 @@
 # Device Tree Editor foundation contract
 
-Status: D0–D10 contracts, 2026-11-06. D4 adds reviewed existing-overlay Save and durable
+Status: D0–D11a contracts, 2026-11-06. D4 adds reviewed existing-overlay Save and durable
 draft recovery; D5 adds explicit saved-source Configure through Projects; D6 adds local
 binding-aware property/reference forms; D7 adds local peripheral and bus-device topology.
 D8 adds Nordic pins for the verified nrf52840dk/nrf52840 profile. D9 adds local module
 recipes, a logical canvas and separately saved layout; its handoff records passed verification.
 D10 adds resource diagnostics and explicit removal reviews; full/browser/package checks passed.
 Broader adapters remain planned. D6 is committed as `564fcff`; D7 as `4caf359`; D8 as `cfaf10e`;
-D9 is committed as `3cf6db1`.
+D9 is committed as `3cf6db1`; D10 as `6403e43`. D11a adds local PWM consumers/LEDs;
+full/browser/package checks passed and the full D11 matrix remains incomplete.
 Full D7 checks and browser/package verification passed as recorded in its handoff.
 The D0 executable evidence is a bounded in-memory source prototype under
 `scripts/prototypes/`, outside the installed application. See the
@@ -883,7 +884,8 @@ The [D9 handoff](device-tree-editor-d9-handoff.md) records the implemented local
 catalogue/canvas, separate layout format and passed verification. The
 [D10 handoff](device-tree-editor-d10-handoff.md) records implemented resource diagnostics and
 removal reviews with passed full checks, browser verification, actual-binding smoke and package
-checks. The next stage is one bounded D11 slice,
+checks. The [D11 handoff](device-tree-editor-d11-handoff.md) records the first PWM slice.
+Subsequent requests select another bounded D11 family,
 preserving the source command path and separation between source saving and project execution.
 
 ## D10 diagnostic observations and removal reviews
@@ -933,7 +935,9 @@ for whole-property repair. Required, mixed, ambiguous, opaque, property-label an
 consumers remain blockers or explicit uncertainty. Providers and pin groups with consumers
 are not silently detached or rewired. Root/reference blocks and non-unique targets remain
 source-only. Indexed chip-select and pin-state routing require explicit form/source repair
-instead of whole-property deletion. Known inherited pin-state consumers block removal of
+instead of whole-property deletion. D11a also requires explicit repair for a `pwms`
+consumer with any local `pwm-names`, preserving the companion entry/name relationship.
+Known inherited pin-state consumers block removal of
 the state or its nested groups; deleting an unrelated alias cannot clear that dependency.
 All known descendant and external consumers are shown; included files, macro-generated
 consumers and inherited data outside the verified adapter remain unknown. Removing an
@@ -947,3 +951,35 @@ history change and remains unsaved. The source engine preserves unrelated bytes;
 recovery, reviewed Save and explicit Configure retain their contracts. Legacy bounded
 module/peripheral leaf-removal commands remain compatible and guarded. No new persistent
 schema, journal or shared process boundary is introduced by D10.
+
+## D11a local PWM consumers
+
+`POST /api/devicetree/editor/drafts/pwm` uses the same exact canonical context/draft guard
+and bounded binding observations as D6. Responses add `providers`, `consumers`, `groups`
+and `group_option` to the base binding projection. Supported providers are unique local
+declarations with matched bindings, explicit matching `#pwm-cells`, and ordered
+`channel, period` or `channel, period, flags` cells. No board/vendor allowlist applies.
+Count and compatible literals must satisfy their supported local binding constraints;
+`pwm_providers()` supplies the same provider evidence to forms and resource diagnostics.
+An optional `channel_count` is reported only from a supported literal integer field
+that satisfies its binding. It is not a valid-channel range. Provider rows retain local
+status, source path/reference, cell names and a capability reason. Consumer rows retain
+the observed field, single entry and editing reason; groups and `group_option` expose
+creation capability without inventing missing bindings or required properties.
+
+`pwm_set`, `pwm_group_add` and `pwm_led_add` enter `DraftService.command`; the
+[D11 handoff](device-tree-editor-d11-handoff.md) records exact fields. Each change is one
+source/history operation guarded by the observed binding fingerprint and draft identity.
+Existing single literal `pwms` entries can be changed; PWM LED creation also validates
+the local group/child schema. No defaults, pinctrl or provider status changes are inferred.
+Numeric flags remain unsigned 32-bit literals and polarity edits change only bit 0.
+Periods are positive unsigned nanoseconds. Existing compatible single `pwm-names` stays
+unchanged; repeated, opaque or multiple names require source repair. Each observation
+has the existing 16-entry, ten-minute bounds and source limits. Commands revalidate
+catalogue evidence before and after planning, and retain exact context/revision/hash guards.
+
+PWM diagnostic observations distinguish established invalid literals from unknown
+channel numbering, available channels and shared timer constraints. Multi-specifier,
+symbolic, inherited and ambiguous sources keep generic/source access. D10 reviews still
+protect consumers when removing a provider. Save, recovery and Configure semantics and
+persistent schemas are unchanged. D11 remains partial beyond this PWM slice.

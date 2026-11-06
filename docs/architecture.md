@@ -9,8 +9,9 @@ inspection in Build Inspector and limited Device Tree overlay editing are workin
 The bounded Nordic pin workflow and local module catalogue/canvas are also implemented.
 The D9 handoff records passed verification. D10 resource diagnostics and removal reviews
 are complete within their documented graph limits, with full/browser/package checks passed.
-Broader pin adapters, advanced
-composition and TinyML experiments remain planned.
+D11a local single-specifier PWM consumers and PWM LED forms are complete within their
+scoped limits, with full/browser/package checks passed. D11 remains partial.
+Broader pin adapters, advanced composition and TinyML experiments remain planned.
 
 ## Dependency direction
 
@@ -438,3 +439,17 @@ removal commands remain guarded and compatible; the normal UI opens the broader 
 No shared dependency is silently deleted or reassigned. Unknown or required consumers do
 not receive invented repairs. D10 adds no persistent format, cross-feature dependency or
 process boundary. See the [D10 handoff](device-tree-editor-d10-handoff.md).
+
+D11a adds feature-owned `PWMService` using the existing binding observation, canonical
+command and source/history paths. Its provider profile requires a unique local matched
+binding and explicit matching `#pwm-cells`, with ordered `channel, period` or
+`channel, period, flags` cells. It edits one literal consumer specifier and creates
+binding-compatible PWM LED groups/children. Count and compatible values must satisfy
+their supported local binding constraints. `pwm_providers()` shares this evidence with
+resource diagnostics. The browser reuses retained observations,
+focus restoration and D10 removal reviews. PWM diagnostics join `ResourceService` without
+becoming global Save blockers. Channel ranges, timer coupling, electrical suitability and
+inherited hardware remain unknown unless separately established. Named PWM consumers need
+explicit repair before provider removal; removing `pwms` alone must not leave companion
+`pwm-names` behind. No persistent schema or
+shared process boundary changes. See the [D11 handoff](device-tree-editor-d11-handoff.md).

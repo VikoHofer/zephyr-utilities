@@ -14,8 +14,10 @@ D8 is committed as `cfaf10e`; D0–D10 are implemented within their documented s
 The D9 handoff records full checks, actual-binding smoke and browser verification.
 D9 is committed as `3cf6db1`. D10 adds source-linked resource diagnostics and guarded
 removal reviews with explicit optional-property repairs; full checks, browser verification
-and installed-package checks passed as recorded in the D10 handoff. D11 is next when
-requested. Broader pin adapters, advanced composition
+and installed-package checks passed as recorded in the D10 handoff. D10 is committed as
+`6403e43`. D11a local single-specifier PWM consumers and PWM LED forms are complete
+within their scoped limits; full/browser/package checks passed in the D11 handoff.
+D11 remains partial; its remaining family matrix is in the master plan. Broader pin adapters, advanced composition
 and TinyML experiment analysis remain planned.
 
 ## Start here

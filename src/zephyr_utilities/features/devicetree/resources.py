@@ -9,6 +9,7 @@ from .binding_service import BindingService
 from .bindings import BindingCatalog
 from .drafts import _GUARD_FIELDS
 from .peripherals import PeripheralService
+from .pwm_resources import pwm_diagnostics
 from .resource_graph import MAX_DIAGNOSTICS, add_pin_state_consumers, build_resource_graph, diagnostic, local_diagnostics, pin_diagnostics
 
 
@@ -54,6 +55,7 @@ class ResourceService(BindingService):
                 projection = PeripheralService._projection(document, catalog)
                 graph = build_resource_graph(document, projection)
                 diagnostics = local_diagnostics(document, projection, graph)
+                diagnostics.extend(pwm_diagnostics(document, projection))
                 diagnostics.extend(diagnostic("binding-catalogue-coverage", "unknown", message) for message in catalog.diagnostics)
                 if self.pins:
                     try:

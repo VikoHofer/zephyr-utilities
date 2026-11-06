@@ -395,8 +395,23 @@ offered as explicit repair choices. Required, mixed, ambiguous and unsafe depend
 must be repaired separately. **Apply removal to draft** commits the reviewed candidate as
 one undoable draft action; it does not save or configure. Unknown external or inherited
 consumers outside verified adapter evidence remain visible limitations. D10's full checks,
-browser verification, actual-binding smoke and installed-package checks passed. D11 advanced
-peripherals is next when requested.
+browser verification, actual-binding smoke and installed-package checks passed. D10 is
+committed as `6403e43`.
+
+The first [D11 slice](docs/device-tree-editor-d11-handoff.md) adds **Load PWM consumers**.
+Edit one literal PWM specifier on an existing consumer, or create a PWM LED group and
+child. Choose a local provider, channel, positive period in nanoseconds and flags when
+the provider declares them. Polarity changes preserve other numeric flag bits. Changes
+share draft Undo/Redo, reviewed Save and D10 removal reviews.
+
+These forms use matched local bindings with explicit two- or three-cell PWM layouts,
+independently of vendor. Inherited providers, macros and multi-specifier properties remain
+available through source or the applicable generic binding form. Channel numbering and
+shared timer restrictions are not inferred from a channel count. D11a full checks,
+browser verification, actual-binding smoke and installed-package checks passed. Removal of a provider
+with named PWM consumers requires explicit consumer repair so companion `pwm-names`
+cannot silently lose their entries. ADC, other advanced peripherals and system resources
+remain planned.
 
 Acknowledged drafts are retained under `.features/devicetree/drafts/` in the data directory.
 **Find recoverable drafts** compares retained text with current files before an explicit restore;

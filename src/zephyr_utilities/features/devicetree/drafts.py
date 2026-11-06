@@ -137,6 +137,7 @@ class DraftService:
         self.pins = None
         self.modules = None
         self.removal = None
+        self.pwm = None
 
     def _capture(self, context):
         captured = deepcopy(context)
@@ -383,7 +384,8 @@ class DraftService:
         pin_command = self.pins is not None and kind in self.pins.commands
         module_command = self.modules is not None and kind in self.modules.commands
         removal_command = self.removal is not None and kind in self.removal.commands
-        if not any((binding_command, peripheral_command, pin_command, module_command, removal_command)) and (fields is None or not fields <= set(command) or set(command) - fields - optional):
+        pwm_command = self.pwm is not None and kind in self.pwm.commands
+        if not any((binding_command, peripheral_command, pin_command, module_command, removal_command, pwm_command)) and (fields is None or not fields <= set(command) or set(command) - fields - optional):
             raise ValueError("Choose the exact supported visual command fields.")
         with self.editor.lock, self.lock:
             context = self._context(binding)
@@ -394,6 +396,8 @@ class DraftService:
                 raise ValueError("This draft has incomplete or unsupported structure. Repair the source before using visual controls.")
             if removal_command:
                 change = self.removal.plan(body, context, draft)
+            elif pwm_command:
+                change = self.pwm.plan(body, context, draft)
             elif module_command:
                 change = self.modules.plan(body, context, draft)
             elif pin_command:
