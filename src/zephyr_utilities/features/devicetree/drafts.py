@@ -135,6 +135,7 @@ class DraftService:
         self.bindings = None
         self.peripherals = None
         self.pins = None
+        self.modules = None
 
     def _capture(self, context):
         captured = deepcopy(context)
@@ -379,7 +380,8 @@ class DraftService:
         binding_command = self.bindings is not None and kind in self.bindings.commands
         peripheral_command = self.peripherals is not None and kind in self.peripherals.commands
         pin_command = self.pins is not None and kind in self.pins.commands
-        if not binding_command and not peripheral_command and not pin_command and (fields is None or not fields <= set(command) or set(command) - fields - optional):
+        module_command = self.modules is not None and kind in self.modules.commands
+        if not any((binding_command, peripheral_command, pin_command, module_command)) and (fields is None or not fields <= set(command) or set(command) - fields - optional):
             raise ValueError("Choose the exact supported visual command fields.")
         with self.editor.lock, self.lock:
             context = self._context(binding)
@@ -388,7 +390,9 @@ class DraftService:
             document = draft.document
             if document is None or document.syntax.blocked or self._visual_limit(document):
                 raise ValueError("This draft has incomplete or unsupported structure. Repair the source before using visual controls.")
-            if pin_command:
+            if module_command:
+                change = self.modules.plan(body, context, draft)
+            elif pin_command:
                 change = self.pins.plan(body, context, draft)
             elif peripheral_command:
                 change = self.peripherals.plan(body, context, draft)

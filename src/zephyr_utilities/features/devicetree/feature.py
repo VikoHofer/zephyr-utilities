@@ -1,4 +1,4 @@
-"""Source-preserving overlay editor with target-specific pin support; modules are planned."""
+"""Source-preserving overlay editor with local modules and target-specific pins."""
 
 from pathlib import Path
 
@@ -8,7 +8,7 @@ from .api import register
 FEATURE = FeatureDefinition(
     id='devicetree',
     title='Device Tree Editor',
-    description='Configure local bus devices, GPIO LEDs/buttons, binding properties and supported pin assignments in overlay drafts, then review Save and Configure. Hardware modules are planned.',
+    description='Place local hardware modules and configure bus devices, GPIO, binding properties and supported pin assignments in overlay drafts, then review Save and Configure.',
     entry_path="/#/devicetree/editor",
     frontend=FrontendDefinition(Path(__file__).parent / "web"),
     register=register,

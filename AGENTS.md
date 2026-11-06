@@ -8,9 +8,12 @@ read-only build, source and binding inspection. Device Tree Editor supports exis
 status/property and source edits, local binding-aware property/reference forms, UART/I2C/SPI
 and GPIO topology forms, reviewed Save, draft recovery and explicit saved-source Configure
 through Projects. D8 adds Nordic pin forms for the exact verified nrf52840dk/nrf52840
-profile; other inherited hardware remains unknown. D0–D8 are implemented within their
-scoped boundaries; see the D8 handoff for current verification. D9 hardware modules is
-next. Broader pin adapters, module placement and TinyML experiment analysis remain planned.
+profile; other inherited hardware remains unknown. D9 adds vendor-independent local
+module recipes, a logical source-derived canvas and separately saved presentation layout.
+D8 is committed as `cfaf10e`; D0–D9 are implemented within their documented scoped limits.
+The D9 handoff records full checks, actual-binding smoke and browser verification.
+D10 resource diagnostics and removal planning is next. Broader pin adapters, advanced
+composition and TinyML experiment analysis remain planned.
 
 ## Start here
 

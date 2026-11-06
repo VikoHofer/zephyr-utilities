@@ -8,7 +8,7 @@ const stylesheets = new Map();
 const icons = {memory: "▥", devicetree: "⑂", projects: "＋", inspector: "⌕", tinyml: "◈"};
 const toolDetails = {
   memory: ["RAM & ROM reports", "Symbol-level exploration", "Snapshot comparisons"],
-  devicetree: ["Status and simple overlay properties", "Reviewed Save and draft recovery", "Modules and pin assignment planned"],
+  devicetree: ["Local modules, peripherals and properties", "Reviewed Save and draft recovery", "Pin assignments for supported targets"],
   projects: ["Workspace applications", "Create, configure and build", "Environment, board and SDK discovery"],
   inspector: ["Existing build outputs and image context", "Resolved nodes, sources and bindings", "Read-only advanced inspection"],
   tinyml: ["Model and experiment metadata", "Memory, latency and accuracy", "Reproducible framework comparisons"],

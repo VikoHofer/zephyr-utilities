@@ -1,10 +1,11 @@
 # Device Tree Editor foundation contract
 
-Status: D0–D8 contracts, 2026-11-06. D4 adds reviewed existing-overlay Save and durable
+Status: D0–D9 contracts, 2026-11-06. D4 adds reviewed existing-overlay Save and durable
 draft recovery; D5 adds explicit saved-source Configure through Projects; D6 adds local
 binding-aware property/reference forms; D7 adds local peripheral and bus-device topology.
-D8 adds Nordic pins for the verified nrf52840dk/nrf52840 profile; module placement and
-broader adapters remain planned. D6 is committed as `564fcff`; D7 as `4caf359`.
+D8 adds Nordic pins for the verified nrf52840dk/nrf52840 profile. D9 adds local module
+recipes, a logical canvas and separately saved layout; its handoff records passed verification.
+Broader adapters remain planned. D6 is committed as `564fcff`; D7 as `4caf359`; D8 as `cfaf10e`.
 Full D7 checks and browser/package verification passed as recorded in its handoff.
 The D0 executable evidence is a bounded in-memory source prototype under
 `scripts/prototypes/`, outside the installed application. See the
@@ -14,7 +15,8 @@ the [D1 handoff](device-tree-editor-d1-handoff.md) and
 [D2 handoff](device-tree-editor-d2-handoff.md), [D3 handoff](device-tree-editor-d3-handoff.md)
 and [D4 handoff](device-tree-editor-d4-handoff.md), followed by the
 [D5 handoff](device-tree-editor-d5-handoff.md), [D6 handoff](device-tree-editor-d6-handoff.md)
-[D7 handoff](device-tree-editor-d7-handoff.md) and [D8 handoff](device-tree-editor-d8-handoff.md).
+[D7 handoff](device-tree-editor-d7-handoff.md), [D8 handoff](device-tree-editor-d8-handoff.md)
+and [D9 handoff](device-tree-editor-d9-handoff.md).
 
 ## Ownership and compatibility
 
@@ -773,6 +775,92 @@ Undo/Redo, recovery, reviewed Save and explicit Configure keep their existing bo
 No board drawing, module recipe, automatic controller enablement or multi-file writer is
 introduced. The [D8 handoff](device-tree-editor-d8-handoff.md) records current verification.
 
+## D9 module observations, commands and presentation layout
+
+D9 is vendor-independent and inherits D6/D7's local declaration boundary. It does not
+extend D8's inherited pin profile. `ModuleService` observes the canonical overlay with
+the selected local binding catalogue. The built-in catalogue is data only, with catalogue
+version 1 and four version-1 recipes: `bme280-i2c`, `bme280-spi`, `gpio-led` and
+`gpio-button`. It neither downloads components nor executes recipe hooks.
+
+`POST /api/devicetree/editor/drafts/modules` takes the existing context/draft guard.
+Its response retains D7's binding, parent, provider and field metadata, plus:
+
+| Field | Meaning |
+| --- | --- |
+| `catalogue_version`, `recipes` | Versioned recipe identities, descriptions, separate software requirements and observed eligible parent forms |
+| `parents` | Local bus/group declarations with canonical path keys and supported operations |
+| `instances` | Child declarations, structural recipe matches, local edit/removal capability and source origin |
+| `graph.nodes` | Local controllers, groups, modules, providers and read-only unmatched compatible declarations |
+| `graph.edges` | Observed parent relationships and resolved GPIO references, with property/entry identity |
+| `graph.truncated` | Whether the 256-node canvas limit omitted additional declarations; diagnostics explain the limit |
+
+Only unique local declarations receive stable graph keys, formed as `node:` plus their
+canonical path. Repeated contributors, inherited references and unresolved providers do
+not become invented connections. Graph node IDs used by source commands still belong to
+one exact draft revision. Recipe matches are informational and do not claim compatibility,
+provenance or ownership. Handwritten and generated nodes use the same source projection.
+
+The canonical `/drafts/command` route accepts these exact module command fields, in
+addition to `kind` and `schema_id`:
+
+| Kind | Fields |
+| --- | --- |
+| `module_add` | `recipe_id`, `recipe_version`, `parent_id`, `name`, `label`, `address`, `values` |
+| `module_update` | `node_id`, `address`, `values` |
+| `module_remove` | `node_id` |
+
+Adds require the exact observed recipe version and a suitable existing local parent.
+Required values come from its resolved binding. I2C addresses, SPI chip-select indices
+and GPIO provider cells remain explicit; GPIO commands use `address: null`. SPI frequency
+uses the selected binding's constraints. GPIO buttons require an explicit input event
+code. Existing address, name and label conflicts are rejected rather than silently
+creating a second identity or converting an existing node.
+
+Each recipe creates exactly one leaf. No recipe owns a parent, provider, pinctrl state,
+header or other shared dependency. Removal reuses D7's leaf/reference/path guards and
+deletes only the selected local source block. Nested nodes and known consumers require
+explicit resolution. This bounded recipe set consequently needs no ownership metadata
+or automatic dependency cleanup. Broader removal planning belongs to D10.
+
+Module commands validate the observation's context/revision/hash, expiry and local
+catalogue dependencies, then delegate to D7's source plans. One accepted hardware action
+is one canonical draft/history operation. Existing source bytes, unrelated properties
+and comments retain the same guarantees as those plans. Layout coordinates and recipe
+versions are not written into firmware source. Software requirements are displayed
+separately; Kconfig, controller enablement, pin routing, Save and Configure remain explicit
+independent actions. Missing bindings or recipe information do not establish compatibility.
+
+`LayoutService` exposes two presentation-only routes:
+
+| Route | Request beyond the canonical guard | Response |
+| --- | --- | --- |
+| `POST /api/devicetree/editor/drafts/module-layout` | `schema_id` | `schema_version`, `layout_id`, `revision`, `positions` |
+| `POST /api/devicetree/editor/drafts/module-layout/save` | `schema_id`, `expected_layout_revision`, `positions` | Updated layout record without private scope data |
+
+Both routes revalidate the current module observation. Each position is keyed by a
+current graph key with exactly `{x, y}` integer values in the range 0–31. Read responses
+omit positions for nodes absent from the current graph. Position changes never create
+source edits, source history revisions, recovery records or project jobs. **Save layout**
+is separate from overlay **Review and Save**.
+
+Persistent records use schema version 1 under the feature-owned `module-layouts`
+directory. A SHA-256 identity covers the workspace path/identity, application path, overlay
+path, project/configuration identifiers and requested target. Records contain this scope,
+layout identity, optimistic revision and positions. A directory `flock`, bounded regular
+file reads, atomic replacement and file/directory synchronization protect writes. Symlink
+directories/records are refused. Unknown versions, malformed records, conflicts and
+failed replacement preserve the previous record. A synchronization failure after replacement
+requires reload to determine the stored revision. Limits are 256 layout records, 256 KiB per record
+and 256 positions. This is a new format; no older layout schema needs migration.
+See [ADR 0022](decisions/0022-module-layout-and-source-identity.md).
+
+The canvas offers keyboard-accessible selection, placement/connection forms and directional
+layout controls. Moving/selecting cards is presentation only. Source and module changes
+use the shared draft-observation lifecycle; retained presentation does not authorize stale
+commands. Background refresh must not scroll, refocus or discard an unrelated form.
+Current verification is recorded in the [D9 handoff](device-tree-editor-d9-handoff.md).
+
 ## Verification and next stage
 
 The [D0 handoff](device-tree-editor-d0-handoff.md) records the prototype baseline.
@@ -789,5 +877,7 @@ records local binding-aware properties and references. The [D7 handoff](device-t
 records local peripheral topology, real Configure evidence and passed full/browser/package
 checks. The [D8 handoff](device-tree-editor-d8-handoff.md) records the bounded Nordic pin
 workflow and current verification. D0–D8 are implemented within their scoped boundaries.
-The next implementation stage is D9 only: module recipes and visual placement, preserving
-the source command path and separation between source saving and project execution.
+The [D9 handoff](device-tree-editor-d9-handoff.md) records the implemented local module
+catalogue/canvas, separate layout format and passed verification. The next
+implementation stage is D10 only: resource diagnostics and broader removal planning,
+preserving the source command path and separation between source saving and project execution.

@@ -1,9 +1,9 @@
 <section class="dte-workspace" data-dte-root>
   <header class="dte-heading">
     <div><p class="dte-eyebrow">Device Tree Editor</p><h1>Visual overlay editor</h1></div>
-    <span class="dte-badge">Properties, peripherals and pins</span>
+    <span class="dte-badge">Modules, peripherals and pins</span>
   </header>
-  <p class="dte-intro">Edit and save an existing application overlay, then explicitly configure it to check the saved source. Compilation is a separate action in Projects. Pin assignments are available for supported targets; module placement remains planned.</p>
+  <p class="dte-intro">Place local modules, configure peripherals and edit an existing application overlay, then review and Save your changes. Pin assignments are available for supported targets. Configure and compilation remain separate actions.</p>
 
   <section class="dte-card dte-picker" aria-labelledby="dte-project-heading">
     <div class="dte-section-heading"><h2 id="dte-project-heading">Registered applications</h2><button type="button" data-dte-refresh-catalog>Refresh list</button></div>
@@ -76,6 +76,7 @@
         <details data-dte-validation-evidence hidden><summary>Configuration evidence and log</summary><dl class="dte-facts" data-dte-validation-facts></dl><pre class="dte-source dte-validation-log" data-dte-validation-log></pre></details>
       </section>
       <div class="dte-conflict" data-dte-conflict hidden><p>Your retained text is shown below. Review the server draft before choosing the text to continue with.</p><details><summary>Inspect competing server draft</summary><pre class="dte-source" data-dte-server-source></pre></details><button type="button" data-dte-use-local>Continue with my text</button><button type="button" data-dte-use-server>Use server draft</button></div>
+      <section class="dte-modules" data-dte-modules aria-label="Modules and connections"></section>
       <div class="dte-draft-columns">
         <section class="dte-visual" aria-labelledby="dte-visual-heading">
           <h3 id="dte-visual-heading">Source declarations</h3>

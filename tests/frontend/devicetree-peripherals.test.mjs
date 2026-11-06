@@ -150,6 +150,16 @@ test("topology keys preserve parent-child relationships across revision-specific
   assert.equal(after.find((row) => row.node.node_id === "new-child").parent.node_id, "new-bus");
 });
 
+test("an unrelated draft command retains paused peripheral presentation until explicitly refreshed", async () => {
+  const app = harness(); await app.session.load(); const observed = app.state.peripheralView.data;
+  await app.drafts.command({kind: "set_status", node_id: "bus", status: "okay"});
+  assert.equal(app.state.peripheralView.data, null); assert.equal(app.state.peripheralView.presentation, observed);
+  assert.equal(await app.session.command({kind: "peripheral_remove", node_id: "child"}), false);
+  assert.equal(app.commands.length, 1);
+  await app.session.load(); assert.equal(app.state.peripheralView.data.revision, 1);
+  assert.equal(app.state.peripheralView.presentation, app.state.peripheralView.data); app.dispose();
+});
+
 // Minimal event-bubbling DOM for observable panel interactions; server behavior is tested separately.
 class Element {
   constructor(tag, document) { this.tagName = tag.toUpperCase(); this.ownerDocument = document || {createElement: (name) => new Element(name, this.ownerDocument)};
@@ -260,4 +270,28 @@ test("panel navigation discards loaded topology and disposal removes event handl
   const app = harness(undefined, true); await click(app.root, "Load peripherals"); app.panel.navigate();
   assert.equal(app.state.peripheralView.data, null); const calls = app.calls.length; app.dispose();
   named(app.root, "button", "Load peripherals").dispatch("click"); await settle(); assert.equal(app.calls.length, calls);
+});
+
+test("peripheral refresh retains the mounted form and reports results beside its action", async () => {
+  const wait = deferred(); let reads = 0;
+  const app = harness((api) => async (...args) => { const response = await api(...args); if (++reads > 1) await wait.promise; return response; }, true);
+  await click(app.root, "Load peripherals"); await click(app.root, "I2C · /i2c"); app.reveals.length = 0;
+  const form = named(app.root, "form", "Controller properties");
+  const control = useField(chosenField(form, "clock-frequency"), "400000");
+  const container = form.parentNode.parentNode;
+  await click(app.root, "Apply controller properties");
+  assert.equal(app.state.peripheralView.data, null); assert.equal(container.hidden, false);
+  assert.equal(named(app.root, "form", "Controller properties"), form);
+  assert.equal(control.value, "400000"); assert.equal(control.disabled, true);
+  assert.match(form.textContent, /Refreshing/); assert.deepEqual(app.reveals, []);
+  wait.resolve(); await settle();
+  assert.equal(container.hidden, false); assert.match(named(app.root, "form", "Controller properties").textContent, /updated/);
+  assert.deepEqual(app.reveals, []); app.dispose();
+});
+
+test("peripheral input errors remain beside the submitting form without changing the viewport", async () => {
+  const app = harness(undefined, true); await click(app.root, "Load peripherals"); await click(app.root, "I2C · /i2c");
+  app.reveals.length = 0; await click(app.root, "Apply controller properties");
+  assert.match(named(app.root, "form", "Controller properties").textContent, /Select at least one controller field/);
+  assert.deepEqual(app.reveals, []); assert.equal(app.commands.length, 0); app.dispose();
 });

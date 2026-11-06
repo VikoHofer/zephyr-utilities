@@ -1,16 +1,17 @@
 # Device Tree Editor master plan
 
-Status: limited overlay editor available; D0–D8 implementations complete within their
-staged scopes on 2026-11-06. D6 is committed as `564fcff`; D7 as `4caf359`. D8 adds the
-bounded Nordic pin workflow; its current verification and measured limits are recorded
-in the stage handoffs. The next product
+Status: limited overlay editor available; D0–D9 implementations complete within their
+staged scopes on 2026-11-06. D6 is committed as `564fcff`; D7 as `4caf359`; D8 as `cfaf10e`.
+D9 local module recipes, logical canvas and separate layout persistence are implemented;
+verification is recorded in the D9 handoff. Current verification and measured limits
+are recorded in the stage handoffs. The next product
 priority is the visual Device Tree Editor
 following the delivered everyday Project Creator workflow. This plan does not imply
 that every advanced item in the Project Creator roadmap is complete. The editor's
 runtime now exposes existing-overlay editing, reviewed Save/recovery and explicit
 saved-source Configure, local binding-aware properties/references and local peripheral
 topology and Nordic pin configuration for the verified nrf52840dk/nrf52840 profile.
-Module placement remains planned; D9 is next.
+Vendor-independent module placement uses supported local declarations; D10 is next.
 
 Build an offline visual hardware editor inside the existing `zephyr-utils` application.
 Users open a project, select its exact configuration, place hardware modules, connect
@@ -43,7 +44,9 @@ records explicit saved-source Configure and Projects handoff. The [D6 handoff](d
 records local binding-aware property/reference editing. The [D7 handoff](device-tree-editor-d7-handoff.md)
 records local peripheral and bus-device forms, real Configure evidence and completed checks.
 The [D8 handoff](device-tree-editor-d8-handoff.md) records the bounded Nordic pin
-adapter, source workflow and current verification. D9 is next.
+adapter, source workflow and current verification. The
+[D9 handoff](device-tree-editor-d9-handoff.md) records local recipes, source-derived module
+graphs, separate layout persistence and passed verification. D10 is next.
 
 ## Product experience
 
@@ -74,7 +77,7 @@ adapters, not a fixed example copied into every project.
 Nordic's Devicetree Visual Editor is the interaction reference: its documentation
 describes live synchronization between visual edits and source, with saving from either
 view. Adopt that interaction principle within this application's browser architecture.
-The module canvas and staged contracts below are our proposed design, not claims about
+The module canvas and staged contracts below describe this application's design, not claims about
 Nordic's feature set. See [Nordic's editor guide](https://docs.nordicsemi.com/r/bundle/nrf-connect-vscode/page/guides/work_with_devicetree_editor.html).
 
 ### Workspace layout
@@ -350,7 +353,9 @@ not resolve inherited effective hardware or offer label renaming. D7 implementat
 **complete** for local UART/I2C/SPI topology and GPIO LED/button forms, atomic child
 address edits and guarded removal. Its real Configure smoke, full checks and
 browser/package verification passed as recorded in the handoff. D8's bounded Nordic pin
-implementation is **complete** within its published profile; its handoff records verification. D9–D15 are **not started**.
+implementation is **complete** within its published profile; its handoff records verification.
+D9 local recipes, logical placement and separate layout persistence are **complete within
+their scoped limits**, with passed full/browser/package checks. D10–D15 are **not started**.
 The default order is sequential; shared contracts
 and source safety precede richer visuals. Split a stage further if its exit gate cannot
 be delivered and tested in a reviewable change. Complete the selected slice without
@@ -372,7 +377,7 @@ until D4. This uses the same application/server, not a separate feature launcher
 | D6 | Binding-aware properties and references | Complete local-overlay implementation; see D6 handoff |
 | D7 | Peripheral and bus configuration | Complete local topology implementation; verification status in D7 handoff |
 | D8 | Nordic pin assignment and pinctrl states | Bounded nrf52840dk profile implemented; verification in D8 handoff |
-| D9 | Module catalogue and visual placement | Main requested visual experience |
+| D9 | Module catalogue and visual placement | Local recipe/canvas implementation present; verification in D9 handoff |
 | D10 | Resource diagnostics and removal planning | Reliable multi-device projects |
 | D11 | Advanced peripheral and system resources | Broader hardware coverage |
 | D12 | Multiple overlays and coordinated source changes | Complete application composition |
@@ -622,6 +627,17 @@ unassign round trips and resource conflicts. Unknown pins or routes stay unknown
 
 ### D9 Hardware modules and visual placement
 
+Implementation status: the local catalogue and logical canvas are implemented; passed
+verification is recorded in the [D9 handoff](device-tree-editor-d9-handoff.md). BME280 I2C/SPI recipes
+and GPIO LED/button recipes create single leaves under explicitly selected existing local
+buses/groups. Actual bindings supply required properties and provider cells. Structural
+recipe matches preserve handwritten nodes without conversion or ownership claims. Leaf
+removal retains all parents/providers, so these recipes need no dependency ownership
+metadata. The graph is reconstructed from source after Save/reopen; coordinates use
+unique local paths and live in separate schema-version-1 feature storage. Hardware
+semantics, Kconfig and pin routing are not inferred from layout. See
+[ADR 0022](decisions/0022-module-layout-and-source-identity.md) for scope and limits.
+
 Scope: add a logical module/bus canvas and a local versioned recipe catalogue. Begin
 with small tested examples such as an I2C sensor, SPI device and GPIO indicator/input.
 Collect required parameters before committing an addition. Provide forms as an equal
@@ -827,12 +843,12 @@ performance claims without measurements.
 
 ## Starting point
 
-The next implementation request should be **D9 only**, after D8 verification is complete.
+The next implementation request should be **D10 only**; D9 verification is complete.
 D0's contracts/source experiment, D1's read-only context and D2's source operations
 provide the foundation; D3 connects source and visual session drafts. D4 delivers the first small
 usable existing-overlay editor. D5 closes its configure/build loop and D6 adds local
 binding-aware properties/references. D7 adds common peripheral topology; D8 adds bounded
-Nordic pin editing. D9–D10 deliver module placement and broader resource planning.
+Nordic pin editing. D9 adds local module placement; D10 adds broader resource planning.
 Later stages expand coverage while preserving the same
 source synchronization and save semantics.
 

@@ -1,3 +1,4 @@
+import {retainActionFocus} from "./view-focus.js";
 import {bindingEnumValue, bindingTypes, bindingValue, createBindingSession, localBindingValue} from "./bindings.js";
 import {nodeSelection, restoreNodeSelection} from "./drafts.js";
 
@@ -29,6 +30,7 @@ export function mountBindingPanel(root, {api, state, workspace, drafts, reveal, 
     handlers.get(item)[event] = callback;
   };
   for (const eventName of ["click", "change", "submit"]) root.addEventListener(eventName, (event) => {
+    if (eventName === "submit" || eventName === "click" && event.target.closest("button")) feedbackHost = locateFeedback(event.target);
     for (let item = event.target; item && item !== root; item = item.parentNode) {
       handlers.get(item)?.[eventName]?.(event);
       if (event.cancelBubble) break;
@@ -36,10 +38,11 @@ export function mountBindingPanel(root, {api, state, workspace, drafts, reveal, 
   }, {signal: lifetime.signal});
   const button = (text, action, primary = false) => {
     const item = element("button", primary ? "dte-primary" : "", text); item.type = "button";
+    item.dataset.focusKey = "button:" + text;
     if (action) listen(item, "click", action);
     return item;
   };
-  const label = (title, control) => { const item = element("label", "", title); item.append(control); return item; };
+  const label = (title, control) => { control.dataset.focusKey = "field:" + title; const item = element("label", "", title); item.append(control); return item; };
   const input = (type = "text") => {
     const item = element("input"); item.type = type; item.autocomplete = "off"; item.spellcheck = false; return item;
   };
@@ -64,14 +67,29 @@ export function mountBindingPanel(root, {api, state, workspace, drafts, reveal, 
   const referencePanel = element("div", "dte-binding-references");
   controls.append(label("Binding node", nodeSelect), bindingInfo, label("Binding property", propertySelect), propertyPanel, labelPanel, referencePanel);
   root.append(heading, intro, status, error, recovery, diagnostics, controls);
+  const feedbackSections = new Set([propertyPanel, labelPanel, referencePanel]);
+  let feedbackHost;
+  const localFeedback = document.createElement("p"); localFeedback.setAttribute("role", "status");
+  function locateFeedback(target) {
+    for (let item = target; item && item !== root; item = item.parentNode) if (feedbackSections.has(item)) return item;
+    return null;
+  }
+  function renderFeedback(view) {
+    if (!feedbackHost) { localFeedback.hidden = true; localFeedback.remove?.(); return; }
+    localFeedback.className = view.error ? "dte-error" : "dte-muted";
+    localFeedback.textContent = view.error || view.message || "";
+    localFeedback.hidden = !localFeedback.textContent;
+    if (localFeedback.parentNode !== feedbackHost) feedbackHost.append(localFeedback);
+  }
   const session = createBindingSession({api, state, workspace, drafts, onChange() { render(); onChange?.(); }});
   function selectedNode() { return array(data?.nodes)[selectedIndex]; }
   function selectedProperty() { return array(selectedNode()?.properties).find((item) => item.name === selectedName); }
-  function feedback(message) { session.fail(message); reveal?.(error); }
-  async function run(operation) {
-    const captured = workspace(); const token = generation;
-    await operation();
-    if (!disposed && token === generation && workspace() === captured) reveal?.(state.bindingView.error ? error : status);
+  function feedback(message) { session.fail(message); }
+  function run(operation) {
+    const token = generation; const captured = workspace(); const context = state.data?.id;
+    const draft = state.draftView?.entry?.server?.id;
+    return retainActionFocus(root, operation, () => !disposed && token === generation
+      && captured === workspace() && context === state.data?.id && draft === state.draftView?.entry?.server?.id, lifetime.signal);
   }
   function submit(command) { return run(() => session.command(command)); }
   function message(parent, text, className = "dte-muted") { if (text) parent.append(element("p", className, text)); }
@@ -243,11 +261,13 @@ export function mountBindingPanel(root, {api, state, workspace, drafts, reveal, 
     message(labelPanel, "Labels identify local reference targets. Renaming labels is not offered without evidence for references in other files.");
   }
   function renderReferences() {
+    const expanded = [...referencePanel.querySelectorAll("details")].map((item) => item.open);
     referencePanel.replaceChildren();
     referencePanel.append(element("h4", "", "Aliases and chosen references"));
     message(referencePanel, "References can select only unique targets declared in this overlay. Existing unresolved or external references remain source-only.");
-    for (const [kind, title, collection] of [["alias", "Alias", "aliases"], ["chosen", "Chosen", "chosen"]]) {
+    for (const [index, [kind, title, collection]] of [["alias", "Alias", "aliases"], ["chosen", "Chosen", "chosen"]].entries()) {
       const details = element("details"); details.append(element("summary", "", `${title} references (${array(data?.[collection]).length})`));
+      details.open = Boolean(expanded[index]);
       for (const item of array(data?.[collection])) {
         const row = element("div", "dte-binding-existing"); message(row, `${item.name} = ${item.reference || "unresolved source"} · ${item.state || "unknown"}`, "dte-path");
         if (data.capabilities?.[`set_${kind}`] && item.removable !== false) {
@@ -285,9 +305,9 @@ export function mountBindingPanel(root, {api, state, workspace, drafts, reveal, 
     session.sync(); const view = state.bindingView;
     status.textContent = view.message || (view.busy ? "Reading current local schemas…" : "Load binding properties to inspect this source revision. No project tools run.");
     error.hidden = !view.error; error.textContent = view.error;
-    controls.hidden = !view.data;
-    if (rendered !== view.data) {
-      rendered = data = view.data; diagnostics.replaceChildren();
+    controls.hidden = !view.presentation;
+    if (rendered !== view.presentation) {
+      rendered = data = view.presentation; diagnostics.replaceChildren();
       if (data) {
         for (const item of array(data.diagnostics)) message(diagnostics, item.message || item, "dte-notice");
         nodeSelect.replaceChildren(); option(nodeSelect, "-1", "Choose a node declaration");
@@ -297,9 +317,10 @@ export function mountBindingPanel(root, {api, state, workspace, drafts, reveal, 
         nodeSelect.value = String(selectedIndex); renderNode(); renderReferences();
       }
     }
+    renderFeedback(view);
     updateDisabled();
   }
   render();
-  return {render, navigate() { generation++; session.clear(); render(); },
+  return {render, navigate() { generation++; feedbackHost = null; session.clear(); render(); },
     dispose() { disposed = true; generation++; lifetime.abort(); session.dispose(); }};
 }

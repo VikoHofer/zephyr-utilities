@@ -6,6 +6,8 @@ import {createValidationSession, diagnosticSelection} from "./validation.js";
 import {mountBindingPanel} from "./binding-view.js";
 import {mountPeripheralPanel} from "./peripheral-view.js";
 import {mountPinPanel} from "./pin-view.js";
+import {mountModulePanel} from "./module-view.js";
+import {retainActionFocus} from "./view-focus.js";
 
 const array = (value) => Array.isArray(value) ? value : [];
 const text = (value, fallback = "Unknown") => value == null || value === "" ? fallback : String(value);
@@ -22,6 +24,7 @@ export function mount(host, context) {
   let renderedCatalog;
   let renderedData;
   let renderedDraftControls;
+  let declarationsAvailable = false;
   let session;
   let drafts;
   let saving;
@@ -29,6 +32,7 @@ export function mount(host, context) {
   let bindings;
   let peripherals;
   let pins;
+  let modules;
   let shownReview;
   let reviewTrigger;
   let shownConfigure;
@@ -44,6 +48,12 @@ export function mount(host, context) {
   }
   function option(select, value, label) {
     const element = node("option", "", label); element.value = value; select.append(element);
+  }
+  const visualFeedback = node("p", "dte-muted", "");
+  visualFeedback.setAttribute("role", "status"); visualFeedback.hidden = true;
+  $("visual-controls").append(visualFeedback);
+  for (const name of ["node", "property", "property-name", "property-kind", "property-value", "apply-property", "remove-property", "enable", "disable", "show-source"]) {
+    $(name).dataset.focusKey = name;
   }
   function fact(parent, label, value, path = false) {
     const item = node("div");
@@ -208,7 +218,7 @@ export function mount(host, context) {
     const node = selectedNode();
     const property = selectedProperty();
     const simple = !property || ["string", "cells", "boolean"].includes(property.value?.kind);
-    const disabled = !node || node.editable === false || Boolean(property && !property.editable) || !simple;
+    const disabled = !declarationsAvailable || !node || node.editable === false || Boolean(property && !property.editable) || !simple;
     for (const name of ["property-name", "property-kind", "property-value", "apply-property"]) $(name).disabled = disabled;
     $("property-name").readOnly = Boolean(property);
     $("remove-property").disabled = disabled || !property;
@@ -227,6 +237,7 @@ export function mount(host, context) {
     const busy = Boolean(view?.loading || entry?.flight || entry?.historyOperation || entry?.externalOperation);
     const error = state.saveView?.review ? view?.error || entry?.error || "" : state.saveView?.error || view?.error || entry?.error || "";
     const available = Boolean(view?.ready && server && !pending && !busy && !entry.uncertain && !entry.conflict && !server.syntax.blocked);
+    declarationsAvailable = available;
     $("draft-status").textContent = view?.loading ? "Opening and revalidating the draft…"
       : entry?.uncertain ? "The last request needs reconciliation. Your local text is retained."
         : entry?.externalOperation ? "Reviewing the current draft. Source editing resumes when the review closes."
@@ -264,10 +275,10 @@ export function mount(host, context) {
     $("source-error").hidden = !state.documentError; $("source-error").textContent = state.documentError || "";
     $("source-status").textContent = server ? "Typing updates this draft after a short pause. Both source and visual changes share Undo/Redo."
       : state.documentLoading ? "Reading current overlay source…" : "Choose an available overlay to read its source.";
-    $("visual-controls").hidden = !available || !array(server?.nodes).length;
+    $("visual-controls").hidden = !view?.ready || !array(server?.nodes).length;
     $("visual-notice").hidden = available && array(server?.nodes).length > 0;
     $("visual-notice").textContent = !view?.ready ? "Open an overlay to inspect its declarations."
-      : pending || busy ? "Waiting for the current source revision; previous declarations are hidden."
+      : pending || busy ? "Waiting for the current source revision; previous declarations remain visible with editing paused."
         : entry?.uncertain || entry?.conflict ? "Reconcile the draft before making visual changes."
           : server?.syntax.blocked ? "The current source is incomplete or outside visual support. Your text is retained; correct it in source or use Undo."
             : "This overlay has no node declarations. Add a node or reference block in source to use visual controls.";
@@ -286,7 +297,7 @@ export function mount(host, context) {
       entry.selectedPropertyIndex = restorePropertySelection(array(selectedNode()?.properties), entry.propertyHint);
       if (entry.selectedPropertyIndex < 0 && !server.syntax.blocked) entry.propertyHint = null;
     }
-    const controlKey = `${server?.id}:${server?.revision}:${available}:${entry?.selectedNodeIndex || 0}:${entry?.selectedPropertyIndex ?? -1}`;
+    const controlKey = `${server?.id}:${server?.revision}:${entry?.selectedNodeIndex || 0}:${entry?.selectedPropertyIndex ?? -1}`;
     if (available && renderedDraftControls !== controlKey) {
       renderedDraftControls = controlKey;
       const select = $("node"); select.replaceChildren();
@@ -296,12 +307,18 @@ export function mount(host, context) {
       const statuses = array(node?.properties).filter((property) => property.name === "status");
       $("node-status").textContent = !node ? "Choose a node occurrence to edit its properties." : statuses.length > 1 ? "Multiple local status assignments; choose a property occurrence below."
         : statuses.length ? `Local status: ${text(statuses[0].value?.value, "Opaque or deleted")}` : "Local status: not specified in this block.";
-      $("enable").disabled = $("disable").disabled = !node || node.editable === false || statuses.length > 1 || statuses[0]?.editable === false;
-      $("show-source").disabled = !node;
       const properties = $("property"); properties.replaceChildren(); option(properties, "", "New property");
       array(node?.properties).forEach((item, index) => option(properties, String(index), `${item.name}${!item.editable ? " · source only" : ""}`));
       properties.value = entry.selectedPropertyIndex >= 0 ? String(entry.selectedPropertyIndex) : "";
       populateProperty();
+    }
+    if (available) {
+      const selected = selectedNode(); const statuses = array(selected?.properties).filter((property) => property.name === "status");
+      $("node").disabled = $("property").disabled = false;
+      $("enable").disabled = $("disable").disabled = !selected || selected.editable === false || statuses.length > 1 || statuses[0]?.editable === false;
+      $("show-source").disabled = !selected; propertyControls();
+    } else {
+      for (const control of $("visual-controls").querySelectorAll("input, select, textarea, button")) control.disabled = true;
     }
     $("diff").textContent = server?.diff?.text || "No acknowledged source changes.";
     $("diff-status").textContent = pending ? "The diff reflects the last acknowledged draft; your latest typing is still pending."
@@ -536,6 +553,7 @@ export function mount(host, context) {
     bindings?.render();
     peripherals?.render();
     pins?.render();
+    modules?.render();
   }
   async function action(operation, destination) {
     const captured = ++actionGeneration;
@@ -590,7 +608,20 @@ export function mount(host, context) {
     renderDraft();
   });
   listen($("property-kind"), "change", propertyControls);
-  const sendCommand = (command) => action(() => drafts.command(command), () => $("source-panel"));
+  function visualMessage(message, failed = false) {
+    visualFeedback.className = failed ? "dte-error" : "dte-muted";
+    visualFeedback.textContent = message; visualFeedback.hidden = !message;
+  }
+  const sendCommand = async (command) => {
+    if (!declarationsAvailable) return false;
+    const captured = ++actionGeneration; const workspace = context.workspace.path;
+    visualMessage("Updating the overlay draft…");
+    const accepted = await retainActionFocus($("visual-controls"), () => drafts.command(command),
+      () => !disposed && captured === actionGeneration && workspace === context.workspace.path, lifetime.signal);
+    if (disposed || captured !== actionGeneration || workspace !== context.workspace.path) return false;
+    visualMessage(draftEntry()?.error || (accepted ? "The overlay draft was updated. Save remains separate." : "The draft could not be updated."), !accepted);
+    return accepted;
+  };
   listen($("enable"), "click", () => { void sendCommand({kind: "set_status", node_id: selectedNode().id, status: "okay"}); });
   listen($("disable"), "click", () => { void sendCommand({kind: "set_status", node_id: selectedNode().id, status: "disabled"}); });
   listen($("property-form"), "submit", (event) => {
@@ -598,14 +629,14 @@ export function mount(host, context) {
     const name = $("property-name").value;
     if (name.length > 256 || !/^[A-Za-z_#][A-Za-z_0-9,#.+?-]*$/.test(name)) {
       draftEntry().error = "Enter a supported property name, such as status, current-speed or vendor,option.";
-      renderDraft(); context.reveal?.($("draft-error")); return;
+      renderDraft(); visualMessage(draftEntry().error, true); return;
     }
     const kind = $("property-kind").value;
     let value = kind === "boolean" ? null : $("property-value").value;
     if (kind === "cells") {
       const parts = value.trim().split(/[\s,]+/);
       if (!parts.length || parts.length > 64 || parts.some((part) => !/^(?:0[xX][\da-fA-F]+|\d+)$/.test(part) || Number(part) > 0xffffffff)) {
-        draftEntry().error = "Enter one to 64 unsigned 32-bit integer cells, separated by spaces."; renderDraft(); context.reveal?.($("draft-error")); return;
+        draftEntry().error = "Enter one to 64 unsigned 32-bit integer cells, separated by spaces."; renderDraft(); visualMessage(draftEntry().error, true); return;
       }
       value = parts.map(Number);
     }
@@ -699,12 +730,14 @@ export function mount(host, context) {
     drafts, reveal: context.reveal, onChange: render});
   pins = mountPinPanel($("pins"), {api: context.api, state, workspace: () => context.workspace.path,
     drafts, reveal: context.reveal, onChange: render});
+  modules = mountModulePanel($("modules"), {api: context.api, state, workspace: () => context.workspace.path,
+    drafts, reveal: context.reveal, onChange: render});
   render();
   return {
-    navigate(view) { actionGeneration++; saving.cancel(); validation.closeReview(); validation.resume(); bindings.navigate(); peripherals.navigate(); pins.navigate(); return session.navigate(view); },
+    navigate(view) { actionGeneration++; visualMessage(""); saving.cancel(); validation.closeReview(); validation.resume(); bindings.navigate(); peripherals.navigate(); pins.navigate(); modules.navigate(); return session.navigate(view); },
     dispose() {
       disposed = true; actionGeneration++; lifetime.abort(); saving.dispose(); closeReview({restoreFocus: false});
-      validation.dispose(); closeConfigure({restoreFocus: false}); bindings.dispose(); peripherals.dispose(); pins.dispose(); session.dispose(); drafts.dispose();
+      validation.dispose(); closeConfigure({restoreFocus: false}); bindings.dispose(); peripherals.dispose(); pins.dispose(); modules.dispose(); session.dispose(); drafts.dispose();
       for (const url of downloadUrls) URL.revokeObjectURL(url);
     },
   };

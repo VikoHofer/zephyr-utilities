@@ -8,6 +8,8 @@ from .validation import ValidationService
 from .binding_service import BindingService
 from .peripherals import PeripheralService
 from .pins import PinService
+from .modules import ModuleService
+from .layout import LayoutService
 
 
 def register(router, context):
@@ -34,6 +36,14 @@ def register(router, context):
     drafts.pins = pins
     context.services["devicetree_pins"] = pins
     router.add("POST", "/api/devicetree/editor/drafts/pins", lambda request: pins.inspect(request.body))
+    modules = ModuleService(drafts)
+    drafts.modules = modules
+    context.services["devicetree_modules"] = modules
+    router.add("POST", "/api/devicetree/editor/drafts/modules", lambda request: modules.inspect(request.body))
+    layout = LayoutService(drafts, modules, storage)
+    context.services["devicetree_layout"] = layout
+    router.add("POST", "/api/devicetree/editor/drafts/module-layout", lambda request: layout.read(request.body))
+    router.add("POST", "/api/devicetree/editor/drafts/module-layout/save", lambda request: layout.save(request.body))
     for suffix in ("open", "get", "source", "command", "undo", "redo"):
         router.add("POST", f"/api/devicetree/editor/drafts/{suffix}",
                    lambda request, operation=getattr(drafts, suffix): operation(request.body))

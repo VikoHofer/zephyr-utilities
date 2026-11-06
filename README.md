@@ -10,8 +10,11 @@ and bindings, and carries the selected image into Memory Explorer for report gen
 Device Tree Editor supports visual status/property edits, local binding-aware forms and
 references, local UART/I2C/SPI and GPIO topology, editable overlay source, reviewed
 single-file Save, draft recovery and explicit saved-source Configure. Nordic pin assignment
-supports the exact verified nrf52840dk/nrf52840 profile. Hardware modules and broader pin
-adapters remain planned.
+supports the exact verified nrf52840dk/nrf52840 profile. A vendor-independent module
+catalogue places BME280 I2C/SPI devices and GPIO indicators/buttons under supported local
+parents. Its logical canvas reconstructs devices from source and saves coordinates
+separately. Broader pin adapters and advanced composition remain planned. See the
+[D9 handoff](docs/device-tree-editor-d9-handoff.md) for verified scope and limitations.
 TinyML model/experiment analysis also remains planned.
 
 ## Start
@@ -360,8 +363,23 @@ deletion so an inherited assignment cannot return silently. Read-only PWM/QSPI r
 contribute evidence, and known pin conflicts, reservations and shared controller instances
 are checked. Package pads, solder bridges, electrical suitability and external wiring
 remain unknown. Other pin encodings and opaque source remain available in the source editor.
-D0–D8 are implemented within these scoped limits; D8 verification is recorded in its
-handoff. D9 module recipes and visual placement is the next stage.
+D0–D8 are implemented within these scoped limits; D8 is committed as `cfaf10e` and its
+verification is recorded in its handoff.
+
+The [D9 workflow](docs/device-tree-editor-d9-handoff.md) adds **Load modules** and a
+vendor-independent logical canvas. Place a BME280 I2C/SPI device or GPIO LED/button using
+an explicitly selected existing local bus/group and the actual binding's required fields.
+Software requirements are shown separately. The action adds one leaf to the canonical
+draft; updating/removing a device shares source Undo/Redo and preserves shared parents
+and providers. Handwritten nodes are recognized without recipe conversion. Missing local
+bindings, inherited connections, physical wiring and driver readiness remain unknown.
+
+Select cards and use the directional controls to arrange the graph. **Save layout** stores
+positions separately under `.features/devicetree/module-layouts/`; it does not change the
+overlay or its history. **Review and Save** still publishes firmware source, from which
+the graph is rebuilt on reopen even without layout data. D9 also retains forms, canvas
+positions and keyboard focus during guarded refreshes. Full checks, actual-binding smoke
+and browser verification passed. D10 resource diagnostics and broader removal planning is next.
 
 Acknowledged drafts are retained under `.features/devicetree/drafts/` in the data directory.
 **Find recoverable drafts** compares retained text with current files before an explicit restore;

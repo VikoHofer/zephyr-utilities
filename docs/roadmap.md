@@ -30,7 +30,7 @@ research master plan, not a general coding-assistant integration.
 | Feature | State | Initial implementation direction |
 | --- | --- | --- |
 | Memory Explorer (`memory`) | Available | Existing-build reports, visualization, snapshots and comparisons |
-| Device Tree Editor (`devicetree`) | Existing-overlay editing, local binding/reference and peripheral forms, bounded Nordic pins, reviewed Save/recovery and explicit Configure | D9 module recipes and visual placement next; broader pin adapters remain later |
+| Device Tree Editor (`devicetree`) | Existing-overlay editing, binding/peripheral forms, bounded pins, local module canvas, reviewed Save/recovery and explicit Configure | D0–D9 complete within documented limits; D10 resource diagnostics/removal planning next; broader pin adapters remain later |
 | Project Creator (`projects`) | Applications, creation/build and environment discovery available | Maintain the delivered everyday workflow and add focused public editor handoffs |
 | Build Inspector (`inspector`) | Advanced build, resolved-tree, current source and binding navigation available | Preserve available inspection; further depth deferred |
 | TinyML Experiments (`tinyml`) | Planned | Connect model/build/run identities and compare imported experiment measurements |
@@ -59,8 +59,8 @@ Applications can also be opened before configuration to browse current sources a
 bindings. Conventional include locations are candidates, not configured search paths.
 The Device Tree Editor now supports existing-overlay source and literal property editing,
 local binding-aware properties/references, UART/I2C/SPI and GPIO topology, bounded Nordic
-pin/signal assignment, reviewed Save and draft recovery. Its broader goal is hardware-module
-placement and wider target coverage. Following the delivered everyday
+pin/signal assignment, local hardware-module placement, reviewed Save and draft recovery.
+Its broader goal includes wider target coverage and advanced composition. Following the delivered everyday
 Project Creator workflow, the [Device Tree Editor master plan](device-tree-editor-masterplan.md)
 is the next product direction. It defines D0–D15 with separate implementation prompts
 and exit gates: source-preserving edits and guarded saving first, then peripherals,
@@ -108,8 +108,19 @@ explicit shared-state split and preserve other consumers. Local direct GPIO entr
 symbolic flag controls. Known conflicts and shared controller instances are diagnosed;
 read-only PWM/QSPI evidence is retained. No board drawing, package/electrical guarantee,
 custom-board resolver, module recipe or multi-overlay composition is implied. D8's current
-verification is recorded in the [D8 handoff](device-tree-editor-d8-handoff.md). D9 module
-recipes and visual placement is next.
+verification is recorded in the [D8 handoff](device-tree-editor-d8-handoff.md). D8 is
+committed as `cfaf10e`.
+
+D9 adds a vendor-independent, data-only catalogue for BME280 I2C/SPI devices and GPIO
+LED/button leaves, with a keyboard-accessible logical canvas and binding-aware connection
+forms. It uses supported unique local bus/group declarations and actual provider cells;
+it does not expand D8's inherited pin adapter. Each recipe creates one leaf, and removal
+preserves shared parents and providers. Handwritten nodes are recognized structurally
+without conversion. Source and shared Undo/Redo remain canonical, while separately saved
+layout has its own versioned, scoped records. Software requirements are displayed without
+changing Kconfig. D9 implementation and passed verification are recorded in the
+[D9 handoff](device-tree-editor-d9-handoff.md). D10 resource diagnostics and broader removal
+planning is the next stage when requested.
 
 The [Project Creator and environment analyser master plan](project-creator-masterplan.md)
 provides the earlier shared-context proposal; the editor master plan now defines its

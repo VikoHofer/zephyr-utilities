@@ -6,8 +6,9 @@ HTTP routes and scoped browser modules through an explicit registry.
 
 Memory Explorer, Project Creator's analyser/creation/build workflow, existing-build
 inspection in Build Inspector and limited Device Tree overlay editing are working features.
-The bounded Nordic pin workflow is also implemented. Hardware modules, broader pin
-adapters and TinyML experiments remain planned.
+The bounded Nordic pin workflow and local module catalogue/canvas are also implemented.
+The D9 handoff records passed verification. Broader pin adapters, advanced composition
+and TinyML experiments remain planned.
 
 ## Dependency direction
 
@@ -358,7 +359,34 @@ routes and electrical/package facts remain unknown. No metadata file becomes a b
 The pin panel reuses the draft-observation lifecycle, with explicit loading/cancellation,
 reconciliation, keyboard forms and a selectable table. Source, Undo/Redo, reviewed Save
 and explicit Configure retain their existing boundaries. The [D8 handoff](device-tree-editor-d8-handoff.md)
-records the exact supported profile and current verification. D9 module placement is next.
+records the exact supported profile and current verification. D8 is committed as `cfaf10e`.
+
+D9 adds `ModuleService`, a data-only built-in recipe catalogue and the module canvas.
+Recipes describe BME280 I2C/SPI leaves and GPIO LED/button leaves. The module service
+extends the existing peripheral observation and delegates its canonical commands to D7
+source plans. Required values come from the selected local binding catalogue; recipes
+do not infer inherited buses, routing, provider cells or software configuration. Each
+addition creates one leaf under an existing explicitly selected bus/group. Removal uses
+the existing reference, path and nested-declaration guards and leaves parents/providers
+intact. Consequently, no ownership metadata or exclusive dependency cleanup is required.
+Structural recipe matches are informational for handwritten and generated nodes alike.
+
+The graph is rebuilt from canonical source on every accepted observation. Unique local
+paths produce stable `node:/...` presentation keys; source occurrence IDs remain bound
+to a draft revision. Unmatched local compatible declarations can appear read-only.
+The canvas contains at most 256 nodes, with an explicit truncation diagnostic and no
+dangling edges. It does not claim to represent a complete inherited tree or physical wiring.
+
+`LayoutService` stores schema-version-1 records in the feature-owned `module-layouts`
+directory, independently of firmware, drafts, Undo/Redo and recovery. A scope identifies
+workspace identity, application, overlay path, project/configuration and target.
+Positions are integer grid coordinates from 0 to 31 and use current graph keys only.
+Layout writes require the current module observation and an optimistic layout revision;
+directory locking and atomic replacement protect concurrent application processes.
+Unknown versions and invalid records are preserved. The store permits 256 records,
+256 KiB per record and 256 positions per record; no older layout format needs migration.
+See [ADR 0022](decisions/0022-module-layout-and-source-identity.md) and the
+[D9 handoff](device-tree-editor-d9-handoff.md) for boundaries and verification status.
 
 ## Measurement boundary
 
@@ -384,6 +412,7 @@ or worst-case resource demand. The [research roadmap](roadmap.md) and
 - [ADR 0008: Application source browsing before configuration](decisions/0008-application-source-browsing.md)
 - [ADR 0009: Project navigation and advanced Build Inspector](decisions/0009-project-navigation-and-inspector.md)
 - [ADR 0012: Reviewed local sample cloning](decisions/0012-reviewed-local-sample-cloning.md)
+- [ADR 0022: Module layout and source identity](decisions/0022-module-layout-and-source-identity.md)
 - [Adding a feature](adding-a-feature.md)
 - [HTTP/browser integration contract](platform-contract.md)
 

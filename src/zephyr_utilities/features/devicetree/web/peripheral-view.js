@@ -1,3 +1,4 @@
+import {retainActionFocus} from "./view-focus.js";
 import {bindingTypes, localBindingValue} from "./bindings.js";
 import {createPeripheralSession, peripheralAddress, peripheralFieldValue, peripheralLabel,
   peripheralName, topologyRows} from "./peripherals.js";
@@ -18,15 +19,17 @@ export function mountPeripheralPanel(root, {api, state, workspace, drafts, revea
     if (!handlers.has(node)) handlers.set(node, {}); handlers.get(node)[event] = callback;
   };
   for (const type of ["click", "change", "submit"]) root.addEventListener(type, (event) => {
+    if (type === "submit" || type === "click" && event.target.closest("button")) feedbackHost = locateFeedback(event.target);
     for (let node = event.target; node && node !== root; node = node.parentNode) {
       handlers.get(node)?.[type]?.(event); if (event.cancelBubble) break;
     }
   }, {signal: lifetime.signal});
   const button = (title, action, primary = false) => {
     const node = make("button", title, primary ? "dte-primary" : ""); node.type = "button";
+    node.dataset.focusKey = "button:" + title;
     if (action) listen(node, "click", action); return node;
   };
-  const label = (title, control) => { const node = make("label", title); node.append(control); return node; };
+  const label = (title, control) => { control.dataset.focusKey = "field:" + title; const node = make("label", title); node.append(control); return node; };
   const input = (value = "") => { const node = make("input"); node.type = "text"; node.value = String(value); node.spellcheck = false; node.autocomplete = "off"; return node; };
   const option = (select, value, title) => { const node = make("option", title); node.value = value; select.append(node); return node; };
   const note = (parent, text, className = "dte-muted") => { if (text) parent.append(make("p", text, className)); };
@@ -47,12 +50,33 @@ export function mountPeripheralPanel(root, {api, state, workspace, drafts, revea
   root.append(heading);
   note(root, "Configure supported controllers and devices declared in this overlay. Inherited board topology, pin assignment and hardware modules remain outside these forms. Changes update the working draft; Save and Configure remain separate.");
   root.append(status, error, recovery, diagnostics, controls);
+  const feedbackSections = new Set([detail, groups]);
+  let feedbackHost;
+  let feedbackForm;
+  const localFeedback = document.createElement("p"); localFeedback.setAttribute("role", "status");
+  function locateFeedback(target) {
+    feedbackForm = null;
+    for (let item = target; item && item !== root; item = item.parentNode) {
+      if (item.tagName === "FORM") feedbackForm = item.children[0]?.textContent;
+      if (feedbackSections.has(item)) return item;
+    }
+    return null;
+  }
+  function renderFeedback(view) {
+    if (!feedbackHost) { localFeedback.hidden = true; localFeedback.remove?.(); return; }
+    const destination = [...feedbackHost.querySelectorAll("form")].find((form) => form.children[0]?.textContent === feedbackForm) || feedbackHost;
+    localFeedback.className = view.error ? "dte-error" : "dte-muted";
+    localFeedback.textContent = view.error || view.message || "";
+    localFeedback.hidden = !localFeedback.textContent;
+    if (localFeedback.parentNode !== destination) destination.append(localFeedback);
+  }
   const session = createPeripheralSession({api, state, workspace, drafts, onChange() { render(); onChange?.(); }});
-  function feedback(message) { session.fail(message); reveal?.(error); }
-  async function run(operation) {
-    const captured = workspace(); const token = generation;
-    await operation();
-    if (!disposed && token === generation && workspace() === captured) reveal?.(state.peripheralView.error ? error : status);
+  function feedback(message) { session.fail(message); }
+  function run(operation) {
+    const token = generation; const captured = workspace(); const context = state.data?.id;
+    const draft = state.draftView?.entry?.server?.id;
+    return retainActionFocus(root, operation, () => !disposed && token === generation
+      && captured === workspace() && context === state.data?.id && draft === state.draftView?.entry?.server?.id, lifetime.signal);
   }
   function submit(command, key = selectedKey) { selectedKey = key; return run(() => session.command(command)); }
   function form(parent, title, onSubmit) {
@@ -306,14 +330,15 @@ export function mountPeripheralPanel(root, {api, state, workspace, drafts, revea
     if (disposed) return;
     session.sync(); const view = state.peripheralView;
     status.textContent = view.message || (view.busy ? "Inspecting current local peripherals…" : "Load peripherals to inspect this source revision. No project tools run.");
-    error.hidden = !view.error; error.textContent = view.error; controls.hidden = !view.data;
-    if (rendered !== view.data) {
-      rendered = data = view.data; diagnostics.replaceChildren();
+    error.hidden = !view.error; error.textContent = view.error; controls.hidden = !view.presentation;
+    if (rendered !== view.presentation) {
+      rendered = data = view.presentation; diagnostics.replaceChildren();
       if (data) { diagnosticsFor(diagnostics, data.diagnostics); renderTopology(); renderGroups(); }
     }
+    renderFeedback(view);
     updateDisabled();
   }
   render();
-  return {render, navigate() { generation++; session.clear(); render(); },
+  return {render, navigate() { generation++; feedbackHost = null; session.clear(); render(); },
     dispose() { disposed = true; generation++; lifetime.abort(); session.dispose(); }};
 }

@@ -1,3 +1,4 @@
+import {retainActionFocus} from "./view-focus.js";
 import {createPinSession, gpioKey, pinKey, pinName, selectedFlags, selectedPin} from "./pins.js";
 
 const array = (value) => Array.isArray(value) ? value : [];
@@ -15,15 +16,17 @@ export function mountPinPanel(root, {api, state, workspace, drafts, reveal, onCh
   };
   const listen = (node, event, callback) => { if (!handlers.has(node)) handlers.set(node, {}); handlers.get(node)[event] = callback; };
   for (const type of ["click", "change", "submit"]) root.addEventListener(type, (event) => {
+    if (type === "submit" || type === "click" && event.target.closest("button")) feedbackHost = locateFeedback(event.target);
     for (let node = event.target; node && node !== root; node = node.parentNode) {
       handlers.get(node)?.[type]?.(event); if (event.cancelBubble) break;
     }
   }, {signal: lifetime.signal});
   const button = (text, action, primary = false) => {
     const node = make("button", text, primary ? "dte-primary" : ""); node.type = "button";
+    node.dataset.focusKey = "button:" + text;
     if (action) listen(node, "click", action); return node;
   };
-  const label = (text, control) => { const node = make("label", text); node.append(control); return node; };
+  const label = (text, control) => { control.dataset.focusKey = "field:" + text; const node = make("label", text); node.append(control); return node; };
   const option = (select, value, text) => { const node = make("option", text); node.value = value; select.append(node); return node; };
   const note = (parent, text, className = "dte-muted") => { if (text) parent.append(make("p", text, className)); };
   const permitted = (node, allowed) => { node.dataset.pinAllowed = String(Boolean(allowed)); node.disabled = !allowed; };
@@ -43,12 +46,27 @@ export function mountPinPanel(root, {api, state, workspace, drafts, reveal, onCh
   root.append(heading);
   note(root, "Pin assignment uses a target adapter. The current adapter supports nrf52840dk/nrf52840 with verified local checkout evidence. Default and sleep are separate states. Changes update the working draft; Save and Configure remain separate.");
   root.append(status, error, recovery, diagnostics, controls);
+  const feedbackSections = new Set([signalForm, gpioForm]);
+  let feedbackHost;
+  const localFeedback = document.createElement("p"); localFeedback.setAttribute("role", "status");
+  function locateFeedback(target) {
+    for (let item = target; item && item !== root; item = item.parentNode) if (feedbackSections.has(item)) return item;
+    return null;
+  }
+  function renderFeedback(view) {
+    if (!feedbackHost) { localFeedback.hidden = true; localFeedback.remove?.(); return; }
+    localFeedback.className = view.error ? "dte-error" : "dte-muted";
+    localFeedback.textContent = view.error || view.message || "";
+    localFeedback.hidden = !localFeedback.textContent;
+    if (localFeedback.parentNode !== feedbackHost) feedbackHost.append(localFeedback);
+  }
   const session = createPinSession({api, state, workspace, drafts, onChange() { render(); onChange?.(); }});
-  function feedback(message) { session.fail(message); reveal?.(error); }
-  async function run(operation) {
-    const captured = workspace(); const token = generation;
-    await operation();
-    if (!disposed && token === generation && workspace() === captured) reveal?.(state.pinView.error ? error : status);
+  function feedback(message) { session.fail(message); }
+  function run(operation) {
+    const token = generation; const captured = workspace(); const context = state.data?.id;
+    const draft = state.draftView?.entry?.server?.id;
+    return retainActionFocus(root, operation, () => !disposed && token === generation
+      && captured === workspace() && context === state.data?.id && draft === state.draftView?.entry?.server?.id, lifetime.signal);
   }
   function submit(command) { return run(() => session.command(command)); }
   function guarded(action) { return () => { try { action(); } catch (error) { feedback(error.message); } }; }
@@ -117,7 +135,7 @@ export function mountPinPanel(root, {api, state, workspace, drafts, reveal, onCh
     }
     const canChange = () => controller.editable !== false && selected.editable !== false && Boolean(role)
       && assignment?.editable !== false && (!selected.shared || shared.checked);
-    const assign = button(assignment ? "Reassign signal in draft" : "Assign signal to draft", null, true); assign.type = "submit";
+    const assign = button(assignment ? "Reassign signal in draft" : "Assign signal to draft", null, true); assign.type = "submit"; assign.dataset.focusKey = "signal-apply";
     const unassign = button("Unassign signal from draft", guarded(() => {
       if (!canChange() || !assignment) throw new Error("Choose an editable assigned signal and explicitly split a shared state before removing it.");
       void submit({kind: "pin_unassign", controller: controller.id, state: selected.name, role, split_shared: Boolean(selected.shared && shared.checked)});
@@ -204,9 +222,9 @@ export function mountPinPanel(root, {api, state, workspace, drafts, reveal, onCh
   function render() {
     if (disposed) return; session.sync(); const view = state.pinView;
     status.textContent = view.message || (view.busy ? "Inspecting target pin evidence…" : "Load pin assignments to inspect this source revision. No project tools run.");
-    error.hidden = !view.error; error.textContent = view.error; controls.hidden = !view.data?.supported;
-    if (rendered !== view.data) {
-      rendered = data = view.data; diagnostics.replaceChildren();
+    error.hidden = !view.error; error.textContent = view.error; controls.hidden = !view.presentation?.supported;
+    if (rendered !== view.presentation) {
+      rendered = data = view.presentation; diagnostics.replaceChildren();
       if (data) {
         note(diagnostics, data.target ? `Selected target: ${data.target}` : "No exact target is established for this context.");
         diagnosticsFor(diagnostics, data.diagnostics);
@@ -214,9 +232,10 @@ export function mountPinPanel(root, {api, state, workspace, drafts, reveal, onCh
         else { renderSignal(); renderGpio(); renderTable(); }
       }
     }
+    renderFeedback(view);
     updateDisabled();
   }
   render();
-  return {render, navigate() { generation++; session.clear(); render(); },
+  return {render, navigate() { generation++; feedbackHost = null; session.clear(); render(); },
     dispose() { disposed = true; generation++; lifetime.abort(); session.dispose(); }};
 }

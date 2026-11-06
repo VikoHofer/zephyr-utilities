@@ -1,16 +1,27 @@
 /** Revision-bound metadata and commands share the canonical draft lifecycle. */
 const PREFIX = "/api/devicetree/editor/drafts/";
 
+/** Presentation survives a reviewed Save's new context identity for the same document. */
+export function draftPresentationScope(state, workspace) {
+  const context = state.data; const current = state.draftView?.entry;
+  if (!current?.server || context?.workspace !== workspace) return null;
+  const subject = context.application?.path ? [context.workspace_identity, context.application.path,
+    context.application.identity, context.project?.id, context.configuration?.id, context.target?.requested] : context.id;
+  return JSON.stringify([workspace, subject, current.path, current.server.document_id, current.server.id]);
+}
+
 export function createDraftObservationSession({api, state, workspace, drafts, onChange,
   route, stateKey, labels, validResponse = (data) => Array.isArray(data.nodes) && Array.isArray(data.targets)}) {
-  const view = state[stateKey] = {busy: false, data: null, error: "", message: "", captured: null};
+  const view = state[stateKey] = {busy: false, data: null, presentation: null, error: "", message: "", captured: null};
   let disposed = false;
   let generation = 0;
   let loading;
   let applying;
   let reconciling;
+  let presented;
   const publish = () => { if (!disposed) onChange(); };
   const entry = () => state.draftView?.entry;
+  const presentationScope = () => draftPresentationScope(state, workspace());
   function capture() {
     const current = entry();
     if (!state.draftView?.ready || !current?.server || state.data?.workspace !== workspace()) return null;
@@ -35,6 +46,9 @@ export function createDraftObservationSession({api, state, workspace, drafts, on
   }
   function sync() {
     if (disposed) return;
+    if (presented && presented !== presentationScope()) {
+      view.presentation = null; presented = null;
+    }
     if (view.captured && (!matches(view.captured) || entry()?.uncertain || entry()?.conflict)) {
       view.data = null; view.captured = null;
       if (!applying) view.message = labels.changed;
@@ -43,7 +57,7 @@ export function createDraftObservationSession({api, state, workspace, drafts, on
   }
   function clear() {
     generation++; loading?.abort(); loading = null; applying = null; reconciling = null;
-    view.busy = false; view.data = null; view.captured = null;
+    view.busy = false; view.data = null; view.presentation = null; view.captured = null; presented = null;
     view.error = ""; view.message = "";
   }
   function cancel() {
@@ -67,7 +81,9 @@ export function createDraftObservationSession({api, state, workspace, drafts, on
           || !validResponse(data)) {
         throw new Error(labels.mismatch);
       }
-      view.data = data; view.captured = captured;
+      // Keep the last observation visible while its replacement is read. Only data
+      // and captured authorize a command; presentation is never a mutation guard.
+      view.data = data; view.captured = captured; view.presentation = data; presented = presentationScope();
       view.message = afterCommand ? labels.updated
         : labels.loaded;
       return true;

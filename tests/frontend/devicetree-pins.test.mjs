@@ -71,6 +71,38 @@ test("typing invalidates loaded pins and prevents a stale mutation", async () =>
   assert.equal(app.commands.length, 0); app.dispose();
 });
 
+test("stale observations retain presentation only within the same draft and context", async () => {
+  const app = harness(); await app.session.load(); const observation = app.state.pinView.data;
+  app.type(source + "/* pending */");
+  assert.equal(app.state.pinView.presentation, observation); assert.equal(app.state.pinView.data, null);
+  app.state.data.revision++; app.session.sync();
+  assert.equal(app.state.pinView.presentation, observation);
+  app.state.data.id = "another-context"; app.session.sync();
+  assert.equal(app.state.pinView.presentation, null);
+  app.dispose();
+});
+
+test("reviewed Save rebinds retain presentation while fresh context metadata is required for commands", async () => {
+  const app = harness();
+  Object.assign(app.state.data, {application: {path: "/workspace/app", identity: [1, 2]}, workspace_identity: [1, 1],
+    project: {id: "project"}, configuration: {id: "configuration"}, target: {requested: "board"}});
+  await app.session.load(); const observed = app.state.pinView.presentation;
+  app.state.data = {...app.state.data, id: "saved-context", revision: 1};
+  app.state.draftView.entry.server.revision++; app.state.draftView.entry.server.sha256 = "saved-hash";
+  app.session.sync();
+  assert.equal(app.state.pinView.data, null); assert.equal(app.state.pinView.presentation, observed);
+  assert.equal(await app.session.command({kind: "pin_assign"}), false);
+  assert.equal(app.commands.length, 0);
+  app.state.data.target = {requested: "another-board"}; app.session.sync();
+  assert.equal(app.state.pinView.presentation, null); app.dispose();
+});
+
+test("changing draft identity clears retained presentation even after source invalidation", async () => {
+  const app = harness(); await app.session.load(); app.type(source + "/* pending */");
+  app.state.draftView.entry.server.id = "another-draft"; app.session.sync();
+  assert.equal(app.state.pinView.presentation, null); app.dispose();
+});
+
 test("a late pin inspection cannot cross a workspace change", async () => {
   const wait = deferred(); const app = harness((api) => async (...args) => { const result = await api(...args); await wait.promise; return result; });
   const loading = app.session.load(); app.workspace("/other"); wait.resolve(); assert.equal(await loading, false);
@@ -261,4 +293,64 @@ test("explicit selector changes preserve keyboard focus without scrolling", asyn
   assert.deepEqual(role.focusOptions, {preventScroll: true});
   change(field(app.root, "GPIO consumer"), gpioKey(app.model.gpio[0]));
   assert.equal(app.root.ownerDocument.activeElement, field(app.root, "GPIO consumer")); app.dispose();
+});
+
+test("pin forms stay mounted and paused during a command refresh without revealing another section", async () => {
+  const wait = deferred(); let reads = 0;
+  const app = harness((api) => async (...args) => { const response = await api(...args); if (++reads > 1) await wait.promise; return response; }, true);
+  await signal(app, "UART_TX", "sleep");
+  const controller = field(app.root, "Controller"); const role = field(app.root, "Signal role");
+  const form = named(app.root, "form", "Peripheral signal assignment");
+  const controls = form.parentNode; const table = app.root.querySelectorAll("details")[0]; table.open = true;
+  await click(app.root, "Reassign signal in draft");
+  assert.equal(app.state.pinView.data, null); assert.equal(app.state.pinView.busy, true);
+  assert.equal(controls.hidden, false); assert.equal(field(app.root, "Controller"), controller);
+  assert.equal(field(app.root, "Signal role"), role); assert.equal(role.disabled, true);
+  assert.equal(app.root.ownerDocument.activeElement, role);
+  assert.match(form.textContent, /Refreshing/); assert.deepEqual(app.reveals, []);
+  wait.resolve(); await settle();
+  assert.equal(field(app.root, "Controller").value, "uart0");
+  assert.equal(field(app.root, "Pin control state").value, "sleep");
+  assert.equal(field(app.root, "Signal role").value, "UART_TX");
+  assert.equal(app.root.ownerDocument.activeElement, field(app.root, "Signal role"));
+  assert.deepEqual(app.root.ownerDocument.activeElement.focusOptions, {preventScroll: true});
+  assert.equal(table.open, true); assert.equal(controls.hidden, false); assert.deepEqual(app.reveals, []);
+  assert.match(form.textContent, /updated/); app.dispose();
+});
+
+test("source typing pauses mounted pin forms and navigation clears them", async () => {
+  const app = harness(undefined, true); await signal(app);
+  const pin = field(app.root, "Signal pin"); pin.value = "0:8";
+  const controls = named(app.root, "form", "Peripheral signal assignment").parentNode;
+  app.type(source + "/* typing */");
+  assert.equal(controls.hidden, false); assert.equal(field(app.root, "Signal pin"), pin);
+  assert.equal(pin.value, "0:8"); assert.equal(pin.disabled, true);
+  app.panel.navigate(); assert.equal(controls.hidden, true); assert.equal(app.state.pinView.presentation, null);
+  assert.deepEqual(app.reveals, []); app.dispose();
+});
+
+test("pin validation feedback appears beside its form without scrolling", async () => {
+  const app = harness(undefined, true); await signal(app, "UART_RX");
+  await click(app.root, "Assign signal to draft");
+  assert.match(named(app.root, "form", "Peripheral signal assignment").textContent, /Choose a pin/);
+  assert.deepEqual(app.reveals, []); app.dispose();
+});
+
+test("a completed pin update keeps keyboard focus on its equivalent action", async () => {
+  const app = harness(undefined, true); await signal(app);
+  const apply = named(app.root, "button", "Reassign signal in draft"); apply.focus();
+  await click(app.root, "Reassign signal in draft");
+  const refreshed = named(app.root, "button", "Reassign signal in draft");
+  assert.notEqual(refreshed, apply); assert.equal(app.root.ownerDocument.activeElement, refreshed);
+  assert.deepEqual(refreshed.focusOptions, {preventScroll: true}); assert.deepEqual(app.reveals, []); app.dispose();
+});
+
+test("a pin response does not move focus back after the user leaves its form", async () => {
+  const wait = deferred(); let reads = 0;
+  const app = harness((api) => async (...args) => { const response = await api(...args); if (++reads > 1) await wait.promise; return response; }, true);
+  await signal(app); named(app.root, "button", "Reassign signal in draft").focus();
+  await click(app.root, "Reassign signal in draft");
+  const elsewhere = new Element("input", app.root.ownerDocument); elsewhere.focus();
+  wait.resolve(); await settle();
+  assert.equal(app.root.ownerDocument.activeElement, elsewhere); assert.deepEqual(app.reveals, []); app.dispose();
 });
