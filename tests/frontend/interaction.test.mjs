@@ -13,11 +13,17 @@ function result(overrides = {}) {
   return {element, calls, attributes};
 }
 
-test("requested results become keyboard destinations without animation", () => {
+test("requested destinations retain keyboard focus semantics and use minimal scroll alignment", () => {
   const item = result();
   assert.equal(revealResult(item.element), true);
   assert.equal(item.attributes.get("tabindex"), "-1");
   assert.equal(item.attributes.has("data-reveal-target"), true);
+  assert.deepEqual(item.calls, [["focus", {preventScroll: true}], ["scroll", {behavior: "instant", block: "nearest", inline: "nearest"}]]);
+});
+
+test("intentional route navigation can request top alignment explicitly", () => {
+  const item = result();
+  assert.equal(revealResult(item.element, {block: "start"}), true);
   assert.deepEqual(item.calls, [["focus", {preventScroll: true}], ["scroll", {behavior: "instant", block: "start", inline: "nearest"}]]);
 });
 
@@ -39,9 +45,9 @@ test("a requested nested result opens its disclosures before being revealed", ()
   assert.equal(outer.open, true);
 });
 
-test("an in-place action can retain keyboard focus while revealing nearby results", () => {
+test("an explicit destination can be revealed while retaining an input's keyboard focus", () => {
   const item = result();
-  revealResult(item.element, {focus: false, block: "nearest"});
+  revealResult(item.element, {focus: false});
   assert.deepEqual(item.calls, [["scroll", {behavior: "instant", block: "nearest", inline: "nearest"}]]);
   assert.equal(item.attributes.size, 0);
 });

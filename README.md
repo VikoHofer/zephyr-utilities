@@ -306,6 +306,16 @@ locations are missing or replaced, **Manage saved applications** opens Project C
 to reconnect or remove those entries. Refreshing the picker preserves the open draft
 and never deletes saved history.
 
+Routine editor actions and row selections keep the current reading position and
+keyboard focus. Loading, success and error messages appear beside the action; an
+offscreen result also produces a visible notice. **Open application**, **Open directory**
+and **Open overlay draft** show inline feedback, followed by explicit **Go to overlay
+selection** or **Go to overlay draft** controls. Use those controls when ready to move
+to the destination. During context and draft reads, the previous layout stays visible
+but cannot be edited. Explicit source navigation and review dialogs still open their
+requested destinations. See the [scroll-stability handoff](docs/ui-scroll-stability-handoff.md)
+for the interaction changes and verification.
+
 The [D5 workflow](docs/device-tree-editor-d5-handoff.md) adds **Review Configure** for
 a saved overlay in a registered project/configuration. Review the candidate, selected
 environment and command, then explicitly run Configure. Results retain candidate/input

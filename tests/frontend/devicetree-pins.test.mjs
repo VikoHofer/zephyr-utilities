@@ -21,7 +21,7 @@ function harness(wrap = (api) => api, mount = false) {
   const state = {data: {workspace: "/workspace", id: "context", revision: 1}, draftView: {ready: true,
     entry: {generation: 0, text: source, server: {id: "draft", revision: 0, sha256: "hash0", text: source, syntax: {blocked: false}}}}};
   let workspace = "/workspace"; let session; let panel; let notifications = 0;
-  const calls = []; const commands = []; const reveals = []; const model = fixture();
+  const calls = []; const commands = []; const reveals = []; const toasts = []; const model = fixture();
   const response = () => ({...structuredClone(model), schema_id: "schema" + state.draftView.entry.server.revision,
     draft_id: "draft", revision: state.draftView.entry.server.revision, sha256: state.draftView.entry.server.sha256});
   const notify = () => { notifications++; session?.sync(); panel?.render(); };
@@ -34,9 +34,9 @@ function harness(wrap = (api) => api, mount = false) {
     }, async reconcile() { state.draftView.entry.uncertain = false; notify(); return true; }};
   const root = mount ? new Element("section") : null;
   const options = {api, state, drafts, workspace: () => workspace, onChange: notify};
-  if (mount) panel = mountPinPanel(root, {...options, reveal: (node) => reveals.push(node)});
+  if (mount) panel = mountPinPanel(root, {...options, notify: (message, error) => toasts.push({message, error}), reveal: (node) => reveals.push(node)});
   else session = createPinSession(options);
-  return {state, session, panel, root, drafts, calls, commands, model, response, reveals, options,
+  return {state, session, panel, root, drafts, calls, commands, model, response, reveals, toasts, options,
     notifications: () => notifications,
     workspace(value) { workspace = value; session?.sync(); panel?.navigate(); },
     type(value) { state.draftView.entry.text = value; state.draftView.entry.generation++; notify(); },
@@ -150,7 +150,7 @@ test("GPIO flag selection rejects unknown expressions and contradictory choices"
 
 // Event-bubbling DOM supports form interactions without duplicating browser layout checks.
 class Element {
-  constructor(tag, document) { this.tagName = tag.toUpperCase(); this.ownerDocument = document || {createElement: (name) => new Element(name, this.ownerDocument)};
+  constructor(tag, document) { this.tagName = tag.toUpperCase(); this.ownerDocument = document || {defaultView: {innerHeight: 800, innerWidth: 600}, createElement: (name) => new Element(name, this.ownerDocument)};
     this.children = []; this.parentNode = null; this.dataset = {}; this.attributes = {}; this.listeners = {}; this._text = ""; this._value = null; this.type = ""; this.disabled = false; this.hidden = false; this.checked = false; }
   set textContent(value) { this._text = String(value); this.replaceChildren(); }
   get textContent() { return this._text + this.children.map((child) => child.textContent).join(""); }
@@ -159,6 +159,9 @@ class Element {
   append(...children) { for (const child of children) { child.parentNode = this; this.children.push(child); } }
   replaceChildren(...children) { for (const child of this.children) child.parentNode = null; this.children = []; this.append(...children); }
   setAttribute(name, value) { this.attributes[name] = String(value); }
+  getBoundingClientRect() { return this.ownerDocument.offscreen?.(this)
+    ? {top: 900, bottom: 1200, left: 0, right: 400} : {top: 20, bottom: 40, left: 0, right: 400}; }
+
   focus(options) { this.ownerDocument.activeElement = this; this.focusOptions = options; }
   addEventListener(type, callback, options) { (this.listeners[type] ||= []).push(callback); options?.signal?.addEventListener("abort", () => { this.listeners[type] = this.listeners[type].filter((item) => item !== callback); }); }
   matches(selector) { return this.tagName.toLowerCase() === selector; }
@@ -207,10 +210,11 @@ test("shared state changes require an explicit split before submitting", async (
 
 test("pin table fills a form without changing source and exposes reservations", async () => {
   const app = harness(undefined, true); await signal(app);
+  app.root.ownerDocument.offscreen = (node) => node.tagName === "FORM";
   assert.equal(named(app.root, "button", "P0.09").disabled, false); assert.ok(app.root.textContent.includes("NFC reservation"));
   await click(app.root, "P0.09"); assert.ok(named(app.root, "form", "Peripheral signal assignment").textContent.includes("Reserved: NFC reservation"));
   await click(app.root, "P0.08"); assert.equal(field(app.root, "Signal pin").value, "0:8");
-  assert.equal(app.commands.length, 0); assert.equal(app.reveals.at(-1).tagName, "FORM"); app.dispose();
+  assert.equal(app.commands.length, 0); assert.deepEqual(app.reveals, []); assert.match(app.toasts.at(-1).message, /selected in the controller signal form/); app.dispose();
 });
 
 test("GPIO form preserves observed flags and writes only explicitly selected symbols", async () => {

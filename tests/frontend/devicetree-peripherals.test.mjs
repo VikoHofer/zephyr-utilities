@@ -25,7 +25,7 @@ function harness(wrap = (api) => api, mount = false) {
   const state = {data: {workspace: "/workspace", id: "context", revision: 1}, draftView: {ready: true,
     entry: {generation: 0, text: source, server: {id: "draft", revision: 0, sha256: "hash0", text: source, syntax: {blocked: false}}}}};
   let workspace = "/workspace"; let session; let panel; let extraSync; let notifications = 0;
-  const calls = []; const commands = []; const reveals = []; const model = fixture();
+  const calls = []; const commands = []; const reveals = []; const toasts = []; const model = fixture();
   const response = () => ({...structuredClone(model), schema_id: "schema" + state.draftView.entry.server.revision,
     draft_id: "draft", revision: state.draftView.entry.server.revision, sha256: state.draftView.entry.server.sha256});
   const notify = () => { notifications++; session?.sync(); panel?.render(); extraSync?.(); };
@@ -38,9 +38,9 @@ function harness(wrap = (api) => api, mount = false) {
     }, async reconcile() { state.draftView.entry.uncertain = false; notify(); return true; }};
   const root = mount ? new Element("section") : null;
   const options = {api, state, drafts, workspace: () => workspace, onChange: notify};
-  if (mount) panel = mountPeripheralPanel(root, {...options, reveal: (node) => reveals.push(node)});
+  if (mount) panel = mountPeripheralPanel(root, {...options, notify: (message, error) => toasts.push({message, error}), reveal: (node) => reveals.push(node)});
   else session = createPeripheralSession(options);
-  return {state, session, panel, root, drafts, calls, commands, model, response, reveals, options,
+  return {state, session, panel, root, drafts, calls, commands, model, response, reveals, toasts, options,
     notifications: () => notifications,
     extraSync(value) { extraSync = value; },
     workspace(value) { workspace = value; session?.sync(); panel?.navigate(); },
@@ -162,7 +162,7 @@ test("an unrelated draft command retains paused peripheral presentation until ex
 
 // Minimal event-bubbling DOM for observable panel interactions; server behavior is tested separately.
 class Element {
-  constructor(tag, document) { this.tagName = tag.toUpperCase(); this.ownerDocument = document || {createElement: (name) => new Element(name, this.ownerDocument)};
+  constructor(tag, document) { this.tagName = tag.toUpperCase(); this.ownerDocument = document || {defaultView: {innerHeight: 800, innerWidth: 600}, createElement: (name) => new Element(name, this.ownerDocument)};
     this.children = []; this.parentNode = null; this.dataset = {}; this.attributes = {}; this.listeners = {}; this._text = ""; this._value = null; this.type = ""; this.disabled = false; this.hidden = false; this.checked = false; }
   set textContent(value) { this._text = String(value); this.replaceChildren(); }
   get textContent() { return this._text + this.children.map((child) => child.textContent).join(""); }
@@ -172,6 +172,10 @@ class Element {
   replaceChildren(...children) { for (const child of this.children) child.parentNode = null; this.children = []; this.append(...children); }
   remove() { if (this.parentNode) this.parentNode.children = this.parentNode.children.filter((child) => child !== this); this.parentNode = null; }
   setAttribute(name, value) { this.attributes[name] = String(value); }
+  getBoundingClientRect() { return this.ownerDocument.offscreen?.(this)
+    ? {top: 900, bottom: 1200, left: 0, right: 400} : {top: 20, bottom: 40, left: 0, right: 400}; }
+
+  focus(options) { this.ownerDocument.activeElement = this; this.focusOptions = options; }
   addEventListener(type, callback, options) { (this.listeners[type] ||= []).push(callback); options?.signal?.addEventListener("abort", () => { this.listeners[type] = this.listeners[type].filter((item) => item !== callback); }); }
   matches(selector) { if (selector === "[data-peripheral-field]") return "peripheralField" in this.dataset; return this.tagName.toLowerCase() === selector; }
   querySelectorAll(selector) { const matches = selector.split(",").map((value) => value.trim()); return this.children.flatMap((child) => [...(matches.some((value) => child.matches(value)) ? [child] : []), ...child.querySelectorAll(selector)]); }
@@ -181,7 +185,7 @@ class Element {
 }
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 const named = (root, tag, text) => root.querySelectorAll(tag).find((node) => node.textContent.startsWith(text));
-async function click(root, text) { const node = named(root, "button", text); assert.ok(node, text); assert.equal(node.disabled, false, text + " enabled"); node.dispatch("click"); if (node.type === "submit") node.closest("form").dispatch("submit"); await settle(); return node; }
+async function click(root, text) { const node = named(root, "button", text); assert.ok(node, text); assert.equal(node.disabled, false, text + " enabled"); node.focus(); node.dispatch("click"); if (node.type === "submit") node.closest("form").dispatch("submit"); await settle(); return node; }
 function change(node, value) { node.value = value; node.dispatch("change"); }
 function chosenField(form, name) { return form.querySelectorAll("fieldset").find((node) => node.children[0].textContent === name); }
 function useField(group, value) { const controls = group.querySelectorAll("input, select, textarea"); const include = controls.find((node) => node.type === "checkbox"); include.checked = true; include.dispatch("change"); const input = controls.find((node) => node.type !== "checkbox"); input.value = value; return input; }
@@ -293,5 +297,22 @@ test("peripheral input errors remain beside the submitting form without changing
   const app = harness(undefined, true); await click(app.root, "Load peripherals"); await click(app.root, "I2C · /i2c");
   app.reveals.length = 0; await click(app.root, "Apply controller properties");
   assert.match(named(app.root, "form", "Controller properties").textContent, /Select at least one controller field/);
+  assert.deepEqual(app.reveals, []); assert.equal(app.commands.length, 0); app.dispose();
+});
+
+test("peripheral selection and provider entry addition stay in place with offscreen confirmation", async () => {
+  const app = harness(undefined, true); await click(app.root, "Load peripherals");
+  app.root.ownerDocument.offscreen = (node) => ["dte-peripheral-detail", "dte-binding-reference-row"].includes(node.className);
+  app.root.scrollTop = 650; const controller = await click(app.root, "I2C · /i2c");
+  assert.equal(app.root.ownerDocument.activeElement, controller); assert.equal(app.root.scrollTop, 650);
+  assert.equal(app.toasts.at(-1).message, "Details for /i2c are ready below.");
+  const child = await click(app.root, "sensor@20"); assert.equal(app.root.ownerDocument.activeElement, child);
+  assert.equal(app.toasts.at(-1).message, "Details for /i2c/sensor@20 are ready below.");
+  await click(app.root, "BUTTON · /buttons"); const before = app.root.querySelectorAll("select").length;
+  const add = await click(app.root, "Add provider entry");
+  assert.equal(app.root.querySelectorAll("select").length, before + 1);
+  assert.equal(app.toasts.at(-1).message, "Provider entry added to the form.");
+  assert.equal(app.root.ownerDocument.activeElement, add); assert.equal(app.root.scrollTop, 650);
+  const count = app.toasts.length; app.panel.render(); app.panel.render(); assert.equal(app.toasts.length, count);
   assert.deepEqual(app.reveals, []); assert.equal(app.commands.length, 0); app.dispose();
 });

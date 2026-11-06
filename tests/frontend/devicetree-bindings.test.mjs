@@ -1,21 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import {mountBindingPanel} from "../../src/zephyr_utilities/features/devicetree/web/binding-view.js";
 import {bindingEnumValue, bindingValue, createBindingSession, localBindingValue, unsignedCells} from "../../src/zephyr_utilities/features/devicetree/web/bindings.js";
 
 const original = '/ { test: device { compatible = "example,device"; }; };\n';
 function deferred() { let resolve; let reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return {promise, resolve, reject}; }
-function harness(wrap = (api) => api) {
+function harness(wrap = (api) => api, mount = false) {
   const state = {data: {id: "context", revision: 1, workspace: "/workspace"}, draftView: {ready: true,
     entry: {generation: 0, text: original, server: {id: "draft", revision: 0, sha256: "hash0", text: original, syntax: {blocked: false}}}}};
-  let workspace = "/workspace"; let session; let notifications = 0;
-  const calls = []; const commands = [];
+  let workspace = "/workspace"; let session; let panel; let notifications = 0;
+  const calls = []; const commands = []; const reveals = []; const toasts = [];
   const response = () => ({schema_id: "schema" + state.draftView.entry.server.revision, draft_id: "draft",
     revision: state.draftView.entry.server.revision, sha256: state.draftView.entry.server.sha256,
     nodes: [{node_id: "node", name: "device", path: "/device", labels: ["test"],
       binding: {state: "matched", path: "/workspace/dts/bindings/example.yaml"},
       properties: [{name: "rate", type: "int", default: 10, required: true, local: null, editable: true}]}],
     targets: [{id: "node", reference: "&test", label: "test", path: "/device", cells: {gpio: ["pin", "flags"]}}], diagnostics: []});
-  const publish = () => { notifications++; session?.sync(); };
+  const publish = () => { notifications++; session?.sync(); panel?.render(); };
   const api = wrap(async (url, {body}) => { calls.push({url, body}); return response(); });
   const drafts = {pending: () => state.draftView.entry.text !== state.draftView.entry.server.text,
     async command(command) {
@@ -25,11 +26,15 @@ function harness(wrap = (api) => api) {
         sha256: "hash" + (entry.server.revision + 1)};
       entry.text = entry.server.text; publish(); return true;
     }};
-  session = createBindingSession({api, state, drafts, workspace: () => workspace, onChange: publish});
-  return {session, state, drafts, calls, commands, response, notifications: () => notifications,
-    workspace(value) { workspace = value; session.sync(); },
-    type(value) { state.draftView.entry.text = value; state.draftView.entry.generation++; session.sync(); },
-    dispose() { session.dispose(); }};
+  const options = {api, state, drafts, workspace: () => workspace, onChange: publish};
+  const root = mount ? new Element("section") : null;
+  if (mount) panel = mountBindingPanel(root, {...options, notify: (message, error) => toasts.push({message, error}),
+    reveal: (...args) => reveals.push(args)});
+  else session = createBindingSession(options);
+  return {session, panel, root, state, drafts, calls, commands, response, reveals, toasts, notifications: () => notifications,
+    workspace(value) { workspace = value; session?.sync(); panel?.navigate(); },
+    type(value) { state.draftView.entry.text = value; state.draftView.entry.generation++; session?.sync(); panel?.render(); },
+    dispose() { session?.dispose(); panel?.dispose(); }};
 }
 
 test("binding inspection is explicit and never materializes required/default values", async () => {
@@ -249,4 +254,62 @@ test("local schema values do not substitute defaults or fabricate opaque values"
   assert.equal(localBindingValue({type: "boolean", local: {value: {kind: "boolean", value: null}}}), true);
   assert.deepEqual(localBindingValue({type: "phandle-array", local: {parsed: [{reference: "&provider", cells: [4]}]}}), [{reference: "&provider", cells: [4]}]);
   assert.equal(localBindingValue({type: "int", local: {parsed: null}}), null);
+});
+
+
+class Element {
+  constructor(tag, document) {
+    this.tagName = tag.toUpperCase(); this.ownerDocument = document || {activeElement: null, defaultView: {innerHeight: 800, innerWidth: 600}, createElement: (name) => new Element(name, this.ownerDocument)};
+    if (!document) this.ownerDocument.root = this;
+    this.children = []; this.parentNode = null; this.dataset = {}; this.attributes = {}; this.listeners = {};
+    this._text = ""; this._value = null; this.disabled = false; this.hidden = false; this.type = ""; this.scrollTop = 0;
+  }
+  set textContent(value) { this._text = String(value); this.replaceChildren(); }
+  get textContent() { return this._text + this.children.map((child) => child.textContent).join(""); }
+  set value(value) { this._value = String(value); }
+  get value() { return this._value ?? (this.tagName === "SELECT" ? this.children[0]?.value || "" : ""); }
+  append(...children) { for (const child of children) { child.remove(); child.parentNode = this; this.children.push(child); } }
+  replaceChildren(...children) { for (const child of this.children) child.parentNode = null; this.children = []; this.append(...children); }
+  remove() { if (this.parentNode) this.parentNode.children = this.parentNode.children.filter((child) => child !== this); this.parentNode = null; }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getBoundingClientRect() { return this.ownerDocument.offscreen?.(this)
+    ? {top: 900, bottom: 1200, left: 0, right: 400} : {top: 20, bottom: 40, left: 0, right: 400}; }
+
+  focus(options) { if (!this.disabled && !this.hidden) { this.ownerDocument.activeElement = this; this.focusOptions = options; } }
+  addEventListener(type, callback, options) { (this.listeners[type] ||= []).push(callback); options?.signal?.addEventListener("abort", () => { this.listeners[type] = this.listeners[type].filter((item) => item !== callback); }); }
+  matches(selector) { return selector === "[hidden]" ? this.hidden : this.tagName.toLowerCase() === selector; }
+  querySelectorAll(selector) {
+    const selectors = selector.split(",").map((value) => value.trim());
+    const nodes = this.children.flatMap((child) => [...(selectors.some((value) => child.matches(value)) ? [child] : []), ...child.querySelectorAll(selector)]);
+    return Object.assign({length: nodes.length, [Symbol.iterator]: () => nodes[Symbol.iterator]()}, nodes);
+  }
+  closest(selector) { for (let item = this; item; item = item.parentNode) if (item.matches(selector)) return item; return null; }
+  dispatch(type) { const event = {target: this, cancelBubble: false, preventDefault() {}}; for (let item = this; item; item = item.parentNode) for (const callback of item.listeners[type] || []) callback(event); }
+}
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+const named = (root, tag, text) => Array.from(root.querySelectorAll(tag)).find((node) => node.textContent.startsWith(text));
+const field = (root, text) => named(root, "label", text).children[0];
+async function click(root, text) {
+  const node = named(root, "button", text); assert.ok(node, text); assert.equal(node.disabled, false, text + " enabled");
+  node.focus(); node.dispatch("click"); if (node.type === "submit") node.closest("form").dispatch("submit"); await settle(); return node;
+}
+function change(node, value) { node.value = value; node.dispatch("change"); }
+
+
+test("adding binding reference and array entries keeps focus and announces only offscreen additions", async () => {
+  for (const [type, extra, title, message] of [["phandles", {}, "Add reference entry", "Reference entry added to the property form."],
+    ["array", {enum: [1, 2, 3]}, "Add array entry", "Array entry added to the property form."]]) {
+    const app = harness((api) => async (...args) => {
+      const result = await api(...args); result.nodes[0].properties = [{name: "values", type, editable: true, local: null, ...extra}]; return result;
+    }, true);
+    await click(app.root, "Load binding properties"); change(field(app.root, "Binding property"), "values");
+    app.root.scrollTop = 650; app.root.ownerDocument.offscreen = (node) => node.className === "dte-binding-reference-row";
+    const before = app.root.querySelectorAll("select").length; const trigger = await click(app.root, title);
+    assert.equal(app.root.querySelectorAll("select").length, before + 1);
+    assert.deepEqual(app.toasts, [{message, error: false}]); assert.deepEqual(app.reveals, []);
+    assert.equal(app.root.ownerDocument.activeElement, trigger); assert.equal(app.root.scrollTop, 650);
+    app.panel.render(); app.panel.render(); assert.equal(app.toasts.length, 1);
+    app.root.ownerDocument.offscreen = () => false; await click(app.root, title); assert.equal(app.toasts.length, 1);
+    assert.equal(app.commands.length, 0); app.dispose();
+  }
 });

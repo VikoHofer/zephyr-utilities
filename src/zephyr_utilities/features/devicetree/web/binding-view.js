@@ -1,3 +1,4 @@
+import {announceResult} from "./view-feedback.js";
 import {retainActionFocus} from "./view-focus.js";
 import {bindingEnumValue, bindingTypes, bindingValue, createBindingSession, localBindingValue} from "./bindings.js";
 import {nodeSelection, restoreNodeSelection} from "./drafts.js";
@@ -6,7 +7,7 @@ const array = (value) => Array.isArray(value) ? value : [];
 const present = (value) => value !== undefined && value !== null;
 const display = (value) => typeof value === "string" ? value : JSON.stringify(value);
 
-export function mountBindingPanel(root, {api, state, workspace, drafts, reveal, onChange}) {
+export function mountBindingPanel(root, {api, state, workspace, drafts, notify, onChange}) {
   const document = root.ownerDocument;
   const lifetime = new AbortController();
   let disposed = false;
@@ -84,12 +85,23 @@ export function mountBindingPanel(root, {api, state, workspace, drafts, reveal, 
   const session = createBindingSession({api, state, workspace, drafts, onChange() { render(); onChange?.(); }});
   function selectedNode() { return array(data?.nodes)[selectedIndex]; }
   function selectedProperty() { return array(selectedNode()?.properties).find((item) => item.name === selectedName); }
-  function feedback(message) { session.fail(message); }
+  function feedback(message) { session.fail(message); announceFeedback(); }
+  function announceFeedback() {
+    if (disposed) return;
+    announceResult(feedbackHost ? localFeedback : state.bindingView.error ? error : status, notify,
+      {error: Boolean(state.bindingView.error)});
+  }
   function run(operation) {
     const token = generation; const captured = workspace(); const context = state.data?.id;
-    const draft = state.draftView?.entry?.server?.id;
-    return retainActionFocus(root, operation, () => !disposed && token === generation
-      && captured === workspace() && context === state.data?.id && draft === state.draftView?.entry?.server?.id, lifetime.signal);
+    const draft = state.draftView?.entry?.server?.id; const localGeneration = state.draftView?.entry?.generation;
+    const current = () => !disposed && token === generation && captured === workspace()
+      && context === state.data?.id && draft === state.draftView?.entry?.server?.id
+      && localGeneration === state.draftView?.entry?.generation;
+    return retainActionFocus(root, async () => {
+      const result = await operation();
+      if (current()) announceFeedback();
+      return result;
+    }, current, lifetime.signal);
   }
   function submit(command) { return run(() => session.command(command)); }
   function message(parent, text, className = "dte-muted") { if (text) parent.append(element("p", className, text)); }
@@ -130,7 +142,7 @@ export function mountBindingPanel(root, {api, state, workspace, drafts, reveal, 
       populate(initial.cells || []);
       listen(select, "change", () => populate());
       wrapper.append(group);
-      if (explicit) reveal?.(group);
+      if (explicit) announceResult(group, notify, {message: "Reference entry added to the property form."});
     }
     for (const entry of array(current)) add(entry);
     if (!rows.length) add();
@@ -165,7 +177,7 @@ export function mountBindingPanel(root, {api, state, workspace, drafts, reveal, 
           const group = element("div", "dte-binding-reference-row"); const select = enumSelect(value);
           const row = {group, select}; rows.push(row);
           group.append(label("Array entry", select), button("Remove entry", () => { rows.splice(rows.indexOf(row), 1); group.remove(); }));
-          wrapper.append(group); if (explicit) reveal?.(group);
+          wrapper.append(group); if (explicit) announceResult(group, notify, {message: "Array entry added to the property form."});
         };
         for (const value of array(current)) add(value);
         if (!rows.length) add();

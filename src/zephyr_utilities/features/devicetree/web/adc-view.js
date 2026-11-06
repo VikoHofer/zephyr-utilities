@@ -1,9 +1,10 @@
+import {announceResult} from "./view-feedback.js";
 import {retainActionFocus} from "./view-focus.js";
 import {createADCSession, adcChannel, adcConfig, adcEntry, adcRows} from "./adc.js";
 
 const array = (value) => Array.isArray(value) ? value : [];
 
-export function mountADCPanel(root, {api, state, workspace, drafts, reveal, onChange, onRemove}) {
+export function mountADCPanel(root, {api, state, workspace, drafts, notify, onChange, onRemove}) {
   const document = root.ownerDocument; const lifetime = new AbortController(); const handlers = new WeakMap();
   let disposed = false; let generation = 0; let rendered; let data; let selectedKey = ""; let feedbackHost; let feedbackForm;
   const make = (tag, text, className = "") => {
@@ -56,12 +57,10 @@ export function mountADCPanel(root, {api, state, workspace, drafts, reveal, onCh
     localFeedback.className = view.error ? "dte-error" : "dte-muted";
     if (localFeedback.parentNode !== destination) destination.append(localFeedback);
   }
-  function revealFeedback() {
-    if (disposed || !feedbackHost || localFeedback.hidden || !localFeedback.parentNode) return;
-    const bounds = localFeedback.getBoundingClientRect?.(); const viewport = document.defaultView;
-    if (bounds && viewport && bounds.top >= 0 && bounds.bottom <= viewport.innerHeight
-        && bounds.left >= 0 && bounds.right <= viewport.innerWidth) return;
-    reveal?.(localFeedback, {focus: false, block: "nearest"});
+  function announceFeedback() {
+    if (disposed) return;
+    announceResult(feedbackHost ? localFeedback : state.adcView.error ? error : status, notify,
+      {error: Boolean(state.adcView.error)});
   }
   const session = createADCSession({api, state, workspace, drafts, onChange() { render(); onChange?.(); }});
   function run(operation, {focusResult = false} = {}) {
@@ -85,7 +84,7 @@ export function mountADCPanel(root, {api, state, workspace, drafts, reveal, onCh
           const active = document.activeElement;
           if (result && focusResult && !focusMoved && (!document.hasFocus || document.hasFocus())
               && (!active || active === document.body || active === originalFocus)) detail.focus?.({preventScroll: true});
-          revealFeedback();
+          announceFeedback();
         }
         return result;
       } finally { focusLifetime.abort(); }
@@ -99,7 +98,7 @@ export function mountADCPanel(root, {api, state, workspace, drafts, reveal, onCh
     const node = make("form", undefined, "dte-peripheral-form"); node.append(make("h4", title)); parent.append(node);
     listen(node, "submit", (event) => {
       event.preventDefault();
-      try { action(); } catch (error) { session.fail(error.message); revealFeedback(); }
+      try { action(); } catch (error) { session.fail(error.message); announceFeedback(); }
     }); return node;
   }
   function apply(parent, title, allowed) {
@@ -144,7 +143,7 @@ export function mountADCPanel(root, {api, state, workspace, drafts, reveal, onCh
       try { await onRemove(row.node_id, remove); }
       catch (error) {
         if (!disposed && token === generation && captured === workspace() && context === state.data?.id
-          && draft === state.draftView?.entry?.server?.id) { session.fail(error.message || String(error)); revealFeedback(); }
+          && draft === state.draftView?.entry?.server?.id) { session.fail(error.message || String(error)); announceFeedback(); }
       } finally { reviewing = false; remove.textContent = title; }
     });
     detail.append(remove); note(detail, "Review known dependencies before removing this source node. Shared providers are retained.");
@@ -197,7 +196,8 @@ export function mountADCPanel(root, {api, state, workspace, drafts, reveal, onCh
       const title = {provider: "ADC provider", channel: "ADC channel", consumer: "ADC consumer"}[row.kind];
       const item = make("li"); const select = button(`${title} · ${row.node.path || row.node.name || row.node.reference}`, () => {
         if (selectedKey === row.key) return;
-        selectedKey = row.key; renderSelection(); reveal?.(detail);
+        selectedKey = row.key; renderSelection();
+        announceResult(detail, notify, {message: `Details for ${row.node.path || row.node.name || row.node.reference} are ready below.`});
       }); select.dataset.adcKey = row.key; item.append(select); topology.append(item);
     }
     if (!topology.children.length) { const item = make("li"); note(item, "No local ADC providers, channels or consumers were identified. Use source editing to add a supported local declaration."); topology.append(item); }

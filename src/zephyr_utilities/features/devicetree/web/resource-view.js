@@ -1,3 +1,4 @@
+import {announceResult} from "./view-feedback.js";
 import {createRemovalSession, createResourceSession} from "./resources.js";
 
 const array = (value) => Array.isArray(value) ? value : [];
@@ -7,7 +8,7 @@ const diagnosticTitles = {"gpio-conflict": "GPIO pin use", "bus-address-conflict
   "binding-coverage": "Binding coverage", "unresolved-reference": "Reference target", "ambiguous-reference": "Ambiguous reference",
   "required-property-unknown": "Required property", "pin-conflict": "Pin use", "pin-reserved": "Reserved pin"};
 
-export function mountResourcePanel(root, {api, state, workspace, drafts, onChange, reveal, onSource}) {
+export function mountResourcePanel(root, {api, state, workspace, drafts, onChange, notify, onSource}) {
   const document = root.ownerDocument; const lifetime = new AbortController(); const handlers = new WeakMap();
   let disposed = false; let navigation = 0; let rendered; let shownReview; let trigger; let restoreOnClose = true; let selectedKey = "";
   const sourceButtons = []; const repairInputs = new Map();
@@ -225,12 +226,12 @@ export function mountResourcePanel(root, {api, state, workspace, drafts, onChang
   async function reviewRemoval(nodeId, sourceTrigger) {
     const before = stamp(); const token = navigation; trigger = sourceTrigger || review; restoreOnClose = true;
     if (!state.resourceView.data && !await resources.load()) {
-      if (!disposed && token === navigation && before === stamp()) reveal?.(error.hidden ? status : error, {focus: true});
+      if (!disposed && token === navigation && before === stamp()) announceResult(error.hidden ? status : error, notify, {error: true});
       return false;
     }
     if (disposed || token !== navigation || before !== stamp()) return false;
     const accepted = await removal.begin(nodeId);
-    if (!disposed && token === navigation && before === stamp() && !accepted) reveal?.(error.hidden ? status : error, {focus: true});
+    if (!disposed && token === navigation && before === stamp() && !accepted) announceResult(error.hidden ? status : error, notify, {error: true});
     return accepted;
   }
   render();

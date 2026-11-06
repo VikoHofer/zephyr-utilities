@@ -1,3 +1,4 @@
+import {announceResult} from "./view-feedback.js";
 import {retainActionFocus} from "./view-focus.js";
 import {createPinSession, gpioKey, pinKey, pinName, selectedFlags, selectedPin} from "./pins.js";
 
@@ -5,7 +6,7 @@ const array = (value) => Array.isArray(value) ? value : [];
 const roleName = (role) => role.replaceAll("_", " ");
 const present = (value) => value !== undefined && value !== null;
 
-export function mountPinPanel(root, {api, state, workspace, drafts, reveal, onChange}) {
+export function mountPinPanel(root, {api, state, workspace, drafts, notify, onChange}) {
   const document = root.ownerDocument; const lifetime = new AbortController(); const handlers = new WeakMap();
   let disposed = false; let generation = 0; let rendered; let data;
   let controllerId = ""; let stateName = "default"; let role = ""; let selectedGpio = "";
@@ -61,12 +62,23 @@ export function mountPinPanel(root, {api, state, workspace, drafts, reveal, onCh
     if (localFeedback.parentNode !== feedbackHost) feedbackHost.append(localFeedback);
   }
   const session = createPinSession({api, state, workspace, drafts, onChange() { render(); onChange?.(); }});
-  function feedback(message) { session.fail(message); }
+  function feedback(message) { session.fail(message); announceFeedback(); }
+  function announceFeedback() {
+    if (disposed) return;
+    announceResult(feedbackHost ? localFeedback : state.pinView.error ? error : status, notify,
+      {error: Boolean(state.pinView.error)});
+  }
   function run(operation) {
     const token = generation; const captured = workspace(); const context = state.data?.id;
-    const draft = state.draftView?.entry?.server?.id;
-    return retainActionFocus(root, operation, () => !disposed && token === generation
-      && captured === workspace() && context === state.data?.id && draft === state.draftView?.entry?.server?.id, lifetime.signal);
+    const draft = state.draftView?.entry?.server?.id; const localGeneration = state.draftView?.entry?.generation;
+    const current = () => !disposed && token === generation && captured === workspace()
+      && context === state.data?.id && draft === state.draftView?.entry?.server?.id
+      && localGeneration === state.draftView?.entry?.generation;
+    return retainActionFocus(root, async () => {
+      const result = await operation();
+      if (current()) announceFeedback();
+      return result;
+    }, current, lifetime.signal);
   }
   function submit(command) { return run(() => session.command(command)); }
   function guarded(action) { return () => { try { action(); } catch (error) { feedback(error.message); } }; }
@@ -205,7 +217,8 @@ export function mountPinPanel(root, {api, state, workspace, drafts, reveal, onCh
         selectedPin(data.pins, pinKey(pin));
         const field = pinDestination === "gpio" ? gpioPin : signalPin; const form = pinDestination === "gpio" ? gpioForm : signalForm;
         if (!field) throw new Error("Choose a controller signal or GPIO consumer before selecting a pin from the table.");
-        field.value = pinKey(pin); handlers.get(field)?.change?.(); reveal?.(form);
+        field.value = pinKey(pin); handlers.get(field)?.change?.();
+        announceResult(form, notify, {message: `${pin.name || pinKey(pin)} selected in the ${pinDestination === "gpio" ? "GPIO" : "controller signal"} form. Apply it to update the draft.`});
       })); permitted(choose, pin.editable !== false); identity.append(choose);
       const facts = [pin.connector, pin.reserved ? "Reserved" : "", pin.reason].filter(Boolean).join(". ") || "Board routing unknown";
       row.append(identity, make("td", facts), make("td", array(pin.uses).join("; ") || "No observed assignment")); body.append(row);

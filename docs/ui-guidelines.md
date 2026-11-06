@@ -26,20 +26,31 @@ chart meaning must also have text, shape or numeric labels, never color alone.
 | Preview files or commands | Focused review dialog with summary and primary next action visible; technical evidence expandable |
 | Start analysis/build/report | Immediate busy state and visible progress; cancellation remains reachable |
 | Finish background work | Update status and offer an explicit way to open the result; preserve what the user is reading |
-| Select a board, node, source or artifact | Reveal the requested detail once if it is elsewhere in the layout |
-| Refresh or filter a catalogue | Show loading/count/empty/error in its own section; retain typing focus |
-| Save/remove a record | Visible confirmation/error and updated local list; restore focus to a useful surviving control |
+| Load an application or overlay into the current view | Show loading/result/error by the trigger; preserve scroll and focus; offer an explicit control to open its editor or details |
+| Select a board, node, source or artifact | Update the detail in place; provide an explicit Show/Open control if the destination is elsewhere |
+| Edit, Undo, Redo, Sync, refresh or filter | Show loading/count/result/empty/error in its own section; preserve scroll and typing focus |
+| Save/remove a record | Visible confirmation/error and updated local list; preserve scroll and restore focus to a useful surviving control |
+| Show source, open details or view a result | Reveal the explicitly requested destination once |
 | Expand optional evidence | Expand next to its disclosure control; do not hide the required next action inside it |
 
-Prefer a nearby result to scrolling. When a result must live elsewhere,
-`context.reveal(element, {focus: true, block: "start"})` focuses and reveals it once,
-without animation. Use `focus: false` when retaining an input's keyboard focus is
-necessary. The helper ignores hidden, closed-dialog and disconnected destinations.
+Ordinary actions preserve the user's reading position and keyboard focus. Put busy,
+success and error feedback by the initiating control. When that feedback cannot remain
+visible, use the fixed shared notice as well as the retained inline message. Do not scroll
+to a status paragraph, a whole editor section or an input error merely because a request
+finished. Offer a clear Show/Open control for a result or next step elsewhere in the page.
+
+Use `context.reveal(element)` for deliberate navigation to a requested destination.
+It focuses the destination without implicit focus scrolling, then uses immediate
+`block: "nearest"` alignment to minimize movement in the page and nested scroll containers.
+Route navigation explicitly uses `block: "start"` for its destination heading. Use
+`focus: false` when retaining an input's keyboard focus is necessary. The helper ignores
+hidden, closed-dialog and disconnected destinations.
 It opens ancestor disclosures for an explicitly requested result.
 Content targets made focusable by the helper do not show a control-style outline.
 Keep visible keyboard focus indicators on buttons, links and other interactive controls.
 
-Call reveal from an explicit action, not from a polling render. After an awaited request,
+Call reveal only for an explicit navigation action, never from a polling render or an
+ordinary action's completion handler. After an awaited navigation request,
 check the feature's lifetime, view, request identity and captured workspace first. Late
 responses must not pull the user back after they navigate, start another action or switch
 workspace. Cancellation and errors follow the same rule.
@@ -57,7 +68,8 @@ Do not rely on a transient notice as the only place to retain a critical error o
 ## Review before shipping
 
 Check keyboard operation, empty/error states and a long scrolled page at desktop and
-600-pixel widths. Verify that the initiating action visibly responds and the next action
-is reachable. Leave/reopen each changed feature, switch workspace during a request, and
+600-pixel widths. Verify that routine actions visibly respond without moving the page,
+and that explicit destination controls reveal their target once. Check page scrolling
+and nested scrolling regions. Leave/reopen each changed feature, switch workspace during a request, and
 confirm background updates preserve focus and reading position. Verify packaged assets
 when adding a shared helper or feature browser file.

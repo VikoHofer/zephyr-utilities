@@ -1,9 +1,10 @@
+import {announceResult} from "./view-feedback.js";
 import {retainActionFocus} from "./view-focus.js";
 import {createInterruptGPIOSession, interruptGPIOEntry, interruptGPIOFlags, interruptGPIORows} from "./interrupt-gpio.js";
 
 const array = (value) => Array.isArray(value) ? value : [];
 
-export function mountInterruptGPIOPanel(root, {api, state, workspace, drafts, reveal, onChange, onRemove}) {
+export function mountInterruptGPIOPanel(root, {api, state, workspace, drafts, notify, onChange, onRemove}) {
   const document = root.ownerDocument; const lifetime = new AbortController(); const handlers = new WeakMap();
   let disposed = false; let generation = 0; let rendered; let data; let selectedKey = ""; let feedbackHost; let feedbackForm;
   const make = (tag, text, className = "") => {
@@ -56,12 +57,10 @@ export function mountInterruptGPIOPanel(root, {api, state, workspace, drafts, re
     localFeedback.className = view.error ? "dte-error" : "dte-muted";
     if (localFeedback.parentNode !== destination) destination.append(localFeedback);
   }
-  function revealFeedback() {
-    if (disposed || !feedbackHost || localFeedback.hidden || !localFeedback.parentNode) return;
-    const bounds = localFeedback.getBoundingClientRect?.(); const viewport = document.defaultView;
-    if (bounds && viewport && bounds.top >= 0 && bounds.bottom <= viewport.innerHeight
-        && bounds.left >= 0 && bounds.right <= viewport.innerWidth) return;
-    reveal?.(localFeedback, {focus: false, block: "nearest"});
+  function announceFeedback() {
+    if (disposed) return;
+    announceResult(feedbackHost ? localFeedback : state.interruptGPIOView.error ? error : status, notify,
+      {error: Boolean(state.interruptGPIOView.error)});
   }
   const session = createInterruptGPIOSession({api, state, workspace, drafts, onChange() { render(); onChange?.(); }});
   function run(operation) {
@@ -72,7 +71,7 @@ export function mountInterruptGPIOPanel(root, {api, state, workspace, drafts, re
       && localGeneration === state.draftView?.entry?.generation;
     return retainActionFocus(root, async () => {
       const result = await operation();
-      if (current()) revealFeedback();
+      if (current()) announceFeedback();
       return result;
     }, current, lifetime.signal);
   }
@@ -81,7 +80,7 @@ export function mountInterruptGPIOPanel(root, {api, state, workspace, drafts, re
     const node = make("form", undefined, "dte-peripheral-form"); node.append(make("h4", title)); parent.append(node);
     listen(node, "submit", (event) => {
       event.preventDefault();
-      try { action(); } catch (error) { session.fail(error.message); revealFeedback(); }
+      try { action(); } catch (error) { session.fail(error.message); announceFeedback(); }
     }); return node;
   }
   function apply(parent, title, allowed) {
@@ -120,7 +119,7 @@ export function mountInterruptGPIOPanel(root, {api, state, workspace, drafts, re
     listen(target, "change", updateProvider); listen(flags, "input", updatePolarity); listen(flags, "change", updatePolarity);
     listen(polarity, "change", () => {
       try { flags.value = String(interruptGPIOFlags(flags.value, polarity.value)); }
-      catch (error) { locateFeedback(polarity); session.fail(error.message); revealFeedback(); }
+      catch (error) { locateFeedback(polarity); session.fail(error.message); announceFeedback(); }
     });
     updateProvider(); updatePolarity();
     return () => interruptGPIOEntry(providers.find((provider) => provider.reference === target.value), {pin: pin.value, flags: flags.value});
@@ -135,7 +134,7 @@ export function mountInterruptGPIOPanel(root, {api, state, workspace, drafts, re
       try { await onRemove(row.node_id, remove); }
       catch (error) {
         if (!disposed && token === generation && captured === workspace() && context === state.data?.id
-          && draft === state.draftView?.entry?.server?.id) { session.fail(error.message || String(error)); revealFeedback(); }
+          && draft === state.draftView?.entry?.server?.id) { session.fail(error.message || String(error)); announceFeedback(); }
       } finally { reviewing = false; remove.textContent = title; }
     });
     detail.append(remove); note(detail, "This review covers the whole consumer node, including its other signals. Shared providers are retained.");
@@ -163,7 +162,8 @@ export function mountInterruptGPIOPanel(root, {api, state, workspace, drafts, re
     for (const row of interruptGPIORows(data)) {
       const item = make("li"); const select = button(`${row.node.path || row.node.name} · ${row.node.property}`, () => {
         if (selectedKey === row.key) return;
-        selectedKey = row.key; renderSelection(); reveal?.(detail);
+        selectedKey = row.key; renderSelection();
+        announceResult(detail, notify, {message: `Details for ${(row.node.path || row.node.name) + " · " + row.node.property} are ready below.`});
       }); select.dataset.interruptGPIOKey = row.key; item.append(select); topology.append(item);
     }
     if (!topology.children.length) {

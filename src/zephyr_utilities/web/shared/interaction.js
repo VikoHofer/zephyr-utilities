@@ -1,5 +1,5 @@
-/** Reveal a requested result once. Passive refreshes must not call this helper. */
-export function revealResult(element, {focus = true, block = "start"} = {}) {
+/** Reveal a requested destination once; ordinary action feedback stays in place. */
+export function revealResult(element, {focus = true, block = "nearest"} = {}) {
   if (!element?.isConnected || element.closest("[hidden], [inert], dialog:not([open])")) return false;
   // A requested result can live inside an optional details section.
   for (let parent = element.parentElement; parent; parent = parent.parentElement) {
@@ -13,6 +13,7 @@ export function revealResult(element, {focus = true, block = "start"} = {}) {
     }
     element.focus({preventScroll: true});
   }
+  // Nearest alignment preserves visible destinations, including nested scrollers.
   // Immediate movement also respects reduced-motion preferences and avoids an
   // animation finishing after the user has already started their next action.
   element.scrollIntoView({behavior: "instant", block, inline: "nearest"});

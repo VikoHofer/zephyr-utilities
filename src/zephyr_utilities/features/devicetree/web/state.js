@@ -125,7 +125,7 @@ export function createEditorSession({api, state, workspace, onChange}) {
       if (!current(captured, path)) return false;
       verifyContext(data, path, expected, intent);
       state.contextRef = {id: data.id, revision: data.revision};
-      state.data = data; state.loading = false; publish();
+      state.data = data; publish();
       await readDocument(data, captured, path, signal);
     } catch (error) {
       if (current(captured, path) && error.name !== "AbortError") state.error = error.message || String(error);

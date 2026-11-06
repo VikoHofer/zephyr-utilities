@@ -12,6 +12,8 @@
       <label>Configuration<select data-dte-configuration><option value="">Original</option></select></label>
       <button type="submit" class="dte-primary" data-dte-open-project>Open application</button>
     </form>
+    <p class="dte-muted" role="status" data-dte-project-feedback hidden></p>
+    <button type="button" data-dte-project-next hidden>Go to overlay selection</button>
     <p class="dte-muted" role="status" data-dte-catalog-status></p>
     <p class="dte-notice" data-dte-unavailable-projects hidden><span data-dte-unavailable-projects-summary></span> <a href="#/projects/applications">Manage saved applications</a></p>
     <p class="dte-error" role="alert" data-dte-catalog-error hidden></p>
@@ -22,6 +24,8 @@
         <label>Application directory<input data-dte-directory type="text" autocomplete="off" spellcheck="false" placeholder="applications/weather-station"></label>
         <button type="submit" data-dte-open-directory>Open directory</button>
       </form>
+      <p class="dte-muted" role="status" data-dte-directory-feedback hidden></p>
+      <button type="button" data-dte-directory-next hidden>Go to overlay selection</button>
       <p class="dte-muted">Opening a directory does not register it or configure the project.</p>
     </details>
   </section>
@@ -37,6 +41,8 @@
         <label>Application overlay<select data-dte-overlay><option value="">Choose an overlay</option></select></label>
         <button type="submit" data-dte-select-overlay>Open overlay draft</button>
       </form>
+      <p class="dte-muted" role="status" data-dte-overlay-feedback hidden></p>
+      <button type="button" data-dte-overlay-next hidden>Go to overlay draft</button>
       <p class="dte-muted" data-dte-overlay-status></p>
       <details class="dte-context-details"><summary>Context and overlay evidence</summary>
       <dl class="dte-facts" data-dte-facts></dl>

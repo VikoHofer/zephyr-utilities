@@ -18,7 +18,7 @@ function harness({mount = false, wrap = (api) => api, onRemove} = {}) {
     entry: {generation: 0, text: source, path: "/workspace/app/app.overlay",
       server: {id: "draft", document_id: "document", revision: 0, sha256: "hash0", text: source, syntax: {blocked: false}}}}};
   let workspace = "/workspace"; let session; let panel; let notifications = 0;
-  const calls = []; const commands = []; const reveals = []; const model = fixture();
+  const calls = []; const commands = []; const reveals = []; const toasts = []; const model = fixture();
   const response = () => ({...structuredClone(model), schema_id: "schema" + state.draftView.entry.server.revision,
     draft_id: "draft", revision: state.draftView.entry.server.revision, sha256: state.draftView.entry.server.sha256});
   const notify = () => { notifications++; session?.sync(); panel?.render(); };
@@ -36,9 +36,9 @@ function harness({mount = false, wrap = (api) => api, onRemove} = {}) {
       entry.text = entry.server.text; notify(); return true;
     }, async reconcile() { state.draftView.entry.uncertain = false; notify(); return true; }};
   const options = {api, state, workspace: () => workspace, drafts, onChange: notify}; const root = mount ? new Element("section") : null;
-  if (mount) panel = mountADCPanel(root, {...options, onRemove, reveal: (node, options) => reveals.push({node, options})});
+  if (mount) panel = mountADCPanel(root, {...options, onRemove, notify: (message, error) => toasts.push({message, error}), reveal: (node, options) => reveals.push({node, options})});
   else session = createADCSession(options);
-  return {state, options, root, panel, session, model, calls, commands, response, drafts, reveals,
+  return {state, options, root, panel, session, model, calls, commands, response, drafts, reveals, toasts,
     notifications: () => notifications,
     workspace(value) { workspace = value; session?.sync(); panel?.navigate(); },
     type(value) { state.draftView.entry.text = value; state.draftView.entry.generation++; notify(); },
@@ -134,7 +134,8 @@ class Element {
   remove() { if (this.parentNode) this.parentNode.children = this.parentNode.children.filter((child) => child !== this); this.parentNode = null; }
   setAttribute(name, value) { this.attributes[name] = String(value); }
   getBoundingClientRect() {
-    return this.attributes.role === "status" && this.ownerDocument.feedbackBounds
+    return this.className === "dte-peripheral-detail" && this.ownerDocument.detailBounds
+      || this.attributes.role === "status" && this.ownerDocument.feedbackBounds
       || {top: 20, bottom: 40, left: 0, right: 400};
   }
   focus(options) { if (!this.disabled && !this.hidden) { this.ownerDocument.activeElement = this; this.focusOptions = options; } }
@@ -169,7 +170,7 @@ test("ADC form values and viewport survive passive renders and pending canonical
   const form = named(app.root, "form", "Edit ADC specifier"); const channel = field(form, "Channel ID"); channel.value = "7"; channel.focus(); app.root.scrollTop = 600;
   app.panel.render(); assert.equal(named(app.root, "form", "Edit ADC specifier"), form); assert.equal(channel.value, "7");
   app.type(source + "/* pending */"); assert.equal(named(app.root, "form", "Edit ADC specifier"), form);
-  assert.equal(channel.disabled, true); assert.equal(channel.value, "7"); assert.equal(app.root.scrollTop, 600); assert.equal(app.reveals.length, 1); app.dispose();
+  assert.equal(channel.disabled, true); assert.equal(channel.value, "7"); assert.equal(app.root.scrollTop, 600); assert.equal(app.reveals.length, 0); app.dispose();
 });
 
 test("ADC refresh retains the current form and shows its result beside the trigger", async () => {
@@ -252,19 +253,19 @@ test("ADC navigation and disposal clear inspection and ignore late removal error
 });
 
 
-test("an explicit ADC form error reveals offscreen feedback once without passive scrolling or focus changes", async () => {
+test("an explicit ADC form error announces offscreen feedback once without passive scrolling or focus changes", async () => {
   const app = harness({mount: true}); await click(app.root, "Load ADC channels"); await click(app.root, "ADC channel · /adc/channel@1");
   app.reveals.length = 0; app.root.ownerDocument.feedbackBounds = {top: 820, bottom: 860, left: 0, right: 400};
   const form = named(app.root, "form", "Edit ADC channel configuration"); field(form, "Encoded acquisition").value = "65536";
   const trigger = await click(app.root, "Apply ADC channel to draft");
-  assert.equal(app.reveals.length, 1); assert.equal(app.reveals[0].node.parentNode, form);
-  assert.match(app.reveals[0].node.textContent, /0 to 65535/);
-  assert.deepEqual(app.reveals[0].options, {focus: false, block: "nearest"});
+  assert.deepEqual(app.reveals, []); assert.equal(app.toasts.length, 1);
+  assert.match(app.toasts[0].message, /0 to 65535/);
+  assert.equal(app.toasts[0].error, true);
   assert.equal(app.root.ownerDocument.activeElement, trigger); assert.equal(app.commands.length, 0);
-  app.panel.render(); app.panel.render(); assert.equal(app.reveals.length, 1); app.dispose();
+  app.panel.render(); app.panel.render(); assert.equal(app.toasts.length, 1); assert.deepEqual(app.reveals, []); app.dispose();
 });
 
-test("ADC async results reveal offscreen feedback only for the still-current explicit action", async () => {
+test("ADC async results announce offscreen feedback only for the still-current explicit action", async () => {
   for (const action of ["current", "source", "workspace", "navigation", "dispose"]) {
     const wait = deferred(); let reads = 0;
     const app = harness({mount: true, wrap: (api) => async (...args) => { const result = await api(...args); if (++reads > 1) await wait.promise; return result; }});
@@ -276,12 +277,12 @@ test("ADC async results reveal offscreen feedback only for the still-current exp
     if (action === "navigation") app.panel.navigate();
     if (action === "dispose") app.dispose();
     wait.resolve(); await settle();
-    assert.equal(app.reveals.length, action === "current" ? 1 : 0, action);
+    assert.deepEqual(app.reveals, []); assert.equal(app.toasts.length, action === "current" ? 1 : 0, action);
     if (action === "current") {
-      assert.match(app.reveals[0].node.textContent, /Draft updated/);
-      assert.deepEqual(app.reveals[0].options, {focus: false, block: "nearest"});
+      assert.match(app.toasts[0].message, /Draft updated/);
+      assert.equal(app.toasts[0].error, false);
       assert.equal(app.root.ownerDocument.activeElement.textContent, "Apply ADC to draft");
-      app.panel.render(); assert.equal(app.reveals.length, 1);
+      app.panel.render(); assert.equal(app.toasts.length, 1); assert.deepEqual(app.reveals, []);
     }
     app.dispose();
   }
@@ -304,4 +305,15 @@ test("successful ADC channel creation focuses the new result only when focus has
     if (!moved) assert.deepEqual(result.focusOptions, {preventScroll: true});
     app.dispose();
   }
+});
+
+
+test("ADC row selection announces offscreen details without moving focus or repeating on render", async () => {
+  const app = harness({mount: true}); await click(app.root, "Load ADC channels");
+  app.root.ownerDocument.detailBounds = {top: 900, bottom: 1200, left: 0, right: 400};
+  app.root.scrollTop = 650; const trigger = await click(app.root, "ADC consumer · /sensor");
+  assert.deepEqual(app.reveals, []); assert.equal(app.toasts.length, 1);
+  assert.match(app.toasts[0].message, /Details for .* are ready below/); assert.equal(app.toasts[0].error, false);
+  assert.equal(app.root.ownerDocument.activeElement, trigger); assert.equal(app.root.scrollTop, 650);
+  app.panel.render(); app.panel.render(); assert.equal(app.toasts.length, 1); app.dispose();
 });

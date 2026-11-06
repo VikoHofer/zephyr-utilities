@@ -20,7 +20,8 @@ within their scoped limits; full/browser/package checks passed in the D11 handof
 D11a is committed as `24e79e6`. D11b adds bounded local ADC consumers and common channel
 configuration; full/browser/package checks passed in the D11b handoff. D11b is committed as
 `2f070ad`. D11c adds three explicit interrupt GPIO consumer profiles; full/browser/package
-checks passed as recorded in the D11c handoff. The editor application picker excludes unavailable
+checks passed as recorded in the D11c handoff. D11c is committed as `40b3c0a`.
+The editor application picker excludes unavailable
 registrations while Projects retains them for reconnect/removal. D11 remains partial;
 its remaining family matrix is in the master plan. Broader pin adapters, advanced composition
 and TinyML experiment analysis remain planned.
@@ -78,10 +79,13 @@ and TinyML experiment analysis remain planned.
 - Use the shared Zephyr purple/blue palette and semantic `--app-*` tokens. See
   [UI guidelines](docs/ui-guidelines.md); do not introduce a separate feature theme.
 - Every explicit action needs visible feedback: a busy label, nearby result, focused
-  review dialog or visible notice. Do not append essential results or next steps below
-  the viewport and leave the user to discover them by scrolling.
-- Use `context.reveal(element, options)` once for a requested result that cannot stay
-  near its trigger. Never move focus or scroll on background polling or passive refresh.
+  review dialog or fixed visible notice. Ordinary load, selection, edit, Undo/Redo, Sync,
+  refresh and Save actions preserve scroll and keyboard focus. Keep feedback by its
+  trigger; offer an explicit Show/Open control for essential results elsewhere.
+- Use `context.reveal(element, options)` once for deliberate navigation to a requested
+  destination. It defaults to nearest alignment; route headings explicitly use start.
+  Do not scroll to routine success/error status or move focus on background polling,
+  passive refresh or ordinary action completion.
 - Keep the decision and primary next action visible in review dialogs; collapse optional
   technical details. Support Escape, keyboard focus, cancellation and return to the trigger.
 - Verify actions from a scrolled page and at narrow widths, including error/empty states,

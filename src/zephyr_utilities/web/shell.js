@@ -183,7 +183,7 @@ async function renderRoute() {
     if (requestedResult || state.resultRoute === route.path) { state.resultRoute = null; return; }
     const root = $("app-main");
     const heading = [...root.querySelectorAll("h1")].find((item) => item.getClientRects().length);
-    revealResult(heading || root);
+    revealResult(heading || root, {block: "start"});
   };
   if (location.hash !== routeHash(route.path)) history.replaceState(null, "", routeHash(route.path));
   const feature = state.features.find((item) => item.id === route.feature);

@@ -1,3 +1,4 @@
+import {announceResult} from "./view-feedback.js";
 import {retainActionFocus} from "./view-focus.js";
 import {bindingTypes, localBindingValue} from "./bindings.js";
 import {createPeripheralSession, peripheralAddress, peripheralFieldValue, peripheralLabel,
@@ -8,7 +9,7 @@ const shown = (value) => typeof value === "string" ? value : JSON.stringify(valu
 const exists = (value) => value !== undefined && value !== null;
 const gpio = (parent) => ["led", "button"].includes(parent.kind);
 
-export function mountPeripheralPanel(root, {api, state, workspace, drafts, reveal, onChange, onRemove}) {
+export function mountPeripheralPanel(root, {api, state, workspace, drafts, notify, onChange, onRemove}) {
   const document = root.ownerDocument; const lifetime = new AbortController(); const handlers = new WeakMap();
   let disposed = false; let generation = 0; let rendered; let data; let selectedKey = "";
   const make = (tag, text, className = "") => {
@@ -71,12 +72,23 @@ export function mountPeripheralPanel(root, {api, state, workspace, drafts, revea
     if (localFeedback.parentNode !== destination) destination.append(localFeedback);
   }
   const session = createPeripheralSession({api, state, workspace, drafts, onChange() { render(); onChange?.(); }});
-  function feedback(message) { session.fail(message); }
+  function feedback(message) { session.fail(message); announceFeedback(); }
+  function announceFeedback() {
+    if (disposed) return;
+    announceResult(feedbackHost ? localFeedback : state.peripheralView.error ? error : status, notify,
+      {error: Boolean(state.peripheralView.error)});
+  }
   function run(operation) {
     const token = generation; const captured = workspace(); const context = state.data?.id;
-    const draft = state.draftView?.entry?.server?.id;
-    return retainActionFocus(root, operation, () => !disposed && token === generation
-      && captured === workspace() && context === state.data?.id && draft === state.draftView?.entry?.server?.id, lifetime.signal);
+    const draft = state.draftView?.entry?.server?.id; const localGeneration = state.draftView?.entry?.generation;
+    const current = () => !disposed && token === generation && captured === workspace()
+      && context === state.data?.id && draft === state.draftView?.entry?.server?.id
+      && localGeneration === state.draftView?.entry?.generation;
+    return retainActionFocus(root, async () => {
+      const result = await operation();
+      if (current()) announceFeedback();
+      return result;
+    }, current, lifetime.signal);
   }
   function submit(command, key = selectedKey) { selectedKey = key; return run(() => session.command(command)); }
   function form(parent, title, onSubmit) {
@@ -120,7 +132,7 @@ export function mountPeripheralPanel(root, {api, state, workspace, drafts, revea
         };
         group.append(label("Provider", target), cells, button("Remove provider entry", () => { rows.splice(rows.indexOf(row), 1); group.remove(); }));
         listen(target, "change", () => populate()); wrapper.append(group); populate(value.cells);
-        if (explicit) reveal?.(group);
+        if (explicit) announceResult(group, notify, {message: "Provider entry added to the form."});
       }
       parent.append(wrapper, button("Add provider entry", () => { add({}, true); updateDisabled(); }));
       for (const value of array(current)) add(value); if (!rows.length) add();
@@ -284,14 +296,16 @@ export function mountPeripheralPanel(root, {api, state, workspace, drafts, revea
     topology.replaceChildren();
     for (const parent of [...array(data.controllers), ...array(data.gpio_groups)]) {
       const item = make("li"); const key = parent.path || parent.name;
-      const select = button(`${parent.kind.toUpperCase()} · ${parent.path || parent.name}`, () => { selectedKey = key; renderSelection(); reveal?.(detail); });
+      const select = button(`${parent.kind.toUpperCase()} · ${parent.path || parent.name}`, () => { selectedKey = key; renderSelection();
+        announceResult(detail, notify, {message: `Details for ${parent.path || parent.name} are ready below.`}); });
       select.dataset.topologyKey = key; item.append(select);
       if (array(parent.diagnostics).length) note(item, `${parent.diagnostics.length} controller or address diagnostic(s).`, "dte-notice");
       const children = make("ul");
       for (const child of array(parent.children)) {
         const childItem = make("li"); const childKey = child.path || `${key}/${child.name}`;
         const childSelect = button(`${child.name}${exists(child.address) ? " · " + (parent.kind === "i2c" ? "address 0x" + child.address.toString(16) : "chip select " + child.address) : ""}`, () => {
-          selectedKey = childKey; renderSelection(); reveal?.(detail);
+          selectedKey = childKey; renderSelection();
+          announceResult(detail, notify, {message: `Details for ${child.path || child.name} are ready below.`});
         });
         childSelect.dataset.topologyKey = childKey; childItem.append(childSelect);
         if (array(child.diagnostics).length) note(childItem, `${child.diagnostics.length} device diagnostic(s).`, "dte-notice");

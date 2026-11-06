@@ -28,8 +28,13 @@ function deferred() {
 function harness(api, state = {}) {
   let path = workspace;
   let publications = 0;
-  const session = createEditorSession({api, state, workspace: () => path, onChange: () => publications++});
-  return {session, state, publications: () => publications, changeWorkspace(value) { path = value; }};
+  const updates = [];
+  const session = createEditorSession({api, state, workspace: () => path, onChange: () => {
+    publications++;
+    updates.push({loading: state.loading, documentLoading: state.documentLoading,
+      contextId: state.data?.id, documentId: state.document?.id});
+  }});
+  return {session, state, updates, publications: () => publications, changeWorkspace(value) { path = value; }};
 }
 
 test("application directories stay inside the workspace without parent traversal", () => {
@@ -86,6 +91,118 @@ test("a selected default overlay is read against the returned context revision a
   assert.deepEqual(calls.at(-1), ["/api/devicetree/editor/document", {workspace, context_id: selected.id,
     expected_revision: 1, document_id: "overlay-a"}]);
   assert.equal(app.state.document.text, '&uart0 { status = "okay"; };\n');
+  app.session.dispose();
+});
+
+test("context loading stays active through every publication until the selected document is ready", async () => {
+  const selected = context({editing_document: overlay()});
+  const pending = deferred(); const started = deferred();
+  const app = harness(async (path) => {
+    if (path.endsWith("/catalog")) return catalog();
+    if (path.endsWith("/document")) { started.resolve(); return pending.promise; }
+    return selected;
+  });
+  await app.session.navigate(); app.updates.length = 0;
+  const opening = app.session.openProject(projectId);
+  await started.promise;
+  assert.equal(app.state.data.id, selected.id);
+  assert.equal(app.state.document, null);
+  assert.equal(app.state.loading, true);
+  assert.equal(app.state.documentLoading, true);
+  assert.equal(app.updates.every((update) => update.loading), true);
+  pending.resolve(document(selected)); await opening;
+  assert.equal(app.state.loading, false);
+  assert.equal(app.state.documentLoading, false);
+  assert.equal(app.state.document.id, selected.editing_document.id);
+  assert.equal(app.updates.filter((update) => !update.loading).every((update) => update.documentId === selected.editing_document.id), true);
+  app.session.dispose();
+});
+
+test("a failed document completes the whole loading operation with its nearby error state", async () => {
+  const selected = context({editing_document: overlay()});
+  const pending = deferred(); const started = deferred();
+  const app = harness(async (path) => {
+    if (path.endsWith("/catalog")) return catalog();
+    if (path.endsWith("/document")) { started.resolve(); return pending.promise; }
+    return selected;
+  });
+  await app.session.navigate();
+  const opening = app.session.openProject(projectId);
+  await started.promise;
+  assert.equal(app.state.loading, true);
+  pending.reject(new Error("Overlay read failed")); await opening;
+  assert.equal(app.state.loading, false);
+  assert.equal(app.state.documentLoading, false);
+  assert.equal(app.state.document, null);
+  assert.equal(app.state.documentError, "Overlay read failed");
+  assert.equal(app.state.data.id, selected.id);
+  app.session.dispose();
+});
+
+test("a cancelled document response cannot complete a newer context's document loading", async () => {
+  const first = context({editing_document: overlay()});
+  const second = context({id: "context-b", configuration: {id: configurationId, name: "Debug", revision: 2},
+    editing_document: overlay("overlay-b")});
+  const pendingFirst = deferred(); const pendingSecond = deferred();
+  const startedFirst = deferred(); const startedSecond = deferred();
+  let firstSignal;
+  const app = harness(async (path, options) => {
+    if (path.endsWith("/catalog")) return catalog();
+    if (path.endsWith("/document")) {
+      if (options.body.context_id === first.id) { firstSignal = options.signal; startedFirst.resolve(); return pendingFirst.promise; }
+      startedSecond.resolve(); return pendingSecond.promise;
+    }
+    return options.body.configuration_id === null ? first : second;
+  });
+  await app.session.navigate();
+  const firstOpening = app.session.openProject(projectId); await startedFirst.promise;
+  const secondOpening = app.session.openProject(projectId, configurationId); await startedSecond.promise;
+  assert.equal(firstSignal.aborted, true);
+  pendingFirst.resolve(document(first)); await firstOpening;
+  assert.equal(app.state.data.id, second.id);
+  assert.equal(app.state.document, null);
+  assert.equal(app.state.loading, true);
+  assert.equal(app.state.documentLoading, true);
+  pendingSecond.resolve(document(second)); await secondOpening;
+  assert.equal(app.state.loading, false);
+  assert.equal(app.state.documentLoading, false);
+  assert.equal(app.state.document.id, second.editing_document.id);
+  app.session.dispose();
+});
+
+test("old workspace document finalizers cannot re-enable a new workspace request", async () => {
+  const first = context({editing_document: overlay()});
+  const selected = {...overlay("other-overlay"), path: "/other/app/other.overlay"};
+  const second = context({id: "other-context", workspace: "/other", project: null, configuration: null,
+    application: {path: "/other/app", availability: {state: "available"}}, documents: [selected], editing_document: selected});
+  const pendingFirst = deferred(); const pendingSecond = deferred();
+  const startedFirst = deferred(); const startedSecond = deferred();
+  const app = harness(async (path, options) => {
+    const other = options.body.workspace === "/other";
+    if (path.endsWith("/catalog")) return other ? {workspace: "/other", projects: [], diagnostics: []} : catalog();
+    if (path.endsWith("/document")) {
+      (other ? startedSecond : startedFirst).resolve();
+      return (other ? pendingSecond : pendingFirst).promise;
+    }
+    return other ? second : first;
+  });
+  await app.session.navigate();
+  const firstOpening = app.session.openProject(projectId); await startedFirst.promise;
+  app.changeWorkspace("/other"); await app.session.navigate();
+  assert.equal(app.state.loading, false);
+  assert.equal(app.state.documentLoading, false);
+  assert.equal(app.state.data, null);
+  const secondOpening = app.session.openApplication("app"); await startedSecond.promise;
+  pendingFirst.resolve(document(first)); await firstOpening;
+  assert.equal(app.state.workspace, "/other");
+  assert.equal(app.state.data.id, second.id);
+  assert.equal(app.state.document, null);
+  assert.equal(app.state.loading, true);
+  assert.equal(app.state.documentLoading, true);
+  pendingSecond.resolve(document(second)); await secondOpening;
+  assert.equal(app.state.loading, false);
+  assert.equal(app.state.documentLoading, false);
+  assert.equal(app.state.document.path, selected.path);
   app.session.dispose();
 });
 

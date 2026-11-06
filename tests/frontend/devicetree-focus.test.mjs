@@ -63,3 +63,46 @@ test("disposal removes pending action listeners immediately and suppresses late 
   app.replace(); finish(true); await running;
   assert.equal(app.document.activeElement, app.document.body);
 });
+
+test("review completion returns focus to its re-enabled trigger without scrolling", async () => {
+  const app = fixture(); const confirm = {parentNode: app.root, dataset: {focusKey: "confirm-save"}};
+  app.document.activeElement = confirm; app.original.disabled = true;
+  let finish; const waiting = new Promise((resolve) => { finish = resolve; });
+  const running = retainActionFocus(app.root, () => waiting, () => true, undefined, {returnTo: app.original});
+  app.callbacks.get("focusin")({target: confirm});
+  app.document.activeElement = app.document.body; app.callbacks.get("focusin")({target: app.document.body});
+  app.original.disabled = false; finish(true);
+  assert.equal(await running, true); assert.equal(app.document.activeElement, app.original);
+  assert.deepEqual(app.original.options, {preventScroll: true}); assert.equal(app.callbacks.size, 0);
+});
+
+test("review completion restores an equivalent replaced trigger and leaves a focused trigger alone", async () => {
+  const app = fixture(); const confirm = {parentNode: app.root}; app.document.activeElement = confirm; let next;
+  await retainActionFocus(app.root, () => { next = app.replace(); }, () => true, undefined, {returnTo: app.original});
+  assert.equal(app.document.activeElement, next); assert.deepEqual(next.options, {preventScroll: true});
+  next.options = undefined;
+  await retainActionFocus(app.root, () => true, () => true, undefined, {returnTo: next});
+  assert.equal(next.options, undefined, "a focused surviving trigger is not refocused");
+});
+
+for (const event of ["focusin", "pointerdown"]) test(`later ${event} suppresses review return focus`, async () => {
+  const app = fixture(); app.document.activeElement = {parentNode: app.root};
+  await retainActionFocus(app.root, () => {
+    app.callbacks.get(event)({target: {}}); app.document.activeElement = app.document.body;
+  }, () => true, undefined, {returnTo: app.original});
+  assert.equal(app.document.activeElement, app.document.body); assert.equal(app.callbacks.size, 0);
+});
+
+test("review navigation, disposal and hidden or disabled triggers suppress restoration", async () => {
+  for (const state of ["navigation", "disposal", "hidden", "disabled", "unrendered"]) {
+    const app = fixture(); const lifetime = new AbortController(); app.document.activeElement = {parentNode: app.root};
+    await retainActionFocus(app.root, () => {
+      app.document.activeElement = app.document.body;
+      if (state === "disposal") lifetime.abort();
+      if (state === "hidden") app.original.closest = (selector) => selector === "[hidden]" ? {} : null;
+      if (state === "disabled") app.original.disabled = true;
+      if (state === "unrendered") app.original.getClientRects = () => [];
+    }, () => state !== "navigation", lifetime.signal, {returnTo: app.original});
+    assert.equal(app.document.activeElement, app.document.body, state); assert.equal(app.callbacks.size, 0, state);
+  }
+});

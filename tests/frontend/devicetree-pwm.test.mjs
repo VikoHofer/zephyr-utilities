@@ -17,7 +17,7 @@ function harness({mount = false, wrap = (api) => api, onRemove} = {}) {
     entry: {generation: 0, text: source, path: "/workspace/app/app.overlay",
       server: {id: "draft", document_id: "document", revision: 0, sha256: "hash0", text: source, syntax: {blocked: false}}}}};
   let workspace = "/workspace"; let session; let panel; let notifications = 0;
-  const calls = []; const commands = []; const reveals = []; const model = fixture();
+  const calls = []; const commands = []; const reveals = []; const toasts = []; const model = fixture();
   const response = () => ({...structuredClone(model), schema_id: "schema" + state.draftView.entry.server.revision,
     draft_id: "draft", revision: state.draftView.entry.server.revision, sha256: state.draftView.entry.server.sha256});
   const notify = () => { notifications++; session?.sync(); panel?.render(); };
@@ -35,9 +35,9 @@ function harness({mount = false, wrap = (api) => api, onRemove} = {}) {
       entry.text = entry.server.text; notify(); return true;
     }, async reconcile() { state.draftView.entry.uncertain = false; notify(); return true; }};
   const options = {api, state, workspace: () => workspace, drafts, onChange: notify}; const root = mount ? new Element("section") : null;
-  if (mount) panel = mountPWMPanel(root, {...options, onRemove, reveal: (node) => reveals.push(node)});
+  if (mount) panel = mountPWMPanel(root, {...options, onRemove, notify: (message, error) => toasts.push({message, error}), reveal: (node) => reveals.push(node)});
   else session = createPWMSession(options);
-  return {state, options, root, panel, session, model, calls, commands, response, drafts, reveals,
+  return {state, options, root, panel, session, model, calls, commands, response, drafts, reveals, toasts,
     notifications: () => notifications,
     workspace(value) { workspace = value; session?.sync(); panel?.navigate(); },
     type(value) { state.draftView.entry.text = value; state.draftView.entry.generation++; notify(); },
@@ -111,7 +111,7 @@ test("PWM selection identity survives revised occurrence ids", () => {
 // Browser-like DOM uses iterable NodeLists and delegated events to exercise panel behavior.
 class Element {
   constructor(tag, document) {
-    this.tagName = tag.toUpperCase(); this.ownerDocument = document || {activeElement: null, createElement: (name) => new Element(name, this.ownerDocument)};
+    this.tagName = tag.toUpperCase(); this.ownerDocument = document || {activeElement: null, defaultView: {innerHeight: 800, innerWidth: 600}, createElement: (name) => new Element(name, this.ownerDocument)};
     if (!document) this.ownerDocument.root = this;
     this.children = []; this.parentNode = null; this.dataset = {}; this.attributes = {}; this.listeners = {};
     this._text = ""; this._value = null; this.disabled = false; this.hidden = false; this.type = ""; this.scrollTop = 0;
@@ -124,6 +124,9 @@ class Element {
   replaceChildren(...children) { for (const child of this.children) child.parentNode = null; this.children = []; this.append(...children); }
   remove() { if (this.parentNode) this.parentNode.children = this.parentNode.children.filter((child) => child !== this); this.parentNode = null; }
   setAttribute(name, value) { this.attributes[name] = String(value); }
+  getBoundingClientRect() { return this.ownerDocument.offscreen?.(this)
+    ? {top: 900, bottom: 1200, left: 0, right: 400} : {top: 20, bottom: 40, left: 0, right: 400}; }
+
   focus(options) { if (!this.disabled && !this.hidden) { this.ownerDocument.activeElement = this; this.focusOptions = options; } }
   addEventListener(type, callback, options) { (this.listeners[type] ||= []).push(callback); options?.signal?.addEventListener("abort", () => { this.listeners[type] = this.listeners[type].filter((item) => item !== callback); }); }
   matches(selector) { return selector === "[hidden]" ? this.hidden : this.tagName.toLowerCase() === selector; }
@@ -165,7 +168,7 @@ test("PWM form values and viewport survive passive renders and pending canonical
   const form = named(app.root, "form", "Edit PWM specifier"); const period = field(form, "Period"); period.value = "1250000"; period.focus(); app.root.scrollTop = 600;
   app.panel.render(); assert.equal(named(app.root, "form", "Edit PWM specifier"), form); assert.equal(period.value, "1250000");
   app.type(source + "/* pending */"); assert.equal(named(app.root, "form", "Edit PWM specifier"), form);
-  assert.equal(period.disabled, true); assert.equal(period.value, "1250000"); assert.equal(app.root.scrollTop, 600); assert.equal(app.reveals.length, 1); app.dispose();
+  assert.equal(period.disabled, true); assert.equal(period.value, "1250000"); assert.equal(app.root.scrollTop, 600); assert.equal(app.reveals.length, 0); app.dispose();
 });
 
 test("PWM refresh retains the current form and shows its result beside the trigger", async () => {
@@ -230,4 +233,13 @@ test("PWM navigation and disposal clear inspection and ignore late removal error
   await click(app.root, "Review PWM consumer removal"); app.panel.navigate(); assert.equal(app.state.pwmView.data, null);
   reject(new Error("Old context")); await settle(); assert.equal(app.state.pwmView.error, "");
   const count = app.calls.length; app.dispose(); named(app.root, "button", "Load PWM consumers").dispatch("click"); await settle(); assert.equal(app.calls.length, count);
+});
+
+test("PWM row selection keeps its trigger focused and announces offscreen details once", async () => {
+  const app = harness({mount: true}); await click(app.root, "Load PWM consumers");
+  app.root.ownerDocument.offscreen = (node) => node.className === "dte-peripheral-detail";
+  app.root.scrollTop = 650; const trigger = await click(app.root, "PWM · /leds/led");
+  assert.deepEqual(app.reveals, []); assert.deepEqual(app.toasts, [{message: "Details for /leds/led are ready below.", error: false}]);
+  assert.equal(app.root.ownerDocument.activeElement, trigger); assert.equal(app.root.scrollTop, 650);
+  app.panel.render(); app.panel.render(); assert.equal(app.toasts.length, 1); app.dispose();
 });

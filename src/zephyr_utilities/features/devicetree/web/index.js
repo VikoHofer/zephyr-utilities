@@ -12,6 +12,7 @@ import {mountPWMPanel} from "./pwm-view.js";
 import {mountADCPanel} from "./adc-view.js";
 import {mountInterruptGPIOPanel} from "./interrupt-gpio-view.js";
 import {retainActionFocus} from "./view-focus.js";
+import {announceResult} from "./view-feedback.js";
 
 const array = (value) => Array.isArray(value) ? value : [];
 const text = (value, fallback = "Unknown") => value == null || value === "" ? fallback : String(value);
@@ -28,6 +29,7 @@ export function mount(host, context) {
   let renderedCatalog;
   let renderedData;
   let renderedDraftControls;
+  let presentedDraft = false;
   let declarationsAvailable = false;
   let session;
   let drafts;
@@ -62,6 +64,15 @@ export function mount(host, context) {
   $("visual-controls").append(visualFeedback);
   for (const name of ["node", "property", "property-name", "property-kind", "property-value", "apply-property", "remove-property", "enable", "disable", "show-source"]) {
     $(name).dataset.focusKey = name;
+  }
+  for (const name of ["open-project", "open-directory", "select-overlay", "recheck", "undo", "redo", "sync", "reconcile", "use-local", "use-server", "source", "save", "compare", "reload", "refresh-recovery", "review-recovery", "validate", "validation-refresh", "validation-cancel"]) {
+    $(name).dataset.focusKey = name;
+  }
+  const feedback = (target, options) => announceResult(target, context.notify, options);
+  function clearOpenFeedback() {
+    for (const name of ["project", "directory", "overlay"]) {
+      $(name + "-feedback").hidden = true; $(name + "-next").hidden = true;
+    }
   }
   function fact(parent, label, value, path = false) {
     const item = node("div");
@@ -541,12 +552,26 @@ export function mount(host, context) {
     validation?.sync();
     if (renderedWorkspace !== state.workspace) {
       renderedWorkspace = state.workspace; renderedCatalog = undefined; renderedData = undefined;
+      presentedDraft = false;
+      clearOpenFeedback();
       if (state.selection?.kind === "project") {
         state.formProjectId = state.selection.project_id; state.formConfigurationId = state.selection.configuration_id;
       } else { state.formProjectId = ""; state.formConfigurationId = null; }
       $("directory").value = state.selection?.kind === "application" ? state.selection.application_path : "";
     }
-    renderCatalog(); renderContext(state.data);
+    renderCatalog();
+    // Keep the previous layout visible but inert during a context read. Hiding
+    // the long draft would clamp the browser's scroll position before it returns.
+    const reading = state.loading || state.documentLoading;
+    $("open-directory").disabled = reading;
+    $("open-directory").textContent = reading && state.selection?.kind === "application" ? "Opening…" : "Open directory";
+    for (const name of ["project", "directory", "overlay"]) $(name + "-next").disabled = reading || !state.data;
+    $("results").inert = reading;
+    $("results").setAttribute("aria-busy", String(reading));
+    $("recheck").textContent = reading ? "Checking…" : "Recheck context";
+    $("select-overlay").textContent = reading ? "Reading…" : "Open overlay draft";
+    if (reading && renderedData) return;
+    renderContext(state.data);
     void drafts?.bind(state.data, state.document);
     $("loading").hidden = !state.loading;
     $("error").hidden = !state.error; $("error").textContent = state.error || "";
@@ -555,9 +580,14 @@ export function mount(host, context) {
     $("open-directory").disabled = state.loading;
     $("open-directory").textContent = state.loading && state.selection?.kind === "application" ? "Opening…" : "Open directory";
     $("recheck").disabled = state.loading || state.documentLoading;
-    $("select-overlay").disabled = state.loading || state.documentLoading || !$("overlay").value;
-    $("select-overlay").textContent = state.documentLoading ? "Reading…" : "Open overlay draft";
+    $("select-overlay").disabled = state.loading || state.documentLoading || state.draftView?.loading || !$("overlay").value;
+    $("select-overlay").textContent = state.documentLoading || state.draftView?.loading ? "Reading…" : "Open overlay draft";
+    $("overlay-next").disabled = !state.draftView?.ready;
+    $("draft-panel").inert = Boolean(state.draftView?.loading);
+    $("draft-panel").setAttribute("aria-busy", String(Boolean(state.draftView?.loading)));
+    if (state.draftView?.loading && presentedDraft) return;
     renderDraft();
+    presentedDraft = Boolean(state.draftView?.ready);
     renderSaving();
     renderValidation();
     bindings?.render();
@@ -569,41 +599,67 @@ export function mount(host, context) {
     interruptGPIO?.render();
     resources?.render();
   }
-  async function action(operation, destination) {
+  async function action(operation, destination, options = {}) {
     const captured = ++actionGeneration;
     const workspace = context.workspace.path;
-    const accepted = await operation();
-    if (disposed || captured !== actionGeneration || workspace !== context.workspace.path) return;
-    if (!accepted && !state.error && !state.documentError && !state.draftView?.error && !draftEntry()?.error) return;
+    const current = () => !disposed && captured === actionGeneration && workspace === context.workspace.path;
+    if (options.open) {
+      if (options.open !== "overlay") {
+        $("overlay-feedback").hidden = true; $("overlay-next").hidden = true;
+      }
+      const status = $(options.open + "-feedback"); status.textContent = "Opening…"; status.className = "dte-muted"; status.hidden = false;
+    }
+    const accepted = await retainActionFocus(root, async () => {
+      const accepted = await operation();
+      if (current() && accepted && options.open && state.data && state.document) {
+        await drafts.bind(state.data, state.document);
+      }
+      return accepted;
+    }, current, lifetime.signal);
+    if (!current()) return;
+    if (!options.open && !accepted && !state.error && !state.documentError && !state.draftView?.error && !draftEntry()?.error) return;
     const target = state.error ? $("error") : state.documentError ? $("source-error")
       : state.draftView?.error || draftEntry()?.error ? $("draft-error")
-        : state.data?.application?.availability?.state !== "available" ? $("overlay-status") : destination();
-    if (target) context.reveal?.(target);
+        : state.data && state.data.application?.availability?.state !== "available" ? $("overlay-status") : destination();
+    if (options.open) {
+      const status = $(options.open + "-feedback");
+      const failed = Boolean(!accepted || state.error || state.documentError || state.draftView?.error || draftEntry()?.error
+        || options.open === "overlay" && !state.draftView?.ready
+        || state.data?.application?.availability?.state !== "available");
+      status.textContent = failed ? target?.textContent || "The application could not be opened."
+        : options.open === "overlay" ? "Overlay opened. The draft is ready below."
+          : "Application opened. Choose an overlay below.";
+      status.className = failed ? "dte-error" : "dte-muted"; status.hidden = false;
+      $(options.open + "-next").hidden = failed;
+      feedback(status, {error: failed});
+    } else if (target) feedback(target, {message: options.message, error: Boolean(state.error || state.documentError || state.draftView?.error || draftEntry()?.error || state.catalogError)});
   }
   const listen = (element, event, callback) => element.addEventListener(event, callback, {signal: lifetime.signal});
   listen($("project"), "change", () => { state.formProjectId = $("project").value; state.formConfigurationId = null; configurations(); });
   listen($("configuration"), "change", () => { state.formConfigurationId = $("configuration").value || null; });
   listen($("project-form"), "submit", (event) => {
     event.preventDefault();
-    void action(() => session.openProject($("project").value, $("configuration").value || null), () => $("draft-panel"));
+    void action(() => session.openProject($("project").value, $("configuration").value || null), () => $("overlay-status"), {open: "project"});
   });
   listen($("directory-form"), "submit", (event) => {
-    event.preventDefault(); void action(() => session.openApplication($("directory").value), () => $("draft-panel"));
+    event.preventDefault(); void action(() => session.openApplication($("directory").value), () => $("overlay-status"), {open: "directory"});
   });
   listen($("overlay"), "change", () => { $("select-overlay").disabled = !$("overlay").value || state.loading || state.documentLoading; });
   listen($("overlay-form"), "submit", (event) => {
-    event.preventDefault(); void action(() => session.selectDocument($("overlay").value), () => $("draft-panel"));
+    event.preventDefault(); void action(() => session.selectDocument($("overlay").value), () => $("draft-status"), {open: "overlay"});
   });
   listen($("refresh-catalog"), "click", () => {
     void action(() => session.catalog(), () => state.catalogError ? $("catalog-error") : null);
   });
-  listen($("recheck"), "click", () => { void action(() => session.revalidate(), () => $("context-panel")); });
+  for (const name of ["project", "directory"]) listen($(name + "-next"), "click", () => context.reveal?.($("overlay")));
+  listen($("overlay-next"), "click", () => context.reveal?.($("draft-panel")));
+  listen($("recheck"), "click", () => { void action(() => session.revalidate(), () => $("overlay-status")); });
   listen($("source"), "input", () => { drafts.type($("source").value); });
-  const history = (kind, keyboard = false) => action(() => drafts[kind](), () => $(keyboard ? "source" : "draft-status"));
+  const history = (kind) => action(() => drafts[kind](), () => $("draft-status"));
   listen($("source"), "keydown", (event) => {
     if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
     const key = event.key.toLowerCase();
-    if (key === "z" || key === "y") { event.preventDefault(); void history(key === "y" || event.shiftKey ? "redo" : "undo", true); }
+    if (key === "z" || key === "y") { event.preventDefault(); void history(key === "y" || event.shiftKey ? "redo" : "undo"); }
   });
   listen($("undo"), "click", () => { void history("undo"); });
   listen($("redo"), "click", () => { void history("redo"); });
@@ -685,13 +741,14 @@ export function mount(host, context) {
   listen($("retained"), "change", () => { $("retained-source").hidden = true; });
   async function savingAction(operation, trigger, {recovery = false} = {}) {
     const captured = ++actionGeneration; const workspace = context.workspace.path;
+    const current = () => !disposed && captured === actionGeneration && workspace === context.workspace.path;
     reviewTrigger = trigger;
-    const accepted = await operation();
-    if (disposed || captured !== actionGeneration || workspace !== context.workspace.path) return;
+    const accepted = await retainActionFocus(root, operation, current, lifetime.signal, {returnTo: trigger});
+    if (!current()) return;
     if (state.saveView.review) return;
-    if (state.saveView.error) context.reveal?.($("draft-error"));
-    else if (recovery) context.reveal?.($(state.saveView.recoveryError ? "recoveries-error" : "recoveries-status"));
-    else if (accepted && state.saveView.message) context.reveal?.($("save-status"));
+    if (state.saveView.error) feedback($("draft-error"), {error: true});
+    else if (recovery) feedback($(state.saveView.recoveryError ? "recoveries-error" : "recoveries-status"), {error: Boolean(state.saveView.recoveryError)});
+    else if (accepted && state.saveView.message) feedback($("save-status"));
   }
   listen($("save"), "click", () => { void savingAction(() => saving.reviewSave(), $("save")); });
   listen($("compare"), "click", () => { void savingAction(() => saving.compare(), $("compare")); });
@@ -719,10 +776,11 @@ export function mount(host, context) {
   listen($("review-delete"), "click", () => { saving.reviewRecoveryDiscard(); });
   async function validationAction(operation, {review = false} = {}) {
     const captured = ++actionGeneration; const workspace = context.workspace.path;
+    const current = () => !disposed && captured === actionGeneration && workspace === context.workspace.path;
     if (review) configureTrigger = $("validate");
-    await operation();
-    if (disposed || captured !== actionGeneration || workspace !== context.workspace.path || state.validationView.review) return;
-    context.reveal?.($(state.validationView.error ? "validation-error" : "validation-status"));
+    await retainActionFocus(root, operation, current, lifetime.signal, {returnTo: configureTrigger});
+    if (!current() || state.validationView.review) return;
+    feedback($(state.validationView.error ? "validation-error" : "validation-status"), {error: Boolean(state.validationView.error)});
   }
   listen($("validate"), "click", () => { void validationAction(() => validation.review(), {review: true}); });
   listen($("configure-confirm"), "click", () => { void validationAction(() => validation.submit()); });
@@ -748,21 +806,21 @@ export function mount(host, context) {
     context.reveal?.($("source")); $("source").setSelectionRange(...range);
   }
   resources = mountResourcePanel($("resources"), {api: context.api, state, workspace: () => context.workspace.path,
-    drafts, reveal: context.reveal, onChange: render, onSource: resourceSource});
+    drafts, notify: context.notify, onChange: render, onSource: resourceSource});
   bindings = mountBindingPanel($("bindings"), {api: context.api, state, workspace: () => context.workspace.path,
-    drafts, reveal: context.reveal, onChange: render});
+    drafts, notify: context.notify, onChange: render});
   peripherals = mountPeripheralPanel($("peripherals"), {api: context.api, state, workspace: () => context.workspace.path,
-    drafts, reveal: context.reveal, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
+    drafts, notify: context.notify, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
   pwm = mountPWMPanel($("pwm"), {api: context.api, state, workspace: () => context.workspace.path,
-    drafts, reveal: context.reveal, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
+    drafts, notify: context.notify, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
   adc = mountADCPanel($("adc"), {api: context.api, state, workspace: () => context.workspace.path,
-    drafts, reveal: context.reveal, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
+    drafts, notify: context.notify, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
   interruptGPIO = mountInterruptGPIOPanel($("interrupt-gpio"), {api: context.api, state, workspace: () => context.workspace.path,
-    drafts, reveal: context.reveal, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
+    drafts, notify: context.notify, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
   pins = mountPinPanel($("pins"), {api: context.api, state, workspace: () => context.workspace.path,
-    drafts, reveal: context.reveal, onChange: render});
+    drafts, notify: context.notify, onChange: render});
   modules = mountModulePanel($("modules"), {api: context.api, state, workspace: () => context.workspace.path,
-    drafts, reveal: context.reveal, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
+    drafts, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
   render();
   return {
     navigate(view) { actionGeneration++; visualMessage(""); saving.cancel(); validation.closeReview(); validation.resume(); bindings.navigate(); peripherals.navigate(); pins.navigate(); modules.navigate(); resources.navigate(); pwm.navigate(); adc.navigate(); interruptGPIO.navigate(); return session.navigate(view); },

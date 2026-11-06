@@ -1,10 +1,11 @@
+import {announceResult} from "./view-feedback.js";
 import {retainActionFocus} from "./view-focus.js";
 import {peripheralLabel, peripheralName} from "./peripherals.js";
 import {createPWMSession, pwmEntry, pwmFlags, pwmRows} from "./pwm.js";
 
 const array = (value) => Array.isArray(value) ? value : [];
 
-export function mountPWMPanel(root, {api, state, workspace, drafts, reveal, onChange, onRemove}) {
+export function mountPWMPanel(root, {api, state, workspace, drafts, notify, onChange, onRemove}) {
   const document = root.ownerDocument; const lifetime = new AbortController(); const handlers = new WeakMap();
   let disposed = false; let generation = 0; let rendered; let data; let selectedKey = ""; let feedbackHost; let feedbackForm;
   const make = (tag, text, className = "") => {
@@ -58,15 +59,27 @@ export function mountPWMPanel(root, {api, state, workspace, drafts, reveal, onCh
     if (localFeedback.parentNode !== destination) destination.append(localFeedback);
   }
   const session = createPWMSession({api, state, workspace, drafts, onChange() { render(); onChange?.(); }});
+  function announceFeedback() {
+    if (disposed) return;
+    announceResult(feedbackHost ? localFeedback : state.pwmView.error ? error : status, notify,
+      {error: Boolean(state.pwmView.error)});
+  }
   function run(operation) {
-    const token = generation; const captured = workspace(); const context = state.data?.id; const draft = state.draftView?.entry?.server?.id;
-    return retainActionFocus(root, operation, () => !disposed && token === generation && captured === workspace()
-      && context === state.data?.id && draft === state.draftView?.entry?.server?.id, lifetime.signal);
+    const token = generation; const captured = workspace(); const context = state.data?.id;
+    const draft = state.draftView?.entry?.server?.id; const localGeneration = state.draftView?.entry?.generation;
+    const current = () => !disposed && token === generation && captured === workspace()
+      && context === state.data?.id && draft === state.draftView?.entry?.server?.id
+      && localGeneration === state.draftView?.entry?.generation;
+    return retainActionFocus(root, async () => {
+      const result = await operation();
+      if (current()) announceFeedback();
+      return result;
+    }, current, lifetime.signal);
   }
   function submit(command, key = selectedKey) { selectedKey = key; return run(() => session.command(command)); }
   function form(parent, title, action) {
     const node = make("form", undefined, "dte-peripheral-form"); node.append(make("h4", title)); parent.append(node);
-    listen(node, "submit", (event) => { event.preventDefault(); try { action(); } catch (error) { session.fail(error.message); } }); return node;
+    listen(node, "submit", (event) => { event.preventDefault(); try { action(); } catch (error) { session.fail(error.message); announceFeedback(); } }); return node;
   }
   function apply(parent, title, allowed) {
     const node = button(title, null, true); node.type = "submit"; permitted(node, allowed); parent.append(node);
@@ -100,7 +113,8 @@ export function mountPWMPanel(root, {api, state, workspace, drafts, reveal, onCh
     };
     listen(target, "change", updateProvider); listen(flags, "input", updatePolarity); listen(flags, "change", updatePolarity);
     listen(polarity, "change", () => {
-      try { flags.value = String(pwmFlags(flags.value, polarity.value)); } catch (error) { session.fail(error.message); }
+      try { flags.value = String(pwmFlags(flags.value, polarity.value)); }
+      catch (error) { locateFeedback(polarity); session.fail(error.message); announceFeedback(); }
     });
     updatePolarity(); updateProvider();
     return () => pwmEntry(providers.find((provider) => provider.reference === target.value), {channel: channel.value, period: period.value, flags: flags.value});
@@ -121,7 +135,7 @@ export function mountPWMPanel(root, {api, state, workspace, drafts, reveal, onCh
         try { await onRemove(consumer.node_id, remove); }
         catch (error) {
           if (!disposed && token === generation && captured === workspace() && context === state.data?.id
-            && draft === state.draftView?.entry?.server?.id) session.fail(error.message || String(error));
+            && draft === state.draftView?.entry?.server?.id) { session.fail(error.message || String(error)); announceFeedback(); }
         } finally { reviewing = false; remove.textContent = "Review PWM consumer removal"; }
       });
       detail.append(remove); note(detail, "Review known dependencies before removing this source node. Shared providers are retained.");
@@ -149,7 +163,8 @@ export function mountPWMPanel(root, {api, state, workspace, drafts, reveal, onCh
     for (const row of pwmRows(data)) {
       const item = make("li"); const select = button(`${row.kind === "group" ? "PWM LEDs" : "PWM"} · ${row.node.path || row.node.name}`, () => {
         if (selectedKey === row.key) return;
-        selectedKey = row.key; renderSelection(); reveal?.(detail);
+        selectedKey = row.key; renderSelection();
+        announceResult(detail, notify, {message: `Details for ${row.node.path || row.node.name} are ready below.`});
       }); select.dataset.pwmKey = row.key; item.append(select); topology.append(item);
     }
     if (!topology.children.length) { const item = make("li"); note(item, "No local PWM consumers or PWM LED groups were identified. Add a supported group or use source editing."); topology.append(item); }

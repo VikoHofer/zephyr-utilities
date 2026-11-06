@@ -62,6 +62,40 @@ promote the production definition after its usable editing workflow passes its g
 | `features/inspector/api.py` | Owns the legacy aliases and shared transient catalogue identities |
 | `features/inspector/parser.py` | Structural generated-DTS reader; unsuitable for editable overlay serialization |
 
+## Browser feedback, focus and reading position
+
+Routine loads, row selections, edits, Undo/Redo, Sync, refresh and Save completion preserve
+the user's reading position and keyboard focus. They update nearby loading, success,
+empty or error feedback. When that feedback is outside the viewport, the editor also
+uses the fixed shared notice; it does not scroll to the status or error. This follows
+the user's preference over the earlier automatic-reveal guidance.
+
+**Open application** and **Open directory** retain feedback beside their initiating
+forms and offer **Go to overlay selection** after a successful open. **Open overlay
+draft** offers **Go to overlay draft** when the draft is ready. These separate controls
+make movement to the result explicit. Success feedback and draft navigation wait for
+the canonical draft binding to finish; opening another application clears the previous
+overlay's feedback and navigation control. Source-location links, requested details and
+review dialogs retain their intentional navigation and focus behavior.
+
+During a context/document read, the previous result layout remains visible and inert
+instead of collapsing the page. During draft loading, an already presented draft remains
+visible and inert until its replacement is ready. The retained DOM is presentation only;
+it does not retain mutation authority. The context loading flag spans both the context
+request and its selected document read, so an intermediate publication cannot enable
+stale controls. Request generations, disposal and workspace guards prevent late responses
+or finalizers from replacing or enabling a newer context.
+
+If a same-view action replaces the initiating control, focus restoration uses
+`focus({preventScroll: true})` and applies only while the request remains current and
+the user has not moved focus elsewhere. Background observations do not move focus.
+The shared `context.reveal` default is immediate nearest alignment, with focus scrolling
+suppressed; it is reserved for deliberate destination actions. The shell explicitly
+requests start alignment when navigating to a route heading. Dialog review, cancellation
+and return to the trigger remain supported. See [UI guidelines](ui-guidelines.md),
+[ADR 0014](decisions/0014-visible-action-feedback.md) and the
+[scroll-stability handoff](ui-scroll-stability-handoff.md) for validation.
+
 ## Public project selection
 
 `ProjectContextProvider` in `core/project_context.py` has its first consumer in D1.
@@ -1073,7 +1107,8 @@ Shared inputs do not establish an exclusive conflict; disabled consumers do not 
 simultaneous use. Provider removal requires individually selected existing optional
 repairs where safe; required, mixed or ambiguous dependencies need explicit repair.
 Removing a consumer node retains its shared provider. The panel makes whole-node
-removal scope explicit, retains forms during refresh, restores action focus and reveals
-offscreen results only for the current explicit action. Save/Configure remain separate;
+removal scope explicit, retains forms during refresh and restores action focus without
+scrolling. Offscreen action feedback uses a visible notice; source/detail navigation
+requires its explicit control. Save/Configure remain separate;
 no persistent schema changes. See the [D11c handoff](device-tree-editor-d11c-handoff.md)
 for current verification and remaining work.

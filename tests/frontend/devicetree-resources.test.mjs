@@ -15,7 +15,7 @@ function harness({mount = false, wrap = (api) => api} = {}) {
     entry: {generation: 0, path: "/workspace/app/app.overlay", text: source,
       server: {id: "draft", document_id: "document", revision: 0, sha256: "hash0", text: source, syntax: {blocked: false}}}}};
   let workspace = "/workspace"; let session; let removal; let panel; let releaseCount = 0;
-  const calls = []; const commands = []; const sourceCalls = []; const reveals = [];
+  const calls = []; const commands = []; const sourceCalls = []; const reveals = []; const toasts = [];
   const model = {nodes: [{node_id: "root", key: "node:/", path: "/", name: "/", unique: true},
     {node_id: "gpio", key: "node:/gpio", path: "/gpio", name: "gpio", unique: true},
     {node_id: "leaf", key: "node:/leaf", path: "/leaf", name: "leaf", unique: true}],
@@ -58,12 +58,12 @@ function harness({mount = false, wrap = (api) => api} = {}) {
   };
   const options = {api, state, workspace: () => workspace, drafts, onChange: notify};
   const root = mount ? new Element("section") : null;
-  if (mount) panel = mountResourcePanel(root, {...options, reveal: (...args) => reveals.push(args), onSource: (...args) => sourceCalls.push(args)});
+  if (mount) panel = mountResourcePanel(root, {...options, notify: (message, error) => toasts.push({message, error}), reveal: (...args) => reveals.push(args), onSource: (...args) => sourceCalls.push(args)});
   else {
     session = createResourceSession(options);
     removal = createRemovalSession({...options, resources: session});
   }
-  return {state, options, root, session, removal, panel, calls, commands, drafts, model, response, reveals, sourceCalls,
+  return {state, options, root, session, removal, panel, calls, commands, drafts, model, response, reveals, toasts, sourceCalls,
     get releaseCount() { return releaseCount; },
     workspace(value) { workspace = value; panel?.navigate(); notify(); },
     type(text) { state.draftView.entry.text = text; state.draftView.entry.generation++; notify(); },
@@ -155,7 +155,7 @@ test("an uncertain apply keeps its error visible and cannot be retried automatic
 // Small browser-like DOM: NodeLists have no Array helpers and native dialog events do not bubble.
 class Element {
   constructor(tag, document) {
-    this.tagName = tag.toUpperCase(); this.ownerDocument = document || {activeElement: null,
+    this.tagName = tag.toUpperCase(); this.ownerDocument = document || {activeElement: null, defaultView: {innerHeight: 800, innerWidth: 600},
       createElement: (name) => new Element(name, this.ownerDocument)};
     if (!document) this.ownerDocument.root = this;
     this.children = []; this.parentNode = null; this.dataset = {}; this.attributes = {}; this.listeners = {};
@@ -171,6 +171,9 @@ class Element {
   replaceChildren(...children) { for (const child of this.children) child.parentNode = null; this.children = []; this.append(...children); }
   remove() { if (this.parentNode) this.parentNode.children = this.parentNode.children.filter((item) => item !== this); this.parentNode = null; }
   setAttribute(name, value) { this.attributes[name] = String(value); }
+  getBoundingClientRect() { return this.ownerDocument.offscreen?.(this)
+    ? {top: 900, bottom: 1200, left: 0, right: 400} : {top: 20, bottom: 40, left: 0, right: 400}; }
+
   focus(options) { if (this.disabled || this.hidden) return; this.ownerDocument.activeElement = this; this.focusOptions = options; }
   showModal() { this.open = true; }
   close() { this.open = false; this.dispatch("close"); }
@@ -275,4 +278,34 @@ test("module removal entry delegates review even when direct leaf removal was bl
   assert.equal(reviews.length, 1); assert.equal(reviews[0][0], "leaf"); assert.equal(reviews[0][1], trigger);
   assert.doesNotMatch(root.textContent, /Preparing removal review/);
   assert.equal(app.commands.length, 0); panel.dispose(); app.dispose();
+});
+
+test("removal preparation errors notify beside the viewport without moving focus to Resources", async () => {
+  for (const stage of ["resources", "review"]) {
+    const app = harness({mount: true, wrap: (api) => async (...args) => {
+      if (stage === "resources" || args[0].endsWith("/review")) throw new Error("Cannot prepare removal.");
+      return api(...args);
+    }});
+    app.root.ownerDocument.offscreen = () => true;
+    const trigger = new Element("button", app.root.ownerDocument); app.root.append(trigger); trigger.focus(); app.root.scrollTop = 650;
+    assert.equal(await app.panel.reviewRemoval("gpio", trigger), false);
+    assert.deepEqual(app.toasts, [{message: "Cannot prepare removal.", error: true}]);
+    assert.deepEqual(app.reveals, []); assert.equal(app.root.ownerDocument.activeElement, trigger); assert.equal(app.root.scrollTop, 650);
+    app.panel.render(); assert.equal(app.toasts.length, 1); app.dispose();
+  }
+});
+
+test("late removal preparation errors cannot notify after source, workspace, navigation or disposal", async () => {
+  for (const action of ["source", "workspace", "navigation", "dispose"]) {
+    const wait = deferred(); const app = harness({mount: true, wrap: () => async () => {
+      await wait.promise; throw new Error("Old removal failure.");
+    }});
+    app.root.ownerDocument.offscreen = () => true; const pending = app.panel.reviewRemoval("gpio");
+    if (action === "source") app.type(source + "/* pending */");
+    if (action === "workspace") app.workspace("/other");
+    if (action === "navigation") app.panel.navigate();
+    if (action === "dispose") app.dispose();
+    wait.resolve(); assert.equal(await pending, false); assert.deepEqual(app.toasts, [], action); assert.deepEqual(app.reveals, []);
+    app.dispose();
+  }
 });
