@@ -2,7 +2,7 @@
 
 Status: implemented and verified on 2026-11-06. Full repository, browser and
 installed-package checks passed. D11c was committed as `40b3c0a` before this interaction
-work; these UI changes remain uncommitted.
+work. The UI changes are committed as `6b73fa8`.
 
 ## Accepted scope
 
@@ -104,5 +104,5 @@ callers requiring route-style alignment must request it explicitly.
 
 No Configure execution or physical hardware validation was performed for this UI work.
 The supported Device Tree families and hardware limits remain those in the
-[D11c handoff](device-tree-editor-d11c-handoff.md). The verified UI changes are ready for
-review and remain uncommitted.
+[D11c handoff](device-tree-editor-d11c-handoff.md). The verified UI changes are committed
+as `6b73fa8`.

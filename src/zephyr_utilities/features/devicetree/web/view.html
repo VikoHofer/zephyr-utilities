@@ -1,9 +1,9 @@
 <section class="dte-workspace" data-dte-root>
   <header class="dte-heading">
-    <div><p class="dte-eyebrow">Device Tree Editor</p><h1>Visual overlay editor</h1></div>
-    <span class="dte-badge">Modules, diagnostics and pins</span>
+    <div><p class="dte-eyebrow">Device Tree Editor</p><h1>Visual hardware editor</h1></div>
+    <span class="dte-badge">Board hardware and connections</span>
   </header>
-  <p class="dte-intro">Place local modules, configure peripherals and inspect resource conflicts in an existing overlay. Review removals and Save your changes explicitly. Pin assignments are available for supported targets; Configure and compilation remain separate actions.</p>
+  <p class="dte-intro">Start with your board, choose a device and connect it to a bus or GPIO. Connections update the overlay draft below; review and Save when you are ready.</p>
 
   <section class="dte-card dte-picker" aria-labelledby="dte-project-heading">
     <div class="dte-section-heading"><h2 id="dte-project-heading">Registered applications</h2><button type="button" data-dte-refresh-catalog>Refresh list</button></div>
@@ -70,6 +70,16 @@
       <p class="dte-muted" data-dte-recovery-status></p>
       <p class="dte-status" role="status" data-dte-save-status hidden></p>
       <p class="dte-error" role="alert" data-dte-draft-error hidden></p>
+      <section class="dte-board" data-dte-board aria-label="Board hardware and connections"></section>
+        <section class="dte-source-panel dte-primary-source" aria-labelledby="dte-source-heading" data-dte-source-panel>
+        <div class="dte-section-heading"><h3 id="dte-source-heading">Overlay source</h3><span class="dte-muted">Ctrl/Cmd+Z to undo</span></div>
+        <p class="dte-path" data-dte-source-path></p>
+        <p class="dte-muted" role="status" data-dte-source-status>Choose an available overlay to read its current source.</p>
+        <p class="dte-error" role="alert" data-dte-source-error hidden></p>
+        <textarea class="dte-source dte-source-editor" aria-label="Overlay source draft" data-dte-source spellcheck="false" autocomplete="off" autocapitalize="off" rows="18" disabled></textarea>
+        <div data-dte-syntax-diagnostics></div>
+        </section>
+      <details class="dte-diff-panel"><summary>Changes from the file on disk</summary><p class="dte-muted" data-dte-diff-status></p><pre class="dte-source dte-diff" data-dte-diff></pre></details>
       <section class="dte-validation" aria-labelledby="dte-validation-heading" data-dte-validation-panel>
         <div class="dte-section-heading"><h3 id="dte-validation-heading">Configuration validation</h3><button type="button" data-dte-validate disabled>Review Configure</button></div>
         <p class="dte-muted" role="status" data-dte-validation-status>Save the overlay before reviewing configuration. Opening and saving never run project tools.</p>
@@ -83,9 +93,10 @@
         <details data-dte-validation-evidence hidden><summary>Configuration evidence and log</summary><dl class="dte-facts" data-dte-validation-facts></dl><pre class="dte-source dte-validation-log" data-dte-validation-log></pre></details>
       </section>
       <div class="dte-conflict" data-dte-conflict hidden><p>Your retained text is shown below. Review the server draft before choosing the text to continue with.</p><details><summary>Inspect competing server draft</summary><pre class="dte-source" data-dte-server-source></pre></details><button type="button" data-dte-use-local>Continue with my text</button><button type="button" data-dte-use-server>Use server draft</button></div>
+      <details class="dte-advanced-tools"><summary>Advanced overlay tools</summary>
       <section class="dte-modules" data-dte-modules aria-label="Modules and connections"></section>
       <section class="dte-resources" data-dte-resources aria-label="Resource diagnostics and removal"></section>
-      <div class="dte-draft-columns">
+      <div class="dte-advanced-source">
         <section class="dte-visual" aria-labelledby="dte-visual-heading">
           <h3 id="dte-visual-heading">Source declarations</h3>
           <p class="dte-muted">These are declarations in this overlay. The pin panel uses separately verified target evidence; other inherited hardware remains unknown.</p>
@@ -107,19 +118,12 @@
           <section class="dte-pwm" data-dte-pwm aria-label="PWM consumers and LEDs"></section>
           <section class="dte-adc" data-dte-adc aria-label="ADC consumers and channels"></section>
           <section class="dte-interrupt-gpio" data-dte-interrupt-gpio aria-label="Interrupt GPIO consumers"></section>
+          <section class="dte-can" data-dte-can aria-label="CAN controllers and transceivers"></section>
           <section class="dte-pins" data-dte-pins aria-label="Pins and signals"></section>
           <section class="dte-bindings" data-dte-bindings aria-label="Binding properties and references"></section>
         </section>
-        <section class="dte-source-panel" aria-labelledby="dte-source-heading" data-dte-source-panel>
-        <div class="dte-section-heading"><h3 id="dte-source-heading">Overlay source</h3><span class="dte-muted">Ctrl/Cmd+Z to undo</span></div>
-        <p class="dte-path" data-dte-source-path></p>
-        <p class="dte-muted" role="status" data-dte-source-status>Choose an available overlay to read its current source.</p>
-        <p class="dte-error" role="alert" data-dte-source-error hidden></p>
-        <textarea class="dte-source dte-source-editor" aria-label="Overlay source draft" data-dte-source spellcheck="false" autocomplete="off" autocapitalize="off" rows="18" disabled></textarea>
-        <div data-dte-syntax-diagnostics></div>
-        </section>
       </div>
-      <details class="dte-diff-panel"><summary>Changes from the file on disk</summary><p class="dte-muted" data-dte-diff-status></p><pre class="dte-source dte-diff" data-dte-diff></pre></details>
+      </details>
     </section>
   </section>
   <details class="dte-card dte-retained" data-dte-retained-panel hidden><summary data-dte-retained-summary>Retained drafts</summary>

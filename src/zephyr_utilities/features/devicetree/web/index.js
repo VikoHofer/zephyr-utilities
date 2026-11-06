@@ -11,6 +11,8 @@ import {mountResourcePanel} from "./resource-view.js";
 import {mountPWMPanel} from "./pwm-view.js";
 import {mountADCPanel} from "./adc-view.js";
 import {mountInterruptGPIOPanel} from "./interrupt-gpio-view.js";
+import {mountCANPanel} from "./can-view.js";
+import {mountBoardPanel} from "./board-view.js";
 import {retainActionFocus} from "./view-focus.js";
 import {announceResult} from "./view-feedback.js";
 
@@ -43,6 +45,8 @@ export function mount(host, context) {
   let pwm;
   let adc;
   let interruptGPIO;
+  let can;
+  let board;
   let shownReview;
   let reviewTrigger;
   let shownConfigure;
@@ -597,6 +601,8 @@ export function mount(host, context) {
     pwm?.render();
     adc?.render();
     interruptGPIO?.render();
+    can?.render();
+    board?.render();
     resources?.render();
   }
   async function action(operation, destination, options = {}) {
@@ -817,16 +823,20 @@ export function mount(host, context) {
     drafts, notify: context.notify, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
   interruptGPIO = mountInterruptGPIOPanel($("interrupt-gpio"), {api: context.api, state, workspace: () => context.workspace.path,
     drafts, notify: context.notify, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
+  can = mountCANPanel($("can"), {api: context.api, state, workspace: () => context.workspace.path,
+    drafts, notify: context.notify, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
+  board = mountBoardPanel($("board"), {api: context.api, state, workspace: () => context.workspace.path,
+    drafts, notify: context.notify, onChange: render, onOpenProjects: () => context.navigate("projects/applications")});
   pins = mountPinPanel($("pins"), {api: context.api, state, workspace: () => context.workspace.path,
     drafts, notify: context.notify, onChange: render});
   modules = mountModulePanel($("modules"), {api: context.api, state, workspace: () => context.workspace.path,
-    drafts, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
+    drafts, notify: context.notify, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
   render();
   return {
-    navigate(view) { actionGeneration++; visualMessage(""); saving.cancel(); validation.closeReview(); validation.resume(); bindings.navigate(); peripherals.navigate(); pins.navigate(); modules.navigate(); resources.navigate(); pwm.navigate(); adc.navigate(); interruptGPIO.navigate(); return session.navigate(view); },
+    navigate(view) { actionGeneration++; visualMessage(""); saving.cancel(); validation.closeReview(); validation.resume(); bindings.navigate(); peripherals.navigate(); pins.navigate(); modules.navigate(); resources.navigate(); pwm.navigate(); adc.navigate(); interruptGPIO.navigate(); can.navigate(); board.navigate(); return session.navigate(view); },
     dispose() {
       disposed = true; actionGeneration++; lifetime.abort(); saving.dispose(); closeReview({restoreFocus: false});
-      validation.dispose(); closeConfigure({restoreFocus: false}); bindings.dispose(); peripherals.dispose(); pins.dispose(); modules.dispose(); resources.dispose(); pwm.dispose(); adc.dispose(); interruptGPIO.dispose(); session.dispose(); drafts.dispose();
+      validation.dispose(); closeConfigure({restoreFocus: false}); bindings.dispose(); peripherals.dispose(); pins.dispose(); modules.dispose(); resources.dispose(); pwm.dispose(); adc.dispose(); interruptGPIO.dispose(); can.dispose(); board.dispose(); session.dispose(); drafts.dispose();
       for (const url of downloadUrls) URL.revokeObjectURL(url);
     },
   };

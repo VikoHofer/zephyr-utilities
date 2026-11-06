@@ -91,10 +91,10 @@
 .dte-workspace .dte-peripherals .dte-section-heading { align-items:flex-start; flex-wrap:wrap; gap:.6rem; }
 .dte-workspace .dte-peripherals .dte-section-heading h3 { margin:0; }
 .dte-workspace .dte-peripherals h4 { margin:.3rem 0 .7rem; font-size:.9rem; overflow-wrap:anywhere; }
-.dte-workspace :is(.dte-pwm, .dte-adc, .dte-interrupt-gpio) { border-top:1px solid var(--app-border); margin-top:1.2rem; padding-top:1rem; min-width:0; }
-.dte-workspace :is(.dte-pwm, .dte-adc, .dte-interrupt-gpio) .dte-section-heading { align-items:flex-start; flex-wrap:wrap; gap:.6rem; }
-.dte-workspace :is(.dte-pwm, .dte-adc, .dte-interrupt-gpio) .dte-section-heading h3 { margin:0; }
-.dte-workspace :is(.dte-pwm, .dte-adc, .dte-interrupt-gpio) h4 { margin:.3rem 0 .7rem; font-size:.9rem; overflow-wrap:anywhere; }
+.dte-workspace :is(.dte-pwm, .dte-adc, .dte-interrupt-gpio, .dte-can) { border-top:1px solid var(--app-border); margin-top:1.2rem; padding-top:1rem; min-width:0; }
+.dte-workspace :is(.dte-pwm, .dte-adc, .dte-interrupt-gpio, .dte-can) .dte-section-heading { align-items:flex-start; flex-wrap:wrap; gap:.6rem; }
+.dte-workspace :is(.dte-pwm, .dte-adc, .dte-interrupt-gpio, .dte-can) .dte-section-heading h3 { margin:0; }
+.dte-workspace :is(.dte-pwm, .dte-adc, .dte-interrupt-gpio, .dte-can) h4 { margin:.3rem 0 .7rem; font-size:.9rem; overflow-wrap:anywhere; }
 .dte-workspace .dte-peripheral-controls, .dte-workspace .dte-peripheral-form { display:grid; gap:.8rem; }
 .dte-workspace .dte-peripheral-form { border-top:1px solid var(--app-border); padding-top:.85rem; margin-top:1rem; }
 .dte-workspace .dte-peripheral-field { min-width:0; margin:0; padding:.65rem; border:1px solid var(--app-border); border-radius:.4rem; }
@@ -134,7 +134,7 @@
 .dte-workspace .dte-module-card strong { font-size:.9rem; }
 .dte-workspace .dte-module-card span { font-size:.76rem; line-height:1.45; }
 .dte-workspace .dte-module-card > button[aria-pressed=true] { border-color:var(--app-brand); box-shadow:0 0 0 1px var(--app-brand); background:var(--app-brand-soft); }
-.dte-workspace .dte-module-canvas-empty { grid-column:1 / -1; }
+.dte-workspace .dte-module-canvas-empty { display:block; min-height:0; padding:.8rem; }
 .dte-workspace .dte-module-detail { min-width:0; border-left:1px solid var(--app-border); padding-left:1rem; }
 .dte-workspace .dte-module-form + .dte-module-form { border-top:1px solid var(--app-border); padding-top:.8rem; margin-top:1rem; }
 .dte-workspace .dte-module-layout-actions { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; }
@@ -205,3 +205,37 @@
   .dte-workspace .dte-review-body { padding:0 .8rem .8rem; }
   .dte-workspace .dte-review-actions button { flex:1 1 auto; }
 }
+
+.dte-workspace .dte-board { border-top:1px solid var(--app-border); padding-top:1rem; margin:1rem 0 1.5rem; min-width:0; }
+.dte-workspace .dte-board .dte-section-heading { flex-wrap:wrap; gap:.6rem; }
+.dte-workspace .dte-board .dte-section-heading h3 { margin:0; margin-right:auto; }
+.dte-workspace .dte-board h4 { margin:.2rem 0 .6rem; font-size:.95rem; overflow-wrap:anywhere; }
+.dte-workspace .dte-board-card { border:1px solid var(--app-brand-border); border-radius:.55rem; padding:1rem; background:var(--app-brand-soft); margin:.7rem 0; min-width:0; }
+.dte-workspace .dte-board-card p { margin:.35rem 0; overflow-wrap:anywhere; }
+.dte-workspace .dte-board-recipes { display:flex; flex-wrap:wrap; gap:.65rem; margin:.85rem 0; }
+.dte-workspace .dte-board-recipes button { flex:1 1 10rem; max-width:18rem; text-align:left; }
+.dte-workspace .dte-board button[aria-pressed=true] { border-color:var(--app-brand); background:var(--app-brand-soft); color:var(--app-brand); box-shadow:0 0 0 1px var(--app-brand-border); }
+.dte-workspace .dte-board-workspace { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(17rem,1fr); gap:1rem; align-items:start; min-width:0; }
+.dte-workspace .dte-board-connections { list-style:none; display:grid; gap:.75rem; align-content:start; margin:0; padding:1rem; min-height:15rem; max-height:35rem; overflow:auto; border:1px solid var(--app-border); border-radius:.5rem; background-color:var(--app-surface-subtle); background-image:radial-gradient(var(--app-border) .7px,transparent .7px); background-size:14px 14px; }
+.dte-workspace .dte-board-connections > li { margin:0; min-width:0; }
+.dte-workspace .dte-board-connections > li > button { width:100%; text-align:left; background:var(--app-surface); border-left:3px solid var(--app-blue-border); }
+.dte-workspace .dte-board-connections p { margin:.35rem 0; }
+.dte-workspace .dte-board-detail { padding:1rem; min-width:0; border:1px solid var(--app-border); border-radius:.5rem; background:var(--app-surface); }
+.dte-workspace .dte-board-form { display:grid; gap:.75rem; margin:.7rem 0 0; padding:.7rem 0 0; }
+.dte-workspace .dte-board-form label:has(input[type=checkbox]) { grid-template-columns:minmax(0,1fr) auto; align-items:center; }
+.dte-workspace .dte-board-form input[type=checkbox] { width:1rem; height:1rem; accent-color:var(--app-brand); }
+.dte-workspace .dte-board-form details > label { margin-top:.7rem; }
+.dte-workspace .dte-primary-source { position:static; max-height:none; overflow:visible; border-top:1px solid var(--app-border); padding-top:.5rem; }
+.dte-workspace .dte-primary-source .dte-source-editor { min-height:14rem; max-height:45vh; }
+.dte-workspace .dte-advanced-tools { border-top:1px solid var(--app-border); margin-top:1.5rem; padding-top:1rem; }
+.dte-workspace .dte-advanced-tools > summary { font-weight:600; }
+.dte-workspace .dte-advanced-source { min-width:0; }
+@media (max-width:900px) {
+  .dte-workspace .dte-board-workspace { grid-template-columns:1fr; }
+  .dte-workspace .dte-board-connections { min-height:0; max-height:20rem; }
+  .dte-workspace .dte-board-recipes button { max-width:none; }
+}
+.dte-workspace .dte-board-device-list { list-style:none; border-left:2px solid var(--app-blue-border); margin:.2rem 0 .15rem 1rem; padding:.25rem 0 .25rem 1rem; }
+.dte-workspace .dte-board-device { position:relative; margin:.4rem 0; padding:.55rem .7rem; border:1px solid var(--app-border); border-radius:.4rem; background:var(--app-surface); font-size:.82rem; overflow-wrap:anywhere; }
+.dte-workspace .dte-board-device::before { content:""; position:absolute; top:1rem; left:-1.1rem; width:1.1rem; border-top:2px solid var(--app-blue-border); }
+.dte-workspace .dte-board-connection > button strong, .dte-workspace .dte-board-device strong { display:block; }

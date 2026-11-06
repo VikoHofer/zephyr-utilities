@@ -15,6 +15,9 @@ from .removal import RemovalService
 from .pwm import PWMService
 from .adc import ADCService
 from .interrupt_gpio import InterruptGPIOService
+from .can import CANService
+from .board_topology import BoardTopologyService
+from .board_connections import BoardConnectionService
 
 
 def register(router, context):
@@ -29,6 +32,12 @@ def register(router, context):
     publisher = OverlayPublisher(storage)
     drafts = DraftService(service, storage=storage, publisher=publisher)
     context.services["devicetree_drafts"] = drafts
+    board = BoardTopologyService(drafts)
+    context.services["devicetree_board"] = board
+    router.add("POST", "/api/devicetree/editor/drafts/board", lambda request: board.inspect(request.body))
+    board_connections = BoardConnectionService(drafts, board)
+    drafts.board_connections = board_connections
+    context.services["devicetree_board_connections"] = board_connections
     bindings = BindingService(drafts)
     drafts.bindings = bindings
     context.services["devicetree_bindings"] = bindings
@@ -49,6 +58,10 @@ def register(router, context):
     drafts.interrupt_gpio = interrupt_gpio
     context.services["devicetree_interrupt_gpio"] = interrupt_gpio
     router.add("POST", "/api/devicetree/editor/drafts/interrupt-gpios", lambda request: interrupt_gpio.inspect(request.body))
+    can = CANService(drafts)
+    drafts.can = can
+    context.services["devicetree_can"] = can
+    router.add("POST", "/api/devicetree/editor/drafts/can", lambda request: can.inspect(request.body))
     pins = PinService(drafts)
     drafts.pins = pins
     context.services["devicetree_pins"] = pins

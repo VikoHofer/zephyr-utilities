@@ -101,6 +101,7 @@ class ProjectsEditorContextProvider:
                   "zephyr": deepcopy(profile.get("zephyr")), "sdk": deepcopy(profile.get("sdk")),
                   "tools": deepcopy(profile.get("tools", [])), "freshness": "unknown",
                   "observation_status": "unavailable", "availability": {"state": "unknown", "reason": ""}}
+        result["board"] = None
         try:
             observation_id = identifier(result["id"])
             store = self.creator.environments
@@ -112,6 +113,12 @@ class ProjectsEditorContextProvider:
                     saved.get("fingerprint") != result["fingerprint"]):
                 raise ValueError("The saved environment observation does not match this profile.")
             result["observation_status"] = saved.get("status", "unknown")
+            boards = saved.get("boards", [])
+            board = next((item for item in boards if isinstance(item, dict) and item.get("id") == profile.get("board_id")), None) if isinstance(boards, list) else None
+            if board and profile.get("target") in board.get("targets", []):
+                keys = {"id", "name", "full_name", "vendor", "socs", "directories", "source_files", "architectures", "platforms",
+                        "revisions", "default_revision", "revision_format", "revision_exact", "targets", "status", "qualifiers", "origins"}
+                result["board"] = {key: deepcopy(value) for key, value in board.items() if key in keys}
             result["freshness"] = "stale" if saved.get("status") == "stale" else "saved-observation"
             try:
                 current_registry = store.custom_boards.signature(workspace)
@@ -250,6 +257,7 @@ class ProjectsEditorContextProvider:
                       "default_overlay": default, "roots": self._roots(profile, diagnostics),
                       "input_evidence": {"predicted": [predicted], "captured": captured, "coverage": "partial",
                                          "source_fingerprints": fingerprints}, "diagnostics": diagnostics}
+            result["board"] = deepcopy(result["environment"].get("board"))
             if path_identity(workspace) != workspace_identity or self.context.workspace.get()["path"] != workspace:
                 raise ValueError("The selected workspace changed during context loading.")
             if self._application(reader, project) != application:

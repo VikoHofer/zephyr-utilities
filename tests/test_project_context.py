@@ -110,6 +110,23 @@ class ProjectContextTests(unittest.TestCase):
         self.assertEqual(selected["environment"]["fingerprint"], "saved-environment")
         self.assertEqual(selected["environment"]["freshness"], "saved-observation")
 
+    def test_selected_board_metadata_is_detached_and_exact_target_bound(self):
+        board = {"id": "custom-board", "name": "demo", "vendor": "test", "status": "discovered",
+                 "targets": [self.profile["target"]], "directories": [str(self.workspace / "custom/boards/demo")],
+                 "socs": ["chip"], "source_files": [], "architectures": ["arm"], "private_data": "not exported"}
+        path = self.creator.environments.root / "snapshots" / f"{self.observation['id']}.json"
+        path.write_text(json.dumps({**self.observation, "boards": [board]}))
+        with patch("subprocess.Popen", side_effect=AssertionError("No tools")):
+            selected = self.capture()
+        self.assertEqual(selected["board"]["name"], "demo")
+        self.assertEqual(selected["board"]["directories"], board["directories"])
+        self.assertNotIn("private_data", selected["board"])
+        selected["board"]["socs"].append("changed")
+        self.assertEqual(self.capture()["board"]["socs"], ["chip"])
+        board["targets"] = ["other/chip"]
+        path.write_text(json.dumps({**self.observation, "boards": [board]}))
+        self.assertIsNone(self.capture()["board"])
+
     def test_missing_toolchain_or_observation_does_not_require_build_readiness(self):
         shutil.rmtree(self.workspace / "sdk")
         (self.creator.environments.root / "snapshots" / f"{self.observation['id']}.json").unlink()

@@ -1,12 +1,13 @@
 import {bindingTypes, localBindingValue} from "./bindings.js";
 import {peripheralAddress, peripheralFieldValue, peripheralLabel, peripheralName} from "./peripherals.js";
 import {createModuleLayoutSession, createModuleSession, modulePositions, moveModule} from "./modules.js";
+import {announceResult} from "./view-feedback.js";
 
 const array = (value) => Array.isArray(value) ? value : [];
 const shown = (value) => typeof value === "string" ? value : JSON.stringify(value);
 const bus = (kind) => ["i2c", "spi"].includes(kind);
 
-export function mountModulePanel(root, {api, state, workspace, drafts, onChange, onRemove}) {
+export function mountModulePanel(root, {api, state, workspace, drafts, notify, onChange, onRemove}) {
   const document = root.ownerDocument; const lifetime = new AbortController(); const handlers = new WeakMap();
   let disposed = false; let navigation = 0; let data; let rendered; let selected = ""; let detailIdentity = "";
   let positions = {}; let requestedParent = "";
@@ -34,7 +35,7 @@ export function mountModulePanel(root, {api, state, workspace, drafts, onChange,
   const input = (value = "") => { const node = make("input"); node.type = "text"; node.value = String(value); node.spellcheck = false; node.autocomplete = "off"; return node; };
   const permit = (node, allowed) => { node.dataset.moduleAllowed = String(Boolean(allowed)); node.disabled = !allowed; };
   const heading = make("div", undefined, "dte-section-heading");
-  const load = button("Load modules", () => { localActionMessage = ""; void session.load(); });
+  const load = button("Load modules", () => { clearPlacementFeedback(); localActionMessage = ""; void session.load(); });
   const cancel = button("Cancel module inspection", () => session.cancel());
   heading.append(make("h3", "Hardware modules"), load, cancel);
   const status = make("p", "", "dte-module-status dte-muted"); status.setAttribute("role", "status");
@@ -46,7 +47,9 @@ export function mountModulePanel(root, {api, state, workspace, drafts, onChange,
   const empty = make("p", "", "dte-notice");
   const controls = make("div", undefined, "dte-module-controls");
   const toolbar = make("div", undefined, "dte-node-actions");
-  const place = button("Place module", () => { requestedParent = ""; select(""); }, "dte-primary"); toolbar.append(place);
+  const place = button("Place module", () => requestPlacement(), "dte-primary");
+  const placementStatus = make("p", "", "dte-module-placement-status dte-muted"); placementStatus.setAttribute("role", "status"); placementStatus.hidden = true;
+  toolbar.append(place, placementStatus);
   const workspaceView = make("div", undefined, "dte-module-workspace");
   const canvas = make("div", undefined, "dte-module-canvas"); canvas.setAttribute("role", "group"); canvas.setAttribute("aria-label", "Logical module and bus graph");
   const detail = make("div", undefined, "dte-module-detail");
@@ -72,8 +75,33 @@ export function mountModulePanel(root, {api, state, workspace, drafts, onChange,
   const layout = createModuleLayoutSession({api, state, workspace, ready: () => session.ready() && !state.moduleView.busy,
     onChange() { render(); onChange?.(); }});
 
+  function clearPlacementFeedback() { placementStatus.textContent = ""; placementStatus.hidden = true; }
+  function unavailablePlacement() {
+    const board = state.data?.target?.requested;
+    return board ? `No compatible module connection is available for ${board} in this view yet.`
+      : "No connection is available in this view yet. Select a board configuration to load its hardware.";
+  }
+  function placementGuidance() {
+    if (state.moduleView.busy) return "Wait for the current module request to finish, then choose a recipe and connection.";
+    if (!state.moduleView.data || !session.ready()) return "Load modules again for the current draft before placing a module.";
+    if (!array(data?.recipes).some((recipe) => recipe.available && array(recipe.parents).some((parent) => parent.addable))) return unavailablePlacement();
+    const staged = readPlacement?.(); const recipe = data.recipes.find((item) => item.id === staged?.recipe);
+    if (!recipe) return requestedParent ? "Choose a module recipe for the selected connection in the placement form."
+      : "Choose a module recipe, then a compatible connection in the placement form.";
+    if (!recipe.available) return recipe.reason || "Choose an available module recipe for this board.";
+    const parent = array(recipe.parents).find((item) => item.parent_key === staged.parent);
+    if (!parent) return "Choose a compatible connection for this recipe in the placement form.";
+    if (!parent.addable) return parent.reason || "Choose an available connection for this recipe.";
+    return "Complete the module fields, then choose Place module in draft.";
+  }
+  function requestPlacement(parentKey = "") {
+    requestedParent = parentKey; select("");
+    const message = placementGuidance(); placementStatus.textContent = message; placementStatus.hidden = false;
+    announceResult(detail, notify, {message});
+  }
   function fail(message) { localActionMessage = message; session.fail(message); }
   async function submit(command, key = selected) {
+    clearPlacementFeedback();
     const token = navigation; const revision = data?.revision; const identity = JSON.stringify([workspace(), state.data?.id, state.draftView?.entry?.server?.id]);
     const focus = {original: document.activeElement, moved: false}; const listeners = new AbortController();
     document.addEventListener?.("focusin", (event) => {
@@ -220,7 +248,13 @@ export function mountModulePanel(root, {api, state, workspace, drafts, onChange,
     note(node, "Only this module's local node is added. Choose an existing bus or GPIO group; controllers, pin assignments, providers and software settings require their own explicit actions.");
     function connection(retained) {
       parent = array(recipe?.parents).find((item) => item.parent_key === parents.value);
-      parameters.replaceChildren(); reason.textContent = parent?.reason || recipe?.reason || ""; collect = () => ({}); address = null;
+      parameters.replaceChildren();
+      reason.textContent = parent?.reason || recipe?.reason || (!recipe
+        ? array(data.recipes).some((item) => item.available && array(item.parents).some((connection) => connection.addable))
+          ? "Choose a module recipe first, then its connection."
+          : unavailablePlacement()
+        : !parent ? "Choose a compatible connection, then complete the module fields." : "");
+      collect = () => ({}); address = null;
       if (parent) {
         if (bus(recipe.kind)) { address = addressControl(parent, retained?.address ?? ""); parameters.append(label(recipe.kind === "i2c" ? "I2C address" : "SPI chip select", address)); }
         collect = fields(parameters, parent.fields, true, retained?.fields);
@@ -306,11 +340,12 @@ export function mountModulePanel(root, {api, state, workspace, drafts, onChange,
     note(detail, instance ? "Source node. Existing handwritten declarations remain editable without recipe conversion."
       : `${node.role === "provider" ? "GPIO provider" : "Local connection"}. Physical routing and inherited hardware remain unknown unless separately established.`);
     const parent = data.parents.find((item) => item.key === selected);
-    if (parent) detail.append(button("Place module on this connection", () => { requestedParent = selected; select(""); }));
+    if (parent) detail.append(button("Place module on this connection", () => requestPlacement(selected)));
     if (instance) instanceDetail(instance);
     if (focused >= 0 && !focusAfterCommand) detail.querySelectorAll("input, select, textarea, button")[focused]?.focus({preventScroll: true});
   }
   function select(key) {
+    clearPlacementFeedback();
     localActionMessage = "";
     if (pendingSelection) pendingSelection.follow = false;
     if (selected === key && detailIdentity) { updateDisabled(); return; }
@@ -382,11 +417,12 @@ export function mountModulePanel(root, {api, state, workspace, drafts, onChange,
       if (data) {
         for (const item of data.diagnostics) note(diagnostics, item.message || item, "dte-notice");
         empty.hidden = data.graph.nodes.length > 0;
-        empty.textContent = "No supported local buses, GPIO groups or modules are declared. Use source or peripheral forms to declare a connection first.";
+        empty.textContent = unavailablePlacement();
         renderGraph();
         if (!state.moduleLayoutView.loaded && !state.moduleLayoutView.busy && view.data) void layout.load();
       } else {
         selected = ""; detailIdentity = ""; positions = {}; readPlacement = null; placementState = null; pendingSelection = null; localActionMessage = "";
+        clearPlacementFeedback();
         cards.clear(); canvas.replaceChildren(); detail.replaceChildren(); formStatuses.clear(); layout.clear(); empty.hidden = true;
       }
     }

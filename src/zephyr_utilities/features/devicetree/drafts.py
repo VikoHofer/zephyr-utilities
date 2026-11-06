@@ -140,6 +140,8 @@ class DraftService:
         self.pwm = None
         self.adc = None
         self.interrupt_gpio = None
+        self.can = None
+        self.board_connections = None
 
     def _capture(self, context):
         captured = deepcopy(context)
@@ -389,7 +391,9 @@ class DraftService:
         pwm_command = self.pwm is not None and kind in self.pwm.commands
         adc_command = self.adc is not None and kind in self.adc.commands
         interrupt_gpio_command = self.interrupt_gpio is not None and kind in self.interrupt_gpio.commands
-        if not any((binding_command, peripheral_command, pin_command, module_command, removal_command, pwm_command, adc_command, interrupt_gpio_command)) and (fields is None or not fields <= set(command) or set(command) - fields - optional):
+        can_command = self.can is not None and kind in self.can.commands
+        board_command = self.board_connections is not None and kind in self.board_connections.commands
+        if not any((binding_command, peripheral_command, pin_command, module_command, removal_command, pwm_command, adc_command, interrupt_gpio_command, can_command, board_command)) and (fields is None or not fields <= set(command) or set(command) - fields - optional):
             raise ValueError("Choose the exact supported visual command fields.")
         with self.editor.lock, self.lock:
             context = self._context(binding)
@@ -400,12 +404,16 @@ class DraftService:
                 raise ValueError("This draft has incomplete or unsupported structure. Repair the source before using visual controls.")
             if removal_command:
                 change = self.removal.plan(body, context, draft)
+            elif board_command:
+                change = self.board_connections.plan(body, context, draft)
             elif pwm_command:
                 change = self.pwm.plan(body, context, draft)
             elif adc_command:
                 change = self.adc.plan(body, context, draft)
             elif interrupt_gpio_command:
                 change = self.interrupt_gpio.plan(body, context, draft)
+            elif can_command:
+                change = self.can.plan(body, context, draft)
             elif module_command:
                 change = self.modules.plan(body, context, draft)
             elif pin_command:

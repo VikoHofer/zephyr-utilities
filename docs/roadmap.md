@@ -27,10 +27,15 @@ research master plan, not a general coding-assistant integration.
 
 ## Feature ownership and next useful slices
 
+Device Tree Editor's immediate priority is now cross-vendor board/controller discovery
+and a usable visual add/connect workflow, starting with the user's `nucleo_f446re`.
+An empty overlay must show the board's inherited hardware. Further D11 feature depth
+follows these foundations; see the [controller-first plan](device-tree-editor-controller-first-plan.md).
+
 | Feature | State | Initial implementation direction |
 | --- | --- | --- |
 | Memory Explorer (`memory`) | Available | Existing-build reports, visualization, snapshots and comparisons |
-| Device Tree Editor (`devicetree`) | Existing-overlay editing, binding/peripheral forms, bounded pins, local module canvas, resource diagnostics/removal reviews, reviewed Save/recovery and explicit Configure | D0–D10 complete within documented scopes; D11a PWM and D11b local ADC forms delivered; D11c interrupt GPIO forms complete within scoped limits with passed checks; D11 remains partial |
+| Device Tree Editor (`devicetree`) | Existing-overlay editing, binding/peripheral forms, bounded pins, local module canvas, resource diagnostics/removal reviews, reviewed Save/recovery and explicit Configure | D0–D10 complete within documented scopes; D11a PWM, D11b local ADC and D11c interrupt GPIO forms delivered; D11d adds nominal CAN settings and existing local transceiver connections; D11 remains partial |
 | Project Creator (`projects`) | Applications, creation/build and environment discovery available | Maintain the delivered everyday workflow and add focused public editor handoffs |
 | Build Inspector (`inspector`) | Advanced build, resolved-tree, current source and binding navigation available | Preserve available inspection; further depth deferred |
 | TinyML Experiments (`tinyml`) | Planned | Connect model/build/run identities and compare imported experiment measurements |
@@ -138,8 +143,11 @@ profiles for BMI270 INT1, HDC2010 DRDY/INT and MAX30210 INT1, using literal loca
 provider evidence and preserved numeric flags. Trigger mode, software enablement and
 physical suitability remain unknown. Full checks, browser verification, actual-binding
 smoke and installed-package checks passed as recorded in the
-[D11c handoff](device-tree-editor-d11c-handoff.md). Broader signal profiles and the
-remaining family matrix stay planned.
+[D11c handoff](device-tree-editor-d11c-handoff.md). D11d adds local nominal CAN settings
+and existing active-transceiver selection for three explicit controller profiles, plus
+declared-limit diagnostics and guarded dependency removal. See the
+[D11d handoff](device-tree-editor-d11d-handoff.md). Broader CAN/interrupt profiles and
+the remaining family matrix stay planned.
 
 The [Project Creator and environment analyser master plan](project-creator-masterplan.md)
 provides the earlier shared-context proposal; the editor master plan now defines its

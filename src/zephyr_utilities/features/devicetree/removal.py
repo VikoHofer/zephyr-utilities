@@ -7,6 +7,7 @@ import time
 import uuid
 
 from .adc_resources import adc_channel_dependants
+from .can_resources import can_passive_dependants, can_repair_reason
 from .drafts import _GUARD_FIELDS, _diff
 from .source_syntax import SourceError
 
@@ -152,6 +153,12 @@ class RemovalService:
             dependants.append(dependant)
             block("An io-channels consumer selects or may select this channel configuration. Repair its input or channel configuration explicitly before removing the child; deleting the whole consumer property is not an automatic repair.", consumer, prop)
 
+        for dependant in can_passive_dependants(document, observed["bindings"], removed_ids):
+            consumer = nodes[dependant["source_node_id"]]
+            dependant["location"] = _location(document, consumer)
+            dependants.append(dependant)
+            block(dependant["message"], consumer)
+
         for consumer in graph.get("pin_state_consumers", []):
             if consumer["target_node_id"] not in removed_ids | ancestors:
                 continue
@@ -206,7 +213,8 @@ class RemovalService:
             routing = prop.name == "cs-gpios" or re.fullmatch(r"pinctrl-[0-9]+", prop.name)
             pwm_names = prop.name == "pwms" and any(item.name == "pwm-names" for item in consumer.properties)
             io_names = prop.name == "io-channels" and any(item.name == "io-channel-names" for item in consumer.properties)
-            safe = bool(not routing and not pwm_names and not io_names and exclusive and literal and (named or optional) and consumer.id in unique_ids and document.can_edit_node(consumer.id)
+            can_reason = can_repair_reason(document, observed["bindings"], consumer, prop)
+            safe = bool(not routing and not pwm_names and not io_names and not can_reason and exclusive and literal and (named or optional) and consumer.id in unique_ids and document.can_edit_node(consumer.id)
                         and len([item for item in consumer.properties if item.name == prop.name]) == 1)
             if safe and len(choices) >= MAX_REPAIRS:
                 block("This removal exceeds the 64-repair review limit. Repair some consumers explicitly before reviewing again.", consumer, prop)
@@ -227,7 +235,7 @@ class RemovalService:
                     if item["property_id"] == property_id:
                         item["repair_id"] = repair_id
             else:
-                reason = ("PWM specifiers with pwm-names require explicit consumer repair; removing pwms alone could leave companion names without their entries."
+                reason = (can_reason or ("PWM specifiers with pwm-names require explicit consumer repair; removing pwms alone could leave companion names without their entries."
                           if pwm_names else
                           "I/O channel specifiers with io-channel-names require explicit consumer repair; removing io-channels alone could leave companion names without their entries."
                           if io_names else
@@ -235,13 +243,19 @@ class RemovalService:
                           if routing else
                           "A required reference must be repaired explicitly in source or its supported form before removal."
                           if field and field["required"] else
-                          "This dependency is mixed, opaque, ambiguous or lacks an established optional binding. Repair it explicitly in source before removal.")
+                          "This dependency is mixed, opaque, ambiguous or lacks an established optional binding. Repair it explicitly in source before removal."))
                 block(reason, consumer, prop)
 
         if selected - repair_properties.keys():
             raise ValueError("A selected repair is unavailable or belongs to another removal preview.")
+        removed_properties = {repair_properties[repair_id] for repair_id in selected}
+        for property_id in removed_properties:
+            consumer, prop = document._property(property_id)
+            reason = can_repair_reason(document, observed["bindings"], consumer, prop, removed_properties)
+            if reason:
+                block(reason, consumer, prop)
         for item in dependants:
-            if item["kind"] == "known-pin-state-consumer":
+            if item["kind"] in {"known-pin-state-consumer", "can-passive-transceiver"}:
                 continue
             if not item.get("property_id"):
                 block("A structural or declaration reference depends on this target. Repair it explicitly in source before removal.", nodes.get(item["source_node_id"], target))

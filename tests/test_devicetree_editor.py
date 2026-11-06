@@ -475,7 +475,7 @@ class EditorContextHttpTests(unittest.TestCase):
         for operation in ("open", "get", "source", "command", "undo", "redo", "review", "save", "compare", "reload",
                           "recovery/list", "recovery/read", "recovery/restore", "recovery/discard",
                           "validation/review", "validation/submit", "validation/status", "validation/cancel", "validation/handoff", "bindings", "peripherals",
-                          "resources", "removal/review", "pwm", "adc", "interrupt-gpios"):
+                          "resources", "removal/review", "pwm", "adc", "interrupt-gpios", "can", "board"):
             for authorized, expected in ((False, 403), (True, 400)):
                 with self.subTest(operation=operation, authorized=authorized), self.assertRaises(HTTPError) as error:
                     self.request(PREFIX + "drafts/" + operation, method="POST", body={}, authorized=authorized)
@@ -704,6 +704,62 @@ properties:
         observed = post("drafts/interrupt-gpios", guard(reopened))
         self.assertEqual(next(row for row in observed["consumers"] if row["path"] == "/sensor")["entry"],
                          {"reference": "&gpio0", "cells": [2, 257]})
+        self.assertEqual(self.server.app.context.jobs.list(), [])
+
+    def test_can_settings_use_guarded_http_history_and_reviewed_save(self):
+        def post(operation, body):
+            with self.request(PREFIX + operation, method="POST", body=body) as response:
+                return json.load(response)
+
+        overlay = self.source / "app.overlay"
+        original = '''/* Handwritten CAN settings. */
+/ {
+    can0: can { compatible = "nxp,flexcan"; bitrate = <250000>; sample-point = <875>; keep = <HANDWRITTEN(1)>; };
+};
+'''
+        overlay.write_text(original)
+        bindings = self.source / "dts/bindings"
+        bindings.mkdir(parents=True)
+        (bindings / "can.yaml").write_text('''compatible: nxp,flexcan
+properties:
+  compatible: {type: string-array, required: true}
+  bitrate: {type: int}
+  sample-point: {type: int}
+  phys: {type: phandle}
+''')
+        context = post("open", {"workspace": str(self.root), "application_path": str(self.source)})
+        binding = {"workspace": str(self.root), "context_id": context["id"], "expected_revision": context["revision"]}
+        document = next(item for item in context["documents"] if item["relative_path"] == "app.overlay")
+        draft = post("drafts/open", {**binding, "document_id": document["id"]})
+
+        def guard(value):
+            return {**binding, "draft_id": value["id"], "expected_draft_revision": value["revision"],
+                    "expected_draft_sha256": value["sha256"]}
+
+        observed = post("drafts/can", guard(draft))
+        controller = next(row for row in observed["controllers"] if row["path"] == "/can")
+        command = {"kind": "can_controller_set", "schema_id": observed["schema_id"], "node_id": controller["node_id"],
+                   "values": {"bitrate": 500000, "sample-point": 800}}
+        draft = post("drafts/command", {**guard(draft), "command": command})
+        changed = original.replace("<250000>", "<500000>").replace("<875>", "<800>")
+        self.assertEqual(draft["text"], changed)
+        self.assertEqual(overlay.read_text(), original)
+        with self.assertRaises(HTTPError) as stale:
+            post("drafts/command", {**guard(draft), "command": command})
+        self.assertEqual(stale.exception.code, 400)
+        stale.exception.close()
+        restored = post("drafts/undo", guard(draft))
+        self.assertEqual(restored["text"], original)
+        redone = post("drafts/redo", guard(restored))
+        self.assertEqual(redone["text"], changed)
+        review = post("drafts/review", guard(redone))
+        saved = post("drafts/save", {**guard(redone), "plan_id": review["plan"]["id"]})
+        self.assertEqual(saved["status"], "saved")
+        self.assertEqual(overlay.read_text(), changed)
+        binding.update(context_id=saved["context"]["id"], expected_revision=saved["context"]["revision"])
+        reopened = post("drafts/open", {**binding, "document_id": saved["draft"]["document_id"]})
+        self.assertEqual(reopened["text"], changed)
+        self.assertTrue(next(row for row in post("drafts/can", guard(reopened))["controllers"] if row["path"] == "/can")["editable"])
         self.assertEqual(self.server.app.context.jobs.list(), [])
 
     def test_resource_removal_review_repairs_are_explicit_atomic_and_revision_bound(self):

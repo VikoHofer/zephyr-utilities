@@ -1,5 +1,12 @@
 # Device Tree Editor master plan
 
+**Priority revision, 2026-11-06:** controller/board support and the beginner visual
+workspace now take precedence over further advanced D11 families. The previous D0–D15
+sequence below records delivered foundations and future capabilities; it is no longer
+the next-work ordering. The [controller-first plan](device-tree-editor-controller-first-plan.md)
+defines the active acceptance gates, beginning with `nucleo_f446re` and cross-vendor
+board/SoC discovery. A local-overlay-only canvas does not satisfy this product goal.
+
 Status: limited overlay editor available; D0–D10 implementations complete within their
 staged scopes on 2026-11-06. D6 is committed as `564fcff`; D7 as `4caf359`; D8 as `cfaf10e`.
 D9 local module recipes, logical canvas and separate layout persistence are implemented;
@@ -19,6 +26,8 @@ checks passed. D11b local ADC consumers/channel forms extend that slice; verific
 recorded in the [D11b handoff](device-tree-editor-d11b-handoff.md), and D11b is committed
 as `2f070ad`. D11c adds three explicit interrupt GPIO signal profiles; full/browser/package
 checks passed as recorded in the [D11c handoff](device-tree-editor-d11c-handoff.md).
+D11d adds nominal CAN settings and existing local active transceiver connections;
+its scope and verification are recorded in the [D11d handoff](device-tree-editor-d11d-handoff.md).
 D11 remains partial.
 
 Build an offline visual hardware editor inside the existing `zephyr-utils` application.
@@ -59,7 +68,8 @@ graphs, separate layout persistence and passed verification. The
 and passed full/browser/package checks. The [D11 handoff](device-tree-editor-d11-handoff.md)
 records the PWM slice; the [D11b handoff](device-tree-editor-d11b-handoff.md) records
 the ADC slice. The [D11c handoff](device-tree-editor-d11c-handoff.md) records interrupt
-GPIO profiles and current verification. Subsequent D11 requests select another bounded family.
+GPIO profiles and current verification. The [D11d handoff](device-tree-editor-d11d-handoff.md)
+records nominal CAN forms. Subsequent D11 requests select another bounded family.
 
 ## Product experience
 
@@ -375,10 +385,11 @@ full/browser/package checks. D11b bounded local ADC consumers/channels are **com
 within their scoped limits**, with passed full/browser/package checks. D11c interrupt GPIO
 forms are **complete within their scoped limits** for three exact profiles, with passed
 full/browser/package checks. D12–D15 are **not started**.
-The default order is sequential; shared contracts
-and source safety precede richer visuals. Split a stage further if its exit gate cannot
-be delivered and tested in a reviewable change. Complete the selected slice without
-starting unrelated later stages.
+The controller-first revision above now determines delivery order. Preserve the source
+and Save contracts while bringing board discovery, inherited-controller connections and
+the visual workspace forward. Stage completion labels describe their historical scoped
+implementations, not completion of the beginner workflow. Split work into reviewable
+changes and verify the active acceptance gates before expanding advanced features.
 
 For D1–D3, exercise the frontend and authenticated routes through an explicitly injected
 development/test feature definition using the existing application composition. Keep
@@ -727,7 +738,9 @@ and leaves driver trigger mode, Kconfig and physical suitability unknown. Its
 | ADC inherited providers, symbolic/multi-specifier and optional configuration forms | Planned |
 | Single-specifier local interrupt GPIO consumers for BMI270 INT1, HDC2010 DRDY/INT and MAX30210 INT1 | D11c complete within its scoped limits; full/browser/package checks passed |
 | Other interrupt signals, inherited providers and symbolic/multiple GPIO specifiers | Planned |
-| CAN, I2S/audio and USB | Planned |
+| Local nominal CAN settings and existing active-transceiver selection for loopback, MCP2515 and FlexCAN | D11d implemented within scoped limits; verification in the D11d handoff |
+| CAN-FD data timing, other CAN profiles, inherited controllers and new-device creation | Planned |
+| I2S/audio and USB | Planned |
 | Clocks, resets, DMA and regulators/power domains | Planned |
 | Fixed memory partitions with known range/alignment constraints | Planned |
 | Provider disabling and console/chosen impact review | Planned beyond existing D10 removal reviews |
@@ -901,9 +914,9 @@ performance claims without measurements.
 
 ## Starting point
 
-The current D11 implementation includes **D11a PWM, D11b local ADC and D11c interrupt
-GPIO profiles** within their documented limits. D11c full/browser/package verification
-passed as recorded in its handoff. The next request should select one remaining bounded D11 family; broader
+The current D11 implementation includes **D11a PWM, D11b local ADC, D11c interrupt
+GPIO profiles and D11d local nominal CAN settings** within their documented limits.
+Verification is recorded in each handoff. The next request should select one remaining bounded D11 family; broader
 interrupt GPIO coverage is also still planned. D10 verification is complete within its
 documented scope; D11 remains incomplete until its matrix is met.
 D0's contracts/source experiment, D1's read-only context and D2's source operations

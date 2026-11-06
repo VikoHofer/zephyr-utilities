@@ -13,8 +13,17 @@ D11a local single-specifier PWM consumers and PWM LED forms are complete within 
 scoped limits, with full/browser/package checks passed. D11b adds local ADC consumers
 and common channel configuration; its verification is recorded in the D11b handoff.
 D11c adds three explicit interrupt GPIO signal profiles; full/browser/package checks
-passed as recorded in the D11c handoff. D11 remains partial.
+passed as recorded in the D11c handoff. D11d adds bounded local CAN nominal settings
+and existing-transceiver connections; verification is in the D11d handoff. D11 remains partial.
 Broader pin adapters, advanced composition and TinyML experiments remain planned.
+
+The current priority is [controller-first visual editing](device-tree-editor-controller-first-plan.md):
+observe the selected board/SoC hardware across vendors before placing devices, and use
+scoped application overrides for inherited-controller connections. The older local-only
+module canvas is not sufficient for a new empty overlay.
+The first board observation and inherited I2C/GPIO connection slice is implemented;
+its [handoff](device-tree-editor-controller-first-handoff.md) records cross-vendor
+discovery, Nucleo connection/browser checks and remaining composition/routing limits.
 
 ## Dependency direction
 
@@ -224,8 +233,12 @@ and a fresh output directory by default. Explicit reuse revalidates a managed ou
 its captured cache/profile and configuration revision before reconfiguring in place.
 Reviewed cleanup removes only an owned output tree and retains historical evidence.
 See [ADR 0017](decisions/0017-project-management-and-build-outputs.md).
-Application/Zephyr/toolchain code runs only for an explicit
-configure/build action. It is not sandboxed by output-directory separation.
+Application CMake and build logic run only for an explicit configure/build action.
+Explicit board-hardware discovery additionally permits bounded read-only preprocessing
+and the selected Zephyr devicetree parser, without running application or board CMake.
+This tooling exception, input guards and observation authority are described in
+[ADR 0023](decisions/0023-board-hardware-observation.md). Temporary output directories
+are not an execution sandbox.
 
 Project/profile and attempt context remain feature-owned. The shared build-inspection
 service captures separate transient observations of existing outputs for Build Inspector
@@ -468,6 +481,14 @@ that lack a direct child phandle. Optional settings, shared providers, source/hi
 reviewed Save and explicit Configure retain their existing boundaries. No storage schema,
 process boundary or cross-feature dependency changes. See the
 [D11b handoff](device-tree-editor-d11b-handoff.md).
+
+D11d adds feature-owned `CANService`, an explicit compatible profile set and shared
+CAN evidence for resource/removal review. Its existing-overlay command changes only
+selected nominal settings or the local `phys` reference through the canonical source
+plan. Active versus passive transceiver precedence, declared bitrate limits and known
+implicit dependencies remain source-derived. No timing calculator, inferred effective
+tree, storage schema or process boundary is added. See the
+[D11d handoff](device-tree-editor-d11d-handoff.md).
 
 
 D11c adds feature-owned `InterruptGPIOService` and a data-only signal profile table.

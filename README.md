@@ -7,7 +7,10 @@ workspace selection and background jobs. Memory Explorer and Project Creator's e
 analysis, minimal C/C++ creation, curated local sample cloning and explicit configure/build workflow are available.
 Advanced Build Inspector reads existing outputs, resolved Device Trees, current sources
 and bindings, and carries the selected image into Memory Explorer for report generation.
-Device Tree Editor supports visual status/property edits, local binding-aware forms and
+Device Tree Editor starts with selected-board hardware discovery and basic BME280 I2C
+sensor / GPIO LED connections that generate overlay declarations. Discovery reads local
+board, SoC and module sources without requiring aliases or local controller copies.
+It also supports visual status/property edits, local binding-aware forms and
 references, local UART/I2C/SPI and GPIO topology, editable overlay source, reviewed
 single-file Save, draft recovery and explicit saved-source Configure. Nordic pin assignment
 supports the exact verified nrf52840dk/nrf52840 profile. A vendor-independent module
@@ -285,9 +288,16 @@ The analysis modules are independent of HTTP. See the [platform contract](docs/p
 [Project Creator contract](docs/project-creator.md),
 [memory API contract](docs/implementation-contract.md) and
 [Memory Explorer master plan](docs/memory-explorer-masterplan.md) for details.
-The [Device Tree Editor master plan](docs/device-tree-editor-masterplan.md)
-divides live overlay editing, hardware-module placement and pin configuration into
-16 implementation stages with individual prompts and acceptance gates.
+The [controller-first plan](docs/device-tree-editor-controller-first-plan.md) prioritizes
+board discovery and basic visual connections before further advanced editor families.
+It supersedes the delivery order in the [original master plan](docs/device-tree-editor-masterplan.md).
+Open a registered application with an exact board configuration and overlay, select
+**Load board hardware**, then **Add BME280 sensor** or **Add LED** and a connection.
+The source appears directly below the hardware workspace; older local forms remain
+under **Advanced overlay tools**. Discovery and connections use the same path across
+vendors. Board composition and pin-routing coverage still have explicit limits; see
+the [controller-first handoff](docs/device-tree-editor-controller-first-handoff.md).
+
 Its [D0 foundation](docs/device-tree-editor-d0-handoff.md) defines the contracts and
 tests a bounded source-edit prototype.
 The [D1 read-only preview](docs/device-tree-editor-d1-handoff.md) adds project/configuration
@@ -463,6 +473,25 @@ electrical suitability remain unverified. Each edit is one undoable draft change
 reviewed Save and Configure stay separate. D11c full checks, browser verification,
 actual-binding smoke and installed-package checks passed within this scope; the wider
 D11 stage remains partial.
+
+The [D11d slice](docs/device-tree-editor-d11d-handoff.md) adds **Load CAN controllers**
+for explicit local `zephyr,can-loopback`, `microchip,mcp2515`, and `nxp,flexcan`
+declarations. Select only the fields to set in this action: nominal `bitrate`,
+`sample-point`, or an existing local `can-transceiver-gpio` connection through `phys`.
+Unchecked fields and defaults stay unchanged. Nominal bitrate is bounded to
+1–1,000,000 bit/s and sample point to 0–999 per mille; 0 explicitly requests the
+driver's automatic sample-point policy. Known local transceiver limits constrain
+rate/connection changes. Missing controller timing, clocks, routing and runtime behavior
+remain unknown; passing declared limits does not prove the requested bitrate is achievable.
+
+Existing active `phys` connections take precedence over passive `can-transceiver`
+children. Passive limits are read-only in this slice. Deprecated speed aliases,
+unresolved/opaque declarations and inherited controllers retain source/generic editing.
+No controller/transceiver nodes, GPIO wiring, pinctrl or Kconfig settings are created.
+CAN-FD data timing is preserved, with known declared data rates considered when changing
+the transceiver connection. Resource reviews protect implicit passive-child dependencies and
+the last transceiver GPIO control. Save/Configure remain explicit and routine actions
+stay in place. See the D11d handoff for final verification and remaining scope.
 
 Acknowledged drafts are retained under `.features/devicetree/drafts/` in the data directory.
 **Find recoverable drafts** compares retained text with current files before an explicit restore;

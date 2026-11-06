@@ -1,6 +1,6 @@
 # Device Tree Editor foundation contract
 
-Status: D0–D11c contracts, 2026-11-06. D4 adds reviewed existing-overlay Save and durable
+Status: D0–D11d and controller-first foundation contracts, 2026-11-06. D4 adds reviewed existing-overlay Save and durable
 draft recovery; D5 adds explicit saved-source Configure through Projects; D6 adds local
 binding-aware property/reference forms; D7 adds local peripheral and bus-device topology.
 D8 adds Nordic pins for the verified nrf52840dk/nrf52840 profile. D9 adds local module
@@ -11,7 +11,8 @@ D9 is committed as `3cf6db1`; D10 as `6403e43`. D11a adds local PWM consumers/LE
 and D11b adds local ADC consumers/common channel configuration;
 full/browser/package checks passed. D11c adds three interrupt GPIO signal profiles;
 its full/browser/package checks passed within the handoff's scoped limits. The full D11
-matrix remains incomplete.
+matrix remains incomplete. D11d adds scoped local CAN nominal settings and existing
+active-transceiver selection, with verification recorded in its handoff.
 Full D7 checks and browser/package verification passed as recorded in its handoff.
 The D0 executable evidence is a bounded in-memory source prototype under
 `scripts/prototypes/`, outside the installed application. See the
@@ -1112,3 +1113,81 @@ scrolling. Offscreen action feedback uses a visible notice; source/detail naviga
 requires its explicit control. Save/Configure remain separate;
 no persistent schema changes. See the [D11c handoff](device-tree-editor-d11c-handoff.md)
 for current verification and remaining work.
+
+
+## D11d local CAN controllers and transceivers
+
+`POST /api/devicetree/editor/drafts/can` uses the standard context/draft guards and
+expiring binding observation. `CANService` returns binding information plus controller
+and transceiver evidence. The controller profiles are exactly `zephyr,can-loopback`,
+`microchip,mcp2515` and `nxp,flexcan`; active transceivers use `can-transceiver-gpio`.
+A literal local compatible and its unique matched binding establish identity. The
+specialized form does not create controllers or transceivers.
+
+`can_controller_set` accepts exactly `kind`, `schema_id`, `node_id`, and `values`.
+`values` is a nonempty subset of `bitrate`, `sample-point`, and `phys`. Nominal bitrate
+is an integer from 1 to 1000000 bit/s; sample point is an integer from 0 to 999 per
+mille, with 0 explicitly selecting the automatic policy. These API bounds do not prove
+clock/prescaler timing feasibility. The form preserves unselected fields, source
+comments and all provider properties. A legacy-only `bus-speed` withholds the modern
+bitrate field; no deprecated property is silently migrated.
+
+`phys` must resolve to one supported local active transceiver with zero PHY cells,
+valid explicit maximum bitrate, an optional valid minimum, and supported existing
+GPIO control evidence. Selected active transceiver limits take precedence over the
+passive `can-transceiver` child. Missing minimum evidence stays unknown while a known
+maximum still bounds accepted rates. Malformed or ambiguous effective limits withhold
+related edits. Changing the connection checks preserved explicit nominal and CAN-FD
+data rates; this form does not edit data-phase settings or GPIO controls. Unsupported
+source remains available through the generic/source workflows.
+
+Commands revalidate local binding evidence before and after planning and produce one
+canonical history action. Resource diagnostics distinguish known contradictions from
+unknown timing, wiring and sharing suitability. Removal reviews protect implicit
+passive-child dependencies and the final GPIO control of an active transceiver;
+removing `phys` must not silently activate a passive configuration. Load, selection
+and Apply retain scroll and focus. Save and Configure remain explicit separate actions.
+See the [D11d handoff](device-tree-editor-d11d-handoff.md) for exact profile limits and
+verification. D11 remains partial.
+
+## Controller-first board hardware
+
+The [controller-first plan](device-tree-editor-controller-first-plan.md) supersedes the
+sequential advanced-family delivery order. See [ADR 0023](decisions/0023-board-hardware-observation.md)
+for the public context and explicit preprocessing boundary.
+
+`POST /api/devicetree/editor/drafts/board` accepts the canonical context and draft
+guards. It returns `schema_version: 1`, an opaque `observation_id`, board/target identity,
+`supported` and `reason`, effective-path node/controller/GPIO lists, source provenance,
+pinctrl states, connector mappings, known allocations and per-controller
+`connection_options`. An unsupported observation still returns its board identity and
+an explanation. It does not change the draft or saved source.
+
+Discovery uses captured board metadata and selected DTS roots, a bounded literal include
+closure, GNU preprocessing and the selected Zephyr `dtlib` parser. No CMake, Configure
+or build runs. It supports an exact single-SoC qualifier, one selected application
+overlay and unambiguous board source. Revisions, board extensions, shields/snippets and
+broader overlay composition need further support. Current board metadata, source and
+binding contents, tool identity and draft guards must still match before an observation
+can authorize an edit. Retention is bounded to sixteen observations for thirty minutes.
+
+The canonical draft command `board_module_add` requires `observation_id` and a
+`connection` with `controller_id`, `kind`, `name` and optional-empty `label`.
+I2C connections additionally provide `compatible: "bosch,bme280"`, integer `address`
+and explicit boolean `enable`. GPIO LED connections provide integer `pin` and `flags`.
+The generated override/group is source preserving and one Undo/Redo action. It does
+not create `led0` aliases or copy inherited controller properties. Known address/pin
+uses, reserved ranges, binding constraints, conditional source and duplicate identities
+are checked before planning and evidence is revalidated afterwards.
+
+Existing I2C pin routing is reused. GPIO counts retain explicit/default provenance and
+do not establish physical package/header availability. The first known pinmux allocation
+decoder covers the verified STM32 encoding; unhandled routing keeps the board visible
+but withholds GPIO assignment when conflicts cannot be assessed. Generic bus observation
+and independently supported I2C connections remain available. Discovery details retain
+these limits. This is not universal pinmux editing or hardware validation.
+
+The primary hardware workspace shows board/controller/device cards and connection forms,
+followed by live source. Older local forms are under Advanced overlay tools. Ordinary
+actions retain scroll/focus and report results beside their trigger; stale/late responses
+cannot authorize edits in another context. Save and Configure remain separate reviews.

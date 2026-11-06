@@ -1,5 +1,26 @@
 # Agent guide
 
+## Current product priority
+
+The user's 2026-11-06 direction supersedes the old sequential D-stage order:
+**board/controller support and the beginner visual connection workflow come first**.
+Start from the selected board/SoC DTS, included sources, module/custom roots and
+bindings across vendors. An empty application overlay must not imply empty hardware;
+aliases such as `led0` are optional annotations, never discovery prerequisites.
+The first reported acceptance board is `nucleo_f446re`. Use representative other
+vendors to verify the shared discovery path before expanding advanced peripherals.
+Connecting a supported device must generate the scoped application overlay changes;
+users must not manually recreate board controllers to begin. Preserve upstream board
+files. Keep advanced D11 work secondary until this basic workflow works. See the
+[controller-first plan](docs/device-tree-editor-controller-first-plan.md).
+
+The first controller-first slice now observes inherited board/SoC hardware and creates
+BME280 I2C / GPIO LED overlay connections. Actual discovery was checked on Nucleo
+F446RE, nRF52840 DK and FRDM-K64F; Nucleo connections and browser Save/reopen passed.
+This is not universal pin routing. See the
+[controller-first handoff](docs/device-tree-editor-controller-first-handoff.md) for limits
+and the next acceptance gates.
+
 Zephyr Utilities is one local application with a Python backend and an English,
 offline browser interface. `zephyr-utils` starts the entire application. Memory
 Explorer and Project Creator's environment analysis, minimal application creation,
@@ -21,6 +42,8 @@ D11a is committed as `24e79e6`. D11b adds bounded local ADC consumers and common
 configuration; full/browser/package checks passed in the D11b handoff. D11b is committed as
 `2f070ad`. D11c adds three explicit interrupt GPIO consumer profiles; full/browser/package
 checks passed as recorded in the D11c handoff. D11c is committed as `40b3c0a`.
+The UI scroll/focus fixes are committed as `6b73fa8`. D11d adds scoped local CAN
+nominal settings and existing-transceiver selection; its handoff records verification.
 The editor application picker excludes unavailable
 registrations while Projects retains them for reconnect/removal. D11 remains partial;
 its remaining family matrix is in the master plan. Broader pin adapters, advanced composition
