@@ -5,10 +5,11 @@ offline browser interface. `zephyr-utils` starts the entire application. Memory
 Explorer and Project Creator's environment analysis, minimal application creation,
 configuration and single-image builds are implemented. Build Inspector owns advanced
 read-only build, source and binding inspection. Device Tree Editor supports existing-overlay
-status/property and source edits, local binding-aware property/reference forms, reviewed
-Save, draft recovery and explicit saved-source Configure through Projects. Binding forms
-use unique local declarations; inherited hardware remains unknown. Hardware modules,
-pin configuration and TinyML experiment analysis remain planned.
+status/property and source edits, local binding-aware property/reference forms, UART/I2C/SPI
+and GPIO topology forms, reviewed Save, draft recovery and explicit saved-source Configure
+through Projects. Forms use unique local declarations; inherited hardware remains unknown.
+D0–D7 are implemented within their scoped boundaries; D8 Nordic pin configuration is next.
+Hardware modules, pin configuration and TinyML experiment analysis remain planned.
 
 ## Start here
 

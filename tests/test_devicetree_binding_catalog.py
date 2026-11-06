@@ -280,3 +280,66 @@ properties:
         first = catalog.match(["vendor,device"])
         first["schema"]["properties"]["rate"]["default"] = 1000
         self.assertEqual(catalog.match(["vendor,device"])["schema"]["properties"]["rate"]["default"], 1)
+
+    def test_device_lists_use_resolved_bus_metadata_and_stable_compatible_order(self):
+        self.write("bus-base.yaml", "on-bus: i2c\nproperties:\n  reg: {type: array, required: true}\n")
+        self.write("z.yaml", "compatible: vendor,z\ninclude: bus-base.yaml\n")
+        self.write("a.yaml", "compatible: vendor,a\non-bus: i2c\n")
+        self.write("generic.yaml", "compatible: vendor,a\n")
+        self.write("controller.yaml", "compatible: vendor,controller\nbus: i2c\n")
+        self.write("unqualified-i2c.yaml", "compatible: vendor,unqualified\n")
+        self.write("spi.yaml", "compatible: vendor,spi\non-bus: spi\n")
+        self.write("uart.yaml", "compatible: vendor,uart\non-bus: uart\n")
+        catalog = self.catalog()
+        result = catalog.devices("i2c")
+        self.assertEqual([item["compatible"] for item in result["candidates"]], ["vendor,a", "vendor,z"])
+        self.assertFalse(result["truncated"])
+        self.assertTrue(all(item["state"] == "matched" and item["schema"]["on_bus"] == "i2c" for item in result["candidates"]))
+        self.assertEqual([item["compatible"] for item in catalog.devices("spi")["candidates"]], ["vendor,spi"])
+        self.assertEqual([item["compatible"] for item in catalog.devices("uart")["candidates"]], ["vendor,uart"])
+
+    def test_device_lists_expose_ambiguous_missing_and_malformed_schemas(self):
+        self.write("duplicate-one.yaml", "compatible: vendor,duplicate\non-bus: spi\n")
+        self.write("duplicate-two.yaml", "compatible: vendor,duplicate\non-bus: spi\n")
+        self.write("malformed.yaml", "compatible: vendor,malformed\non-bus: spi\nproperties: []\n")
+        self.write("missing.yaml", "compatible: vendor,missing\non-bus: spi\ninclude: absent.yaml\n")
+        self.write("unknown.yaml", "compatible: vendor,unknown\ninclude: absent.yaml\n")
+        candidates = self.catalog().devices("spi")["candidates"]
+        self.assertEqual({item["compatible"]: item["state"] for item in candidates}, {
+            "vendor,duplicate": "ambiguous", "vendor,malformed": "unsupported", "vendor,missing": "missing"})
+        self.assertTrue(all(item["schema"] is None and item["diagnostics"] for item in candidates))
+
+    def test_device_list_cache_is_detached_and_remains_bound_to_observed_files(self):
+        self.write("device.yaml", "compatible: vendor,device\non-bus: uart\nproperties:\n  speed: {type: int}\n")
+        catalog = self.catalog()
+        result = catalog.devices("uart")
+        result["candidates"][0]["schema"]["properties"].clear()
+        result["diagnostics"].append("changed")
+        with patch.object(catalog, "_resolve", side_effect=AssertionError("The observed device list is cached")):
+            current = catalog.devices("uart")
+        self.assertIn("speed", current["candidates"][0]["schema"]["properties"])
+        self.assertEqual(current["diagnostics"], [])
+        self.write("duplicate.yaml", "compatible: vendor,device\non-bus: uart\n")
+        with self.assertRaisesRegex(ValueError, "changed"):
+            catalog.revalidate()
+        self.assertEqual(self.catalog().devices("uart")["candidates"][0]["state"], "ambiguous")
+
+    def test_device_list_limit_is_explicit_and_invalid_bus_or_index_is_withheld(self):
+        for number in range(257):
+            self.write(f"device-{number:03}.yaml", f"compatible: vendor,device-{number:03}\non-bus: spi\n")
+        catalog = self.catalog()
+        result = catalog.devices("spi")
+        self.assertEqual(len(result["candidates"]), 256)
+        self.assertEqual(result["candidates"][0]["compatible"], "vendor,device-000")
+        self.assertEqual(result["candidates"][-1]["compatible"], "vendor,device-255")
+        self.assertTrue(result["truncated"])
+        self.assertIn("truncated", " ".join(result["diagnostics"]))
+        for bus in (None, ["spi"], "i3c", ""):
+            with self.subTest(bus=bus), self.assertRaises(ValueError):
+                catalog.devices(bus)
+        self.write("unsafe.yaml", "compatible: [\n")
+        incomplete = self.catalog().devices("spi")
+        self.assertEqual(incomplete["candidates"], [])
+        self.assertIn("incomplete", " ".join(incomplete["diagnostics"]))
+        with self.assertRaises(ValueError):
+            BindingCatalog(self.workspace, [self.root], _parse=False).devices("spi")

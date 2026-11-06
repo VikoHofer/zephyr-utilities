@@ -4,6 +4,7 @@ import {createDraftSession, editorText, nodeSelection, propertySelection, restor
 import {createSaveSession} from "./saving.js";
 import {createValidationSession, diagnosticSelection} from "./validation.js";
 import {mountBindingPanel} from "./binding-view.js";
+import {mountPeripheralPanel} from "./peripheral-view.js";
 
 const array = (value) => Array.isArray(value) ? value : [];
 const text = (value, fallback = "Unknown") => value == null || value === "" ? fallback : String(value);
@@ -25,6 +26,7 @@ export function mount(host, context) {
   let saving;
   let validation;
   let bindings;
+  let peripherals;
   let shownReview;
   let reviewTrigger;
   let shownConfigure;
@@ -530,6 +532,7 @@ export function mount(host, context) {
     renderSaving();
     renderValidation();
     bindings?.render();
+    peripherals?.render();
   }
   async function action(operation, destination) {
     const captured = ++actionGeneration;
@@ -689,12 +692,14 @@ export function mount(host, context) {
   validation = createValidationSession({api: context.api, state, workspace: () => context.workspace.path, drafts, onChange: render});
   bindings = mountBindingPanel($("bindings"), {api: context.api, state, workspace: () => context.workspace.path,
     drafts, reveal: context.reveal, onChange: render});
+  peripherals = mountPeripheralPanel($("peripherals"), {api: context.api, state, workspace: () => context.workspace.path,
+    drafts, reveal: context.reveal, onChange: render});
   render();
   return {
-    navigate(view) { actionGeneration++; saving.cancel(); validation.closeReview(); validation.resume(); bindings.navigate(); return session.navigate(view); },
+    navigate(view) { actionGeneration++; saving.cancel(); validation.closeReview(); validation.resume(); bindings.navigate(); peripherals.navigate(); return session.navigate(view); },
     dispose() {
       disposed = true; actionGeneration++; lifetime.abort(); saving.dispose(); closeReview({restoreFocus: false});
-      validation.dispose(); closeConfigure({restoreFocus: false}); bindings.dispose(); session.dispose(); drafts.dispose();
+      validation.dispose(); closeConfigure({restoreFocus: false}); bindings.dispose(); peripherals.dispose(); session.dispose(); drafts.dispose();
       for (const url of downloadUrls) URL.revokeObjectURL(url);
     },
   };

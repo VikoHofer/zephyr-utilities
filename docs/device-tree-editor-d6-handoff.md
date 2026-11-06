@@ -2,7 +2,7 @@
 
 Status: local binding/property/reference implementation complete and verified on
 2026-11-06 within the limits below.
-D5 was committed as `cb03606` before this stage. D6 changes are uncommitted.
+D5 was committed as `cb03606` before this stage. D6 was committed as `564fcff`.
 
 ## Delivered workflow
 

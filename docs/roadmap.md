@@ -30,7 +30,7 @@ research master plan, not a general coding-assistant integration.
 | Feature | State | Initial implementation direction |
 | --- | --- | --- |
 | Memory Explorer (`memory`) | Available | Existing-build reports, visualization, snapshots and comparisons |
-| Device Tree Editor (`devicetree`) | Existing-overlay editing, local binding/property/reference forms, reviewed Save/recovery and explicit Configure available | D7 peripheral and bus configuration next; hardware modules and pins remain later stages |
+| Device Tree Editor (`devicetree`) | Existing-overlay editing, local binding/reference and peripheral topology forms, reviewed Save/recovery and explicit Configure available | D8 Nordic pin configuration next; module placement remains later |
 | Project Creator (`projects`) | Applications, creation/build and environment discovery available | Maintain the delivered everyday workflow and add focused public editor handoffs |
 | Build Inspector (`inspector`) | Advanced build, resolved-tree, current source and binding navigation available | Preserve available inspection; further depth deferred |
 | TinyML Experiments (`tinyml`) | Planned | Connect model/build/run identities and compare imported experiment measurements |
@@ -58,7 +58,7 @@ include links and direct property summaries do not perform schema resolution or 
 Applications can also be opened before configuration to browse current sources and local
 bindings. Conventional include locations are candidates, not configured search paths.
 The Device Tree Editor now supports existing-overlay source and literal property editing,
-local binding-aware properties/references, reviewed Save and draft recovery. Its broader goal is hardware-module placement and
+local binding-aware properties/references, UART/I2C/SPI and GPIO topology, reviewed Save and draft recovery. Its broader goal is hardware-module placement and
 pin/signal assignment. Following the delivered everyday
 Project Creator workflow, the [Device Tree Editor master plan](device-tree-editor-masterplan.md)
 is the next product direction. It defines D0–D15 with separate implementation prompts
@@ -88,8 +88,15 @@ typed property forms, actual provider specifier cells, safe label addition and a
 references on the shared source command path. Defaults remain informational until Apply;
 inherited values, external references, macros and label rename remain outside visual
 support. See the [D6 handoff](device-tree-editor-d6-handoff.md) for scope and verification
-status. D0–D6 implementations are complete within these scoped boundaries. D7 peripheral
-and bus configuration is next.
+status. D6 was committed as `564fcff`. D7 adds an accessible local topology, supported
+controller settings, binding-selected bus children and GPIO LED/button forms. Atomic
+address changes retain unit-address/`reg` consistency, collision checks reject duplicate
+local allocations, and guarded leaf removal preserves shared controllers and chip-select
+arrays. Required values are explicit; inherited hardware, physical routing and module
+recipes remain unknown or planned. D0–D7 implementations are complete within these
+scoped boundaries. D7's real Configure smoke, full checks,
+browser verification and package verification passed as recorded in the
+[D7 handoff](device-tree-editor-d7-handoff.md). D8 Nordic pin configuration is next.
 
 The [Project Creator and environment analyser master plan](project-creator-masterplan.md)
 provides the earlier shared-context proposal; the editor master plan now defines its

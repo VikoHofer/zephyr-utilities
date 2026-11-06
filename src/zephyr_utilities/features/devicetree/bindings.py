@@ -22,6 +22,7 @@ MAX_INCLUDES = 64
 MAX_PROPERTIES = 1024
 MAX_DEPENDENCIES = 128
 MAX_CANDIDATES = 128
+MAX_DEVICES = 256
 MAX_DEPTH = 16
 MAX_DIAGNOSTICS = 100
 _PROPERTY = re.compile(r"[A-Za-z_#][A-Za-z_0-9,#.+?\-]*")
@@ -254,6 +255,9 @@ class BindingCatalog:
         self._parse = _parse
         self.complete = True
         self.entries, self.by_name, self._resolved = {}, {}, {}
+        self._compatibles = None
+        self._device_buses = None
+        self._devices = {}
         self._directories = {}
         self._entries_seen = 0
         observations = []
@@ -383,6 +387,62 @@ class BindingCatalog:
                 raise _ResolutionError("Binding child includes exceed the 128-file dependency limit.")
         return raw, dependencies
 
+    def _compatible_index(self):
+        if self._compatibles is None:
+            self._compatibles = {}
+            for path, entry in self.entries.items():
+                raw = entry["data"]
+                if not isinstance(raw, dict):
+                    continue
+                compatible = raw.get("compatible")
+                if compatible is None and "include" in raw:
+                    try:
+                        inherited, _ = self._resolve(path)
+                    except _ResolutionError:
+                        # Consumers report errors in helpers without a compatible.
+                        continue
+                    compatible = inherited.get("compatible")
+                if isinstance(compatible, str) and compatible and len(compatible) <= 512:
+                    self._compatibles.setdefault(compatible, []).append(path)
+        return self._compatibles
+
+    def devices(self, bus):
+        """List bounded, detached schemas explicitly qualified for one supported bus."""
+        if not self._parse:
+            raise ValueError("A fingerprint-only binding observation cannot list device schemas.")
+        if not isinstance(bus, str) or bus not in {"uart", "i2c", "spi"}:
+            raise ValueError("Choose one supported device bus: uart, i2c or spi.")
+        if bus in self._devices:
+            return deepcopy(self._devices[bus])
+        result = {"candidates": [], "truncated": False, "diagnostics": list(self.diagnostics)}
+        if not self.complete:
+            result["diagnostics"].append("The binding index is incomplete; device schema selection is withheld.")
+            return result
+        if self._device_buses is None:
+            self._device_buses = {name: set() for name in ("uart", "i2c", "spi")}
+            for compatible, paths in self._compatible_index().items():
+                for path in paths:
+                    raw = self.entries[path]["data"]
+                    try:
+                        resolved, _ = self._resolve(path)
+                        on_bus = resolved.get("on-bus")
+                    except _ResolutionError:
+                        # Explicit qualification is enough to report a broken
+                        # candidate, but an unresolved include cannot imply a bus.
+                        on_bus = raw.get("on-bus")
+                    if isinstance(on_bus, str) and on_bus in self._device_buses:
+                        self._device_buses[on_bus].add(compatible)
+        compatibles = sorted(self._device_buses[bus])
+        result["truncated"] = len(compatibles) > MAX_DEVICES
+        if result["truncated"]:
+            result["diagnostics"].append(f"Only the first {MAX_DEVICES} compatible device schemas for {bus} are listed; this list is truncated.")
+        for compatible in compatibles[:MAX_DEVICES]:
+            match = self.match([compatible], bus=bus)
+            result["candidates"].append({"compatible": compatible, "state": match["state"],
+                "schema": match["schema"], "diagnostics": match["diagnostics"]})
+        self._devices[bus] = result
+        return deepcopy(result)
+
     def match(self, compatibles, *, bus=None, bus_known=True, parent_binding=None):
         if not self._parse:
             raise ValueError("A fingerprint-only binding observation cannot resolve schemas.")
@@ -409,19 +469,9 @@ class BindingCatalog:
             return result
         for compatible in compatibles:
             matching = []
-            for path, entry in self.entries.items():
+            for path in self._compatible_index().get(compatible, []):
+                entry = self.entries[path]
                 raw = entry["data"]
-                if raw.get("compatible") != compatible:
-                    if raw.get("compatible") is not None or "include" not in raw:
-                        continue
-                    try:
-                        inherited, _ = self._resolve(path)
-                    except _ResolutionError:
-                        # A helper without a compatible cannot be selected by
-                        # name. Consumers report its resolution error themselves.
-                        continue
-                    if inherited.get("compatible") != compatible:
-                        continue
                 candidate = {"path": path, "compatible": compatible, "on_bus": raw.get("on-bus"), "sha256": entry["sha256"]}
                 if len(result["candidates"]) < MAX_CANDIDATES:
                     result["candidates"].append(candidate)

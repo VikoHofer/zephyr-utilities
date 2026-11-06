@@ -133,6 +133,7 @@ class DraftService:
         self.publisher = publisher
         self.recovery_failures = {}
         self.bindings = None
+        self.peripherals = None
 
     def _capture(self, context):
         captured = deepcopy(context)
@@ -375,7 +376,8 @@ class DraftService:
                   "remove_property": {"kind", "property_id"}}.get(kind)
         optional = {"property_id"} if kind == "set_property" else set()
         binding_command = self.bindings is not None and kind in self.bindings.commands
-        if not binding_command and (fields is None or not fields <= set(command) or set(command) - fields - optional):
+        peripheral_command = self.peripherals is not None and kind in self.peripherals.commands
+        if not binding_command and not peripheral_command and (fields is None or not fields <= set(command) or set(command) - fields - optional):
             raise ValueError("Choose the exact supported visual command fields.")
         with self.editor.lock, self.lock:
             context = self._context(binding)
@@ -384,7 +386,9 @@ class DraftService:
             document = draft.document
             if document is None or document.syntax.blocked or self._visual_limit(document):
                 raise ValueError("This draft has incomplete or unsupported structure. Repair the source before using visual controls.")
-            if binding_command:
+            if peripheral_command:
+                change = self.peripherals.plan(body, context, draft)
+            elif binding_command:
                 change = self.bindings.plan(body, context, draft)
             elif kind == "set_status":
                 change = document.plan_set_status(command["node_id"], command["status"])

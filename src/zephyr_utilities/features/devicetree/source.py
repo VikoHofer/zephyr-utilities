@@ -565,6 +565,87 @@ class SourceDocument:
             raise SourceError("The initial status operation supports okay or disabled.")
         return self.plan_set_property(node_id, "status", PropertyValue.string(status))
 
+    def plan_update_node(self, node_id, *, unit_address=None, properties=(), remove_properties=()):
+        """Apply explicit local fields and an optional single-cell address in one revision.
+
+        Bus ranges, binding requirements and effective address collisions belong to
+        the caller. Source paths are not renamed when a visible consumer uses them.
+        """
+        self._editable()
+        node = self.node(node_id)
+        self._node_editable(node)
+        if (not isinstance(properties, (tuple, list)) or not isinstance(remove_properties, (tuple, list))
+                or len(properties) + len(remove_properties) > 128):
+            raise SourceError("Choose at most 128 explicit property updates and removals.")
+        checked = []
+        for item in properties:
+            if not isinstance(item, (tuple, list)) or len(item) != 2 or not isinstance(item[1], PropertyValue):
+                raise SourceError("Each property update needs a name and typed literal value.")
+            checked.append((_name(item[0], _NAME, "property name"), item[1]))
+        removed = [_name(name, _NAME, "property name") for name in remove_properties]
+        names = [name for name, _ in checked] + removed
+        if len(names) != len(set(names)):
+            raise SourceError("A property can appear only once in an atomic node update.")
+        edits, diagnostics = [], []
+        if unit_address is not None:
+            address = _integer(unit_address)
+            if "reg" in names:
+                raise SourceError("The unit-address operation owns reg; do not also assign or remove it.")
+            if node.parent_id is None or not _NODE.fullmatch(node.name):
+                raise SourceError("Only a local child declaration can change its unit address.")
+            name = _name(node.name.split("@", 1)[0] + "@" + format(address, "x"), _NODE, "child node name")
+            reg = [prop for prop in node.properties if prop.name == "reg"]
+            if reg:
+                value = self.property_value(reg[0].id) if len(reg) == 1 else None
+                if value is None or value.kind != "cells" or len(value.value) != 1:
+                    raise SourceError("Changing a unit address requires an absent or unique single-cell literal reg property.")
+            checked.append(("reg", PropertyValue.cells((address,))))
+            if name != node.name:
+                edits.append(self._unit_address_edit(node, name))
+                diagnostics.append("The local unit address and reg change together; external path references are not resolved.")
+        missing = []
+        for name, value in checked:
+            found = [prop for prop in node.properties if prop.name == name]
+            if len(found) > 1:
+                raise SourceError("Repeated property declarations cannot be updated as one unambiguous field.")
+            if found:
+                prop = found[0]
+                if prop.kind != "property":
+                    raise SourceError("This property has a deletion directive; reset it explicitly before assigning a value.")
+                if self.property_value(prop.id) is None:
+                    raise SourceError("Opaque expressions are preserved; edit that property's source explicitly.")
+                edits.extend(self._value_edits(prop, value))
+            else:
+                missing.append(name.encode("ascii") + (b" = " + value.render() if value.kind != "boolean" else b"") + b";")
+        for name in removed:
+            edits.extend(self.plan_reset_property(node_id, name).edits)
+        if removed:
+            diagnostics.append("Only selected local property declarations are removed; inherited or earlier values may remain.")
+        if missing:
+            newline = self._layout(node)[2]
+            edits.append(self._insert(node, newline.join(missing), property=True))
+        return self._plan("update-node", edits, diagnostics)
+
+    def _unit_address_edit(self, node, name):
+        old_path = self._path(node)
+        new_path = old_path.rsplit("/", 1)[0] + "/" + name if old_path else None
+        if any(other.id != node.id and (other.parent_id == node.parent_id and other.name in {node.name, name}
+               or old_path and self._path(other) in {old_path, new_path}) for other in self.syntax.nodes):
+            raise SourceError("The current or proposed child name has another source contributor; resolve that collision explicitly.")
+        if any((item.parent_id == node.parent_id and item.target == name) or
+               (new_path and item.parent_id is None and item.target == "&{" + new_path + "}") for item in self.syntax.deletions):
+            raise SourceError("The proposed child name has a deletion directive; resolve it explicitly.")
+        if old_path:
+            for reference in self.reference_inventory()["references"]:
+                target = reference["reference"]
+                if target.startswith("&{") and (target[2:-1] == old_path or target[2:-1].startswith(old_path + "/")):
+                    raise SourceError("A source path references this node or its subtree; edit those path dependencies explicitly before changing its address.")
+        tokens = [token for token in self._tokens(node.start, node.open_brace) if token.kind not in _TRIVIA]
+        start, end = tokens[len(node.labels) * 2].start, tokens[-1].end
+        if self.source[start:end] != node.name.encode("ascii"):
+            raise SourceError("The child name cannot be isolated without changing unrelated source.")
+        return self._edit(start, end, name.encode("ascii"))
+
     def plan_remove_property(self, property_id):
         _, prop = self._property(property_id)
         labels = {self.source[token.start:token.end].decode("ascii") for token in self._label_tokens()

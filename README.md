@@ -8,8 +8,9 @@ analysis, minimal C/C++ creation, curated local sample cloning and explicit conf
 Advanced Build Inspector reads existing outputs, resolved Device Trees, current sources
 and bindings, and carries the selected image into Memory Explorer for report generation.
 Device Tree Editor supports visual status/property edits, local binding-aware forms and
-references, editable overlay source, reviewed single-file Save, draft recovery and explicit
-saved-source Configure. Hardware modules and pin configuration remain planned.
+references, local UART/I2C/SPI and GPIO topology, editable overlay source, reviewed
+single-file Save, draft recovery and explicit saved-source Configure. Hardware modules
+and pin configuration remain planned.
 TinyML model/experiment analysis also remains planned.
 
 ## Start
@@ -319,6 +320,24 @@ set/remove aliases or chosen references to unique declarations in this overlay. 
 renaming, inherited effective-tree resolution, macro evaluation and pin maps are outside
 this stage. Missing/ambiguous bindings and unsupported fields remain explained and
 source-editable. Inspection can be cancelled; Save, Configure and Build remain separate.
+
+The [D7 workflow](docs/device-tree-editor-d7-handoff.md) adds **Load peripherals** and an
+accessible list of local UART, I2C and SPI controllers, their children, and GPIO LED/button
+groups. Configure supported controller fields, add a binding-selected device with its
+explicit required values, or update/remove an existing leaf. Address changes update the
+same node's unit-address and `reg` together. Duplicate local addresses/chip selects and
+known local consumers prevent unsafe changes. All actions share the overlay draft and
+Undo/Redo history.
+
+Simple I2C/SPI forms require one resolved bus and explicit local address/size cell counts
+of 1/0. I2C supports non-reserved 7-bit addresses `0x08`–`0x77`. Existing SPI GPIO
+chip-select arrays keep their order and entries; native chip-select capacity remains
+unknown. Device lists are bounded to 256 compatible candidates with explicit truncation.
+GPIO fields use actual local provider cells, and new buttons require an explicit input
+code for the selected GPIO-key driver. Loading adds no defaults or required properties.
+Inherited controllers, pin routing and module placement remain outside this stage.
+D0–D7 are implemented within these limits; D8 Nordic pins is next. The D7 handoff records
+full checks, browser/package verification and the real Configure smoke.
 
 Acknowledged drafts are retained under `.features/devicetree/drafts/` in the data directory.
 **Find recoverable drafts** compares retained text with current files before an explicit restore;

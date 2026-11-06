@@ -6,6 +6,7 @@ from .saving import SavingService
 from .service import EditorService
 from .validation import ValidationService
 from .binding_service import BindingService
+from .peripherals import PeripheralService
 
 
 def register(router, context):
@@ -24,6 +25,10 @@ def register(router, context):
     drafts.bindings = bindings
     context.services["devicetree_bindings"] = bindings
     router.add("POST", "/api/devicetree/editor/drafts/bindings", lambda request: bindings.inspect(request.body))
+    peripherals = PeripheralService(drafts)
+    drafts.peripherals = peripherals
+    context.services["devicetree_peripherals"] = peripherals
+    router.add("POST", "/api/devicetree/editor/drafts/peripherals", lambda request: peripherals.inspect(request.body))
     for suffix in ("open", "get", "source", "command", "undo", "redo"):
         router.add("POST", f"/api/devicetree/editor/drafts/{suffix}",
                    lambda request, operation=getattr(drafts, suffix): operation(request.body))

@@ -1,5 +1,5 @@
 /** Explicit, revision-bound binding inspection on the canonical draft command path. */
-const PREFIX = "/api/devicetree/editor/drafts/";
+import {createDraftObservationSession} from "./draft-observation.js";
 
 export const bindingTypes = new Set(["boolean", "int", "string", "string-array", "array", "uint8-array",
   "phandle", "path", "phandles", "phandle-array"]);
@@ -73,142 +73,17 @@ export function bindingValue(type, value) {
   throw new Error("This property type is not supported by the binding form. Edit it in source.");
 }
 
-export function createBindingSession({api, state, workspace, drafts, onChange}) {
-  const view = state.bindingView = {busy: false, data: null, error: "", message: "", captured: null};
-  let disposed = false;
-  let generation = 0;
-  let loading;
-  let applying;
-  let reconciling;
-  const publish = () => { if (!disposed) onChange(); };
-  const entry = () => state.draftView?.entry;
-  function capture() {
-    const current = entry();
-    if (!state.draftView?.ready || !current?.server || state.data?.workspace !== workspace()) return null;
-    return {workspace: workspace(), context_id: state.data.id, expected_revision: state.data.revision,
-      draft_id: current.server.id, expected_draft_revision: current.server.revision,
-      expected_draft_sha256: current.server.sha256, local_generation: current.generation};
-  }
-  function matches(captured) {
-    const current = capture();
-    return Boolean(captured && current && !drafts.pending()
-      && Object.keys(current).every((key) => captured[key] === current[key]));
-  }
-  function ready() {
-    const current = entry();
-    return Boolean(capture() && !drafts.pending() && !current.flight && !current.historyOperation
-      && !current.externalOperation && !current.uncertain && !current.conflict && !current.server.syntax?.blocked);
-  }
-  function needsReconcile() { return Boolean(capture() && entry()?.uncertain && !entry()?.conflict); }
-  function canReconcile() {
-    const current = entry();
-    return !disposed && !view.busy && needsReconcile() && !current.flight && !current.historyOperation && !current.externalOperation;
-  }
-  function sync() {
-    if (disposed) return;
-    if (view.captured && (!matches(view.captured) || entry()?.uncertain || entry()?.conflict)) {
-      view.data = null; view.captured = null;
-      if (!applying) view.message = "The draft or context changed. Load binding properties for the current source.";
-      view.error = "";
-    }
-  }
-  function clear() {
-    generation++; loading?.abort(); loading = null; applying = null; reconciling = null;
-    view.busy = false; view.data = null; view.captured = null;
-    view.error = ""; view.message = "";
-  }
-  function cancel() {
-    if (!loading || applying) return;
-    generation++; loading.abort(); loading = null; view.busy = false;
-    view.error = ""; view.message = "Binding inspection cancelled. The working draft is unchanged."; publish();
-  }
-  async function load({afterCommand = false} = {}) {
-    if (disposed || loading || !afterCommand && view.busy) return false;
-    view.error = "";
-    view.message = afterCommand ? "The overlay draft was updated. Refreshing its binding properties; Save remains a separate action." : "";
-    if (!ready()) { view.error = "Finish or reconcile the current draft request before loading bindings. Incomplete source stays editable in the source panel."; publish(); return false; }
-    const captured = capture(); const token = ++generation; const request = new AbortController();
-    loading = request; view.busy = true; publish();
-    const {local_generation: _local, ...guard} = captured;
-    try {
-      const data = await api(PREFIX + "bindings", {method: "POST", body: guard, signal: request.signal});
-      if (disposed || token !== generation || !matches(captured)) return false;
-      if (!data || typeof data.schema_id !== "string" || data.draft_id !== captured.draft_id
-          || data.revision !== captured.expected_draft_revision || data.sha256 !== captured.expected_draft_sha256
-          || !Array.isArray(data.nodes) || !Array.isArray(data.targets)) {
-        throw new Error("The binding response does not match the current draft. Load binding properties again.");
-      }
-      view.data = data; view.captured = captured;
-      view.message = afterCommand ? "Draft updated. Binding properties now describe this source revision. Save remains a separate action."
-        : "Binding properties loaded for this draft. Defaults and required values have not been added.";
-      return true;
-    } catch (error) {
-      if (!disposed && token === generation && matches(captured)) view.error = error.message || String(error);
-      return false;
-    } finally {
-      if (loading === request) loading = null;
-      if (!disposed && token === generation) { view.busy = false; publish(); }
-    }
-  }
-  async function command(command) {
-    sync();
-    if (disposed || view.busy || !view.data || !matches(view.captured) || !ready()) return false;
-    const captured = view.captured; const token = generation; const schema = view.data.schema_id; const request = {};
-    applying = request; view.busy = true; view.error = ""; view.message = "Updating the overlay draft…"; publish();
-    try {
-      const accepted = await drafts.command({...command, schema_id: schema});
-      if (disposed || token !== generation || workspace() !== captured.workspace
-          || state.data?.id !== captured.context_id || state.draftView?.entry?.server?.id !== captured.draft_id) return false;
-      if (!accepted) {
-        view.error = entry()?.error || "The draft command was not accepted. Reconcile the draft or reload binding properties.";
-        view.message = ""; return false;
-      }
-      view.data = null; view.captured = null;
-      view.busy = false;
-      return await load({afterCommand: true});
-    } catch (error) {
-      if (!disposed && token === generation && workspace() === captured.workspace) {
-        view.error = error.message || String(error); view.message = "";
-      }
-      return false;
-    } finally {
-      if (applying === request) {
-        applying = null;
-        if (!disposed) { view.busy = Boolean(loading); sync(); publish(); }
-      }
-    }
-  }
-  async function reconcile() {
-    if (!canReconcile()) return false;
-    const captured = capture(); const token = ++generation; const request = {};
-    reconciling = request; view.busy = true; view.data = null; view.captured = null;
-    view.error = ""; view.message = "Reconciling the canonical draft…"; publish();
-    const current = () => !disposed && token === generation && workspace() === captured.workspace
-      && state.data?.id === captured.context_id && state.data?.revision === captured.expected_revision
-      && entry()?.server?.id === captured.draft_id;
-    try {
-      const accepted = await drafts.reconcile();
-      if (!current()) return false;
-      if (!accepted) {
-        view.error = entry()?.error || "The draft could not be reconciled. Retained source remains available.";
-        view.message = ""; return false;
-      }
-      view.message = drafts.pending() ? "Draft reconciled. Sync retained source before loading binding properties."
-        : "Draft reconciled. Load binding properties again before applying a change.";
-      return true;
-    } catch (error) {
-      if (current()) { view.error = error.message || String(error); view.message = ""; }
-      return false;
-    } finally {
-      if (reconciling === request) {
-        reconciling = null;
-        if (current()) { view.busy = false; sync(); publish(); }
-      }
-    }
-  }
-  return {load, command, sync, ready, clear, cancel, reconcile, needsReconcile, canReconcile,
-    scanning: () => Boolean(loading && !applying), reconciling: () => Boolean(reconciling),
-    fail(message) { view.error = message; view.message = ""; publish(); },
-    dispose() { disposed = true; clear(); },
-  };
+export function createBindingSession(options) {
+  return createDraftObservationSession({...options, route: "bindings", stateKey: "bindingView", labels: {
+    changed: "The draft or context changed. Load binding properties for the current source.",
+    cancelled: "Binding inspection cancelled. The working draft is unchanged.",
+    refreshing: "The overlay draft was updated. Refreshing its binding properties; Save remains a separate action.",
+    blocked: "Finish or reconcile the current draft request before loading bindings. Incomplete source stays editable in the source panel.",
+    mismatch: "The binding response does not match the current draft. Load binding properties again.",
+    updated: "Draft updated. Binding properties now describe this source revision. Save remains a separate action.",
+    loaded: "Binding properties loaded for this draft. Defaults and required values have not been added.",
+    rejected: "The draft command was not accepted. Reconcile the draft or reload binding properties.",
+    pending: "Draft reconciled. Sync retained source before loading binding properties.",
+    reconciled: "Draft reconciled. Load binding properties again before applying a change.",
+  }});
 }

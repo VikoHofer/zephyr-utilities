@@ -1,13 +1,14 @@
 # Device Tree Editor master plan
 
-Status: limited overlay editor available; D0–D6 implementations complete within their
-staged scopes on 2026-11-06. Verification and measured limits are recorded in the stage handoffs. The next product
+Status: limited overlay editor available; D0–D7 implementations complete within their
+staged scopes on 2026-11-06. D6 is committed as `564fcff`; D7 is verified. Verification and measured limits are recorded
+in the stage handoffs. The next product
 priority is the visual Device Tree Editor
 following the delivered everyday Project Creator workflow. This plan does not imply
 that every advanced item in the Project Creator roadmap is complete. The editor's
 runtime now exposes existing-overlay editing, reviewed Save/recovery and explicit
-saved-source Configure, plus local binding-aware properties and references. Module placement
-and pins remain later stages; D7 peripheral and bus configuration is next.
+saved-source Configure, local binding-aware properties/references and local peripheral
+topology. Module placement and pins remain later stages; D8 Nordic pins is next.
 
 Build an offline visual hardware editor inside the existing `zephyr-utils` application.
 Users open a project, select its exact configuration, place hardware modules, connect
@@ -28,7 +29,9 @@ source engine, verification and measured limits. The [D3 handoff](device-tree-ed
 records synchronized session drafts and unified undo. The [D4 handoff](device-tree-editor-d4-handoff.md)
 records guarded existing-overlay Save and recovery. The [D5 handoff](device-tree-editor-d5-handoff.md)
 records explicit saved-source Configure and Projects handoff. The [D6 handoff](device-tree-editor-d6-handoff.md)
-records local binding-aware property/reference editing. D7 is next.
+records local binding-aware property/reference editing. The [D7 handoff](device-tree-editor-d7-handoff.md)
+records local peripheral and bus-device forms, real Configure evidence and completed checks.
+D8 is next.
 
 ## Product experience
 
@@ -331,7 +334,10 @@ comparison and durable recovery. D5 is **complete** for explicit saved-source Co
 candidate/input evidence and Projects handoff; unsaved staging remains unsupported.
 D6 implementation is **complete** for explicitly observed local binding/property/reference
 forms on the shared draft command path; its handoff records verification. It does
-not resolve inherited effective hardware or offer label renaming. D7–D15 are **not started**.
+not resolve inherited effective hardware or offer label renaming. D7 implementation is
+**complete** for local UART/I2C/SPI topology and GPIO LED/button forms, atomic child
+address edits and guarded removal. Its real Configure smoke, full checks and
+browser/package verification passed as recorded in the handoff. D8–D15 are **not started**.
 The default order is sequential; shared contracts
 and source safety precede richer visuals. Split a stage further if its exit gate cannot
 be delivered and tested in a reviewable change. Complete the selected slice without
@@ -351,7 +357,7 @@ until D4. This uses the same application/server, not a separate feature launcher
 | D4 | Guarded Save, reload and recovery | Complete existing-overlay editor; see D4 handoff |
 | D5 | Explicit validation and build handoff | Complete Save-then-Configure workflow; see D5 handoff |
 | D6 | Binding-aware properties and references | Complete local-overlay implementation; see D6 handoff |
-| D7 | Peripheral and bus configuration | Common hardware topology |
+| D7 | Peripheral and bus configuration | Complete local topology implementation; verification status in D7 handoff |
 | D8 | Nordic pin assignment and pinctrl states | First complete pin workflow |
 | D9 | Module catalogue and visual placement | Main requested visual experience |
 | D10 | Resource diagnostics and removal planning | Reliable multi-device projects |
@@ -543,6 +549,18 @@ Keep unsupported fields accessible through source editing with explicit diagnost
 ```
 
 ### D7 Peripherals and bus devices
+
+Implementation complete within the local-overlay scope. Explicit **Load peripherals**
+shows an accessible topology list driven by resolved schemas. Controller forms, required
+device values, GPIO LED/button children and atomic unit-address/`reg` updates share the
+existing draft command/history path. Local address and chip-select collisions are
+rejected; shared controllers/providers and chip-select arrays are preserved. Single-bus
+I2C/SPI address forms require explicit local cell counts 1/0; I2C is limited to
+non-reserved 7-bit addresses. Known local path/reference consumers constrain changes and
+leaf removal. Inherited controllers, pin routing and module recipes remain unsupported.
+See the [D7 handoff](device-tree-editor-d7-handoff.md) for the passed real Configure smoke,
+full/browser/package checks and bounded candidate lists. The following prompt
+records the original stage scope.
 
 Scope: enable/configure UART, I2C and SPI controllers; add/edit/remove child devices;
 provide GPIO LED/button forms and bus/address/chip-select selection. Show bus topology
@@ -787,7 +805,7 @@ performance claims without measurements.
 
 ## Starting point
 
-The next implementation request should be **D7 only**.
+The next implementation request should be **D8 only**.
 D0's contracts/source experiment, D1's read-only context and D2's source operations
 provide the foundation; D3 connects source and visual session drafts. D4 delivers the first small
 usable existing-overlay editor. D5 closes its configure/build loop and D6 adds local

@@ -317,6 +317,25 @@ label addition is available, while label renaming is withheld without cross-file
 The separate reviewed Save/Configure/Build boundaries remain unchanged. See the
 [D6 handoff](device-tree-editor-d6-handoff.md) for limits and verification status.
 
+D7 adds feature-owned `PeripheralService`, derived from the existing binding observation
+service. `drafts/peripherals` projects an accessible local topology and bounded bus-device
+candidates. `BindingCatalog.devices(bus)` uses resolved `on-bus` metadata, stable compatible
+ordering and a 256-candidate limit; ambiguity, unsupported schemas and truncation remain
+visible. Per-observation caches are detached data and reused only after filesystem
+revalidation. Controller identity comes from a single resolved `bus`, never a name guess.
+
+Peripheral commands enter `DraftService.command` and the same source/history/recovery
+path. Atomic node updates preserve unit-address/`reg` consistency, labels and unrelated
+bytes. Single-cell I2C/SPI forms require explicit local cell layout, reject local address
+collisions and preserve shared chip-select arrays. Local path consumers constrain address
+changes; leaf removal checks known local references and retains controllers/providers.
+GPIO LED/key child forms use actual binding/provider metadata. Required creation values
+are explicit; defaults, pinctrl, inherited controller state and module wiring are not
+generated. The browser shares draft-observation lifecycle handling for binding and
+peripheral forms, with late-response invalidation and the same explicit Save/Configure
+boundaries. See the [D7 handoff](device-tree-editor-d7-handoff.md) for supported profiles,
+remaining limits and verification. D8 Nordic pin configuration is next.
+
 ## Measurement boundary
 
 Memory Explorer preserves upstream totals and uncertainty. Static reservations, runtime

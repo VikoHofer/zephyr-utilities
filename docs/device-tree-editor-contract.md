@@ -1,9 +1,10 @@
 # Device Tree Editor foundation contract
 
-Status: D0–D6 contracts, 2026-11-06. D4 adds reviewed existing-overlay Save and durable
+Status: D0–D7 contracts, 2026-11-06. D4 adds reviewed existing-overlay Save and durable
 draft recovery; D5 adds explicit saved-source Configure through Projects; D6 adds local
-binding-aware property/reference forms. Hardware modules, peripheral topology and pins
-remain planned. Verification is tracked in the stage handoffs.
+binding-aware property/reference forms; D7 adds local peripheral and bus-device topology.
+Hardware modules and pins remain planned. D6 is committed as `564fcff`; D7 is complete within its local-overlay scope.
+Full D7 checks and browser/package verification passed as recorded in its handoff.
 The D0 executable evidence is a bounded in-memory source prototype under
 `scripts/prototypes/`, outside the installed application. See the
 [master plan](device-tree-editor-masterplan.md) and
@@ -11,7 +12,8 @@ The D0 executable evidence is a bounded in-memory source prototype under
 the [D1 handoff](device-tree-editor-d1-handoff.md) and
 [D2 handoff](device-tree-editor-d2-handoff.md), [D3 handoff](device-tree-editor-d3-handoff.md)
 and [D4 handoff](device-tree-editor-d4-handoff.md), followed by the
-[D5 handoff](device-tree-editor-d5-handoff.md) and [D6 handoff](device-tree-editor-d6-handoff.md).
+[D5 handoff](device-tree-editor-d5-handoff.md), [D6 handoff](device-tree-editor-d6-handoff.md)
+and [D7 handoff](device-tree-editor-d7-handoff.md).
 
 ## Ownership and compatibility
 
@@ -631,6 +633,76 @@ late responses cannot restore them. Binding commands share source history and do
 Save, Configure or Build. The existing D4/D5 workflows remain separate explicit actions.
 See the [D6 handoff](device-tree-editor-d6-handoff.md) for verification status and limits.
 
+## D7 local peripheral topology
+
+Explicit `POST /api/devicetree/editor/drafts/peripherals` accepts the existing context
+and draft revision/hash guards. Feature service `devicetree_peripherals` returns an
+expiring `schema_id`, local controllers/children, GPIO groups/providers, supported fields,
+creation candidates and diagnostics. Its observation reuses D6 filesystem guards and
+limits. Loading metadata neither changes the overlay nor runs tools. The frontend shows
+an accessible list; selection and forms operate on the same canonical source draft.
+
+Controllers require a unique local declaration and a matched schema whose `bus` contains
+exactly one of `uart`, `i2c` or `spi`. An inherited `&controller` without a resolvable local
+declaration remains outside topology support. UART offers supported status/current-speed
+fields; I2C/SPI offer supported status/clock-frequency fields. Controller-specific enums
+and constants still apply. No default speed, pinctrl or peripheral capability is invented.
+
+`BindingCatalog.devices(bus)` lists only explicitly bus-qualified device bindings, using
+resolved `on-bus` metadata and the existing matching rules. It returns stable compatible
+order, at most 256 candidates per requested bus, `truncated` and diagnostics. Duplicates,
+missing includes and unsupported schemas remain explicit states. Unqualified bindings
+are not inferred to be bus devices. Required creation fields must be supplied explicitly;
+unsupported required fields prevent creation. Loading never inserts binding defaults.
+
+Simple I2C/SPI address forms require explicit local `#address-cells = <1>` and
+`#size-cells = <0>`. Existing children must have a literal single-cell `reg` equal to their
+hexadecimal unit-address. I3C/multiple-bus and other cell layouts remain source-only.
+The I2C form supports non-reserved 7-bit addresses `0x08` through `0x77`; this bounded
+profile does not claim that every address is permitted by a particular device's wiring.
+SPI uses `reg` as a chip-select index. When an existing `cs-gpios` list is resolved, its
+indices constrain selection. Unresolved lists block allocation; absence leaves native
+chip-select capacity unknown. Changes and removal never resize or reorder this shared
+array. UART children do not receive fabricated I2C/SPI addresses.
+
+Duplicate local addresses/chip selects, including disabled siblings, are rejected.
+Unknown or inconsistent sibling addresses withhold allocation. `SourceDocument` applies
+an address update to the existing node header and `reg` in one patch, preserving its
+base name, labels, unrelated properties and surrounding bytes. Local absolute-path
+consumers, including supported binding `path` properties, constrain address changes.
+Leaf removal refuses known local label/path consumers and nested declarations; it
+removes only that source block and leaves controllers, providers and siblings intact.
+External, inherited and macro-generated consumers remain unknown, so these checks are
+not whole-project reference closure or hardware conflict validation.
+
+GPIO group creation uses matched `gpio-leds` or `gpio-keys` schemas. Child fields use
+their actual child binding; `gpios` entries come from unique local providers with named
+cells and an explicit matching `#gpio-cells`. Button creation also requests an explicit
+`zephyr,code`: the selected GPIO-key driver requires it for enabled children even though
+the binding does not mark it required. Existing symbolic input codes and unsupported
+provider layouts remain source-editable. This supplies GPIO specifiers, not pin routing,
+electrical validation or a verified board map.
+
+Commands use the existing guarded `drafts/command` endpoint. Each adds `kind` and the
+current peripheral `schema_id` to these arguments:
+
+| Command | Additional arguments | Result |
+| --- | --- | --- |
+| `peripheral_controller` | `node_id`, `values` | Change supported explicit controller fields |
+| `peripheral_add` | `parent_id`, `name`, `label`, `compatible`, `address`, `values` | Add a supported child with explicit required values |
+| `peripheral_update` | `node_id`, `address`, `values` | Update the existing device, including atomic unit-address/`reg` changes |
+| `peripheral_remove` | `node_id` | Remove a unique local leaf after consumer checks |
+| `gpio_group_add` | `group_kind`, `name` | Add a supported LED/button group under the unique local root |
+| `gpio_add` | `parent_id`, `name`, `label`, `values` | Add a GPIO child using actual provider cells |
+| `gpio_update` | `node_id`, `values` | Change supported fields on an existing GPIO child |
+
+Source, binding and topology edits share Undo/Redo, diff and recovery. Pending text,
+changed context/revision, cancellation and navigation invalidate observations; late
+responses must not restore stale forms. Save and explicit Configure/Build retain their
+existing boundaries. D7 does not add module recipes, inherited-controller resolution,
+pin assignment or automatic pinctrl. See the [D7 handoff](device-tree-editor-d7-handoff.md)
+for measured evidence and verification.
+
 ## Verification and next stage
 
 The [D0 handoff](device-tree-editor-d0-handoff.md) records the prototype baseline.
@@ -643,6 +715,8 @@ The [D3 handoff](device-tree-editor-d3-handoff.md) records synchronized drafts a
 [D4 handoff](device-tree-editor-d4-handoff.md) records guarded publication and recovery.
 The [D5 handoff](device-tree-editor-d5-handoff.md) records explicit saved-source
 configuration and Projects handoff. The [D6 handoff](device-tree-editor-d6-handoff.md)
-records local binding-aware properties and references. The next stage is D7 only:
-peripheral and bus configuration, preserving the same source command path and the
-separation between source saving and project execution.
+records local binding-aware properties and references. The [D7 handoff](device-tree-editor-d7-handoff.md)
+records local peripheral topology, real Configure evidence and passed full/browser/package
+checks. D0–D7 are implemented within their scoped boundaries. The next implementation
+stage is D8 only: the first supported Nordic pin adapter, preserving the source command
+path and separation between source saving and project execution.

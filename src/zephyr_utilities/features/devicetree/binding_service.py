@@ -289,6 +289,7 @@ class BindingService:
             rows.append({"node_id": node.id, "name": node.name, "path": paths[node.id], "labels": list(node.labels),
                          "add_label": node.name != "/" and not node.name.startswith("&") and not ambiguous(node) and document.can_edit_node(node.id),
                          "binding": {"state": match["state"], "path": schema.get("path"), "description": schema.get("description", ""),
+                                     "bus": schema.get("bus", []), "on_bus": schema.get("on_bus"), "compatible": schema.get("compatible"),
                                      "candidates": match.get("candidates", []), "diagnostics": match.get("diagnostics", [])},
                          "properties": properties})
         named = {"aliases": [], "chosen": []}
