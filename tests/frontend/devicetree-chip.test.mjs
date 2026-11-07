@@ -28,6 +28,7 @@ function harness({api: wrapper, draft = true, panel = false, view} = {}) {
   else session = createChipSession(options);
   return {state, calls, response, root, session, panel: mounted,
     render() { session?.sync(); mounted?.render(); },
+    remountPanel() { mounted = mountChipPanel(root, options); },
     async tick() { timers.shift()?.(); await settle(); },
     workspace(value) { workspace = value; },
     dispose() { session?.dispose(); mounted?.dispose(); }, timers};
@@ -156,7 +157,9 @@ class Element {
   append(...elements) { for (const child of elements) { child.parentNode = this; this.children.push(child); } }
   replaceChildren(...elements) { this.children.forEach((child) => { child.parentNode = null; }); this.children = []; this._text = ""; this.append(...elements); }
   setAttribute(name, value) { this.attributes[name] = String(value); }
-  addEventListener(name, fn) { (this.listeners[name] ||= []).push(fn); }
+  addEventListener(name, fn, options = {}) {
+    (this.listeners[name] ||= []).push((event) => { if (!options.signal?.aborted) fn(event); });
+  }
   dispatch(name, event = {}) { for (const fn of this.listeners[name] || []) fn({target: this, preventDefault() {}, ...event}); }
   focus() { this.ownerDocument.activeElement = this; }
   contains(element) { return this === element || this.children.some((child) => child.contains(element)); }
@@ -165,6 +168,28 @@ class Element {
   set textContent(text) { this._text = String(text); this.children = []; }
 }
 function descendants(root) { return root.children.flatMap((child) => [child, ...descendants(child)]); }
+
+test("returning to the editor remounts one chip panel and only current controls respond", async () => {
+  const app = harness({panel: true}); app.render(); await settle();
+  const previous = descendants(app.root);
+  const oldPins = previous.filter((item) => item.attributes.role === "button");
+  const controlCount = previous.filter((item) => ["button", "input", "select"].includes(item.tagName)).length;
+  oldPins[1].dispatch("click");
+  app.dispose(); app.remountPanel(); app.render(); await settle();
+  const current = descendants(app.root);
+  const pins = current.filter((item) => item.attributes.role === "button");
+  assert.equal(current.filter((item) => item.tagName === "svg").length, 1);
+  assert.equal(current.filter((item) => ["button", "input", "select"].includes(item.tagName)).length, controlCount);
+  assert.equal(pins.length, 2); assert.equal(app.root.contains(oldPins[0]), false);
+  assert.equal(app.calls.length, 2, "each live mount observes the chip once");
+  assert.equal(pins[1].attributes["aria-pressed"], "true", "selected pin survives the submenu visit");
+  oldPins[0].dispatch("click");
+  assert.equal(app.state.chipPresentation.selected, "gpiob:8", "disposed controls cannot change retained selection");
+  pins[0].dispatch("click");
+  assert.equal(app.state.chipPresentation.selected, "gpioa:5");
+  assert.equal(pins[0].attributes["aria-pressed"], "true");
+  app.dispose();
+});
 
 test("chip view renders selectable pins, restrictions and disabled function evidence without device controls", async () => {
   const app = harness({panel: true}); app.render(); await settle();

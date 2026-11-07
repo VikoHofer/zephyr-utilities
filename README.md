@@ -170,6 +170,11 @@ Project Creator opens **Applications**. Its sidebar links separate application m
 **Create application**, **Custom boards**, and **Environment**. Detailed build/source inspection lives in
 the optional **Advanced → Build Inspector** area. **Device Tree Editor** automatically displays supported chips and their configured pins,
 and applies supported GPIO/UART/I2C/SPI assignments to existing or new overlay drafts.
+Its **Supported boards** submenu lists verified targets, automatic family coverage,
+current limits and contribution steps without needing an open project. The list records
+source/edit/build evidence; usable actions still depend on the selected sources. See the
+[board support contribution guide](docs/device-tree-editor-support-contributing.md) to
+report another board or add a vendor adapter.
 
 Use **Create application** or `/#/projects/create` after analysis. Choose the name, new
 destination, C/C++ template or supported local sample, exact target and installed GNU SDK; inspect **Preview application**, then

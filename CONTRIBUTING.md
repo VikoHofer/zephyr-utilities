@@ -42,6 +42,11 @@ Read the [feature guide](docs/adding-a-feature.md) before adding a tool. Use the
 requested or agreed slice. Device Tree Editor, Project Creator and TinyML are development
 areas, not completed products.
 
+For Device Tree Editor board evidence or a new vendor/pin encoding, use the
+[board support contribution guide](docs/device-tree-editor-support-contributing.md).
+It identifies the discovery and routing extension points and the checks needed before
+adding a board to the informational **Supported boards** submenu.
+
 For a substantial feature, a short proposal can record its trigger, expected outcome,
 contracts, test evidence and excluded work. The [proposal template](docs/templates/feature-proposal.md)
 is optional for small changes. A focused bug fix usually needs a reproducer and a test,

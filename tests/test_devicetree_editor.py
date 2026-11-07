@@ -77,9 +77,14 @@ class EditorContextApiTests(unittest.TestCase):
         self.assertEqual(editor["status"], "available")
         self.assertEqual(editor["entry_path"], "/#/devicetree/editor")
         self.assertEqual(editor["frontend"]["module"], "/assets/devicetree/index.js")
-        self.assertEqual(editor["navigation"], [])
+        self.assertEqual(editor["navigation"], [
+            {"label": "Chip and pin editor", "view": "editor", "match_views": ["editor"]},
+            {"label": "Supported boards", "view": "support", "match_views": ["support"]},
+        ])
         self.assertEqual(self.call("catalog", {"workspace": str(self.workspace)}, app=default)["workspace"], str(self.workspace))
         self.assertTrue(default.asset("/assets/devicetree/index.js"))
+        for asset in ("support-data.js", "support-view.js", "support.css", "workspace-views.js"):
+            self.assertTrue(default.asset(f"/assets/devicetree/{asset}"))
 
     def test_preview_and_inspector_work_in_both_registration_orders(self):
         for features in ((PREVIEW_FEATURE, INSPECTOR), (INSPECTOR, PREVIEW_FEATURE)):

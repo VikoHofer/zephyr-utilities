@@ -1,3 +1,5 @@
+@import url("./support.css");
+
 .dte-workspace { color:var(--app-text); max-width:1440px; margin:0 auto; }
 .dte-workspace [hidden] { display:none !important; }
 .dte-workspace .dte-heading, .dte-workspace .dte-section-heading { display:flex; align-items:center; justify-content:space-between; gap:1rem; }

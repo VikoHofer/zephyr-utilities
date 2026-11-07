@@ -36,6 +36,7 @@ export function pinPositions(pins) {
 }
 
 export function mountChipPanel(root, options) {
+  root.replaceChildren();
   const {state, workspace, onChange} = options;
   const document = root.ownerDocument; const lifetime = new AbortController();
   const retained = state.chipPresentation ||= {selected: null, query: "", zoom: 1};

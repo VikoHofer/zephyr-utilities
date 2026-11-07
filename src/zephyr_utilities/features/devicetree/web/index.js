@@ -5,11 +5,22 @@ import {createValidationSession, diagnosticSelection} from "./validation.js";
 import {mountChipPanel} from "./chip-view.js";
 import {retainActionFocus} from "./view-focus.js";
 import {announceResult} from "./view-feedback.js";
+import {mountSupportPanel} from "./support-view.js";
+import {createWorkspaceViews} from "./workspace-views.js";
 
 const array = (value) => Array.isArray(value) ? value : [];
 const text = (value, fallback = "Unknown") => value == null || value === "" ? fallback : String(value);
 
 export function mount(host, context) {
+  return createWorkspaceViews({
+    editorRoot: host.querySelector("[data-dte-root]"),
+    supportRoot: host.querySelector("[data-dte-support]"),
+    mountEditor: () => mountEditor(host, context),
+    mountSupport: () => mountSupportPanel(host.querySelector("[data-dte-support]"), context),
+  });
+}
+
+function mountEditor(host, context) {
   const root = host.querySelector("[data-dte-root]");
   const $ = (name) => root.querySelector(`[data-dte-${name}]`);
   const document = root.ownerDocument;
