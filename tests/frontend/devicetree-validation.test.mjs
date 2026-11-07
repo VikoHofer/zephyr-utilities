@@ -58,6 +58,14 @@ test("pending and saved-server dirty drafts require Save without creating a plan
   assert.equal(await app.session.review(), false); assert.deepEqual(app.calls, []); app.dispose();
 });
 
+test("an empty new overlay must be created before Configure can be reviewed", async () => {
+  const app = harness();
+  Object.assign(app.state.draftView.entry.server, {text: "", dirty: false, baseline_exists: false, needs_creation: true});
+  app.state.draftView.entry.text = "";
+  assert.equal(await app.session.review(), false);
+  assert.match(app.state.validationView.message, /Save this draft/); assert.deepEqual(app.calls, []); app.dispose();
+});
+
 test("confirmation sends exact guards and starts polling only the reviewed plan", async () => {
   const app = harness(); await app.session.review(); await app.session.submit();
   assert.deepEqual(app.calls.map(([route]) => route), ["review", "submit"]);

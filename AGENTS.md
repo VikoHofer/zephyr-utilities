@@ -2,67 +2,61 @@
 
 ## Current product priority
 
-The user's 2026-11-06 direction supersedes the old sequential D-stage order:
-**board/controller support and the beginner visual connection workflow come first**.
-The subsequent MVP decision focuses delivery/testing on ST/STM32, Nordic, Espressif,
-NXP and Raspberry Pi. The existing generic discovery foundation is sufficient to move
-to the integrated visual workspace; do not delay it for exhaustive vendor, revision or
-composition coverage. Add discovery depth when it blocks a concrete MVP workflow.
-Unsupported controllers/configurations or connections must show a visible under-construction
-notice, the specific reason and unavailable actions. Support is determined by observed
-capabilities, not a blanket brand guarantee or a board-vendor blacklist.
-Start from the selected board/SoC DTS, included sources, module/custom roots and
-bindings across vendors. An empty application overlay must not imply empty hardware;
-aliases such as `led0` are optional annotations, never discovery prerequisites.
-The first reported acceptance board is `nucleo_f446re`. Use representative other
-vendors to verify the shared discovery path before expanding advanced peripherals.
-Connecting a supported device must generate the scoped application overlay changes;
-users must not manually recreate board controllers to begin. Preserve upstream board
-files. Keep advanced D11 work secondary until this basic workflow works. See the
-[controller-first plan](docs/device-tree-editor-controller-first-plan.md).
+The user's 2026-11-07 direction replaces the earlier controller-first connection plan,
+integrated module-library plan and D-stage sequence. **The first stage is a graphical
+chip and pin editor.** Opening a project must automatically show its selected chip,
+known pins and current assignments. Selecting a pin exposes supported GPIO, UART, I2C
+and SPI functions; applying a complete assignment changes the application overlay draft.
+Do not require separate hardware, pin or binding extraction buttons.
 
-The first controller-first slice now observes inherited board/SoC hardware and creates
-BME280 I2C / GPIO LED overlay connections. Actual discovery was checked on Nucleo
-F446RE, nRF52840 DK and FRDM-K64F; Nucleo connections and browser Save/reopen passed.
-This is not universal pin routing. See the
-[controller-first handoff](docs/device-tree-editor-controller-first-handoff.md) for limits
-and the next acceptance gates.
-The foundation is committed as `a0fa84b`, including previously verified D11d work.
-The qualified-target continuation shares pure metadata parsing with Projects and supports
-CPU/core and nested-variant DTS resolution; see the
-[qualified-target handoff](docs/device-tree-editor-controller-targets-handoff.md).
-It is committed as `cc32fb1`. The next feature priority is the integrated module
-library, connection canvas and inspector with live source, under the scoped MVP plan.
-The [MVP support handoff](docs/device-tree-editor-mvp-support-handoff.md) records the
-implemented construction notices, capability blockers and complete/browser/package checks.
+Follow the [chip and pin redesign plan](docs/device-tree-editor-pin-workspace-plan.md).
+Initial delivery focuses on ST/STM32, Nordic, Espressif, NXP and Raspberry Pi
+microcontrollers, with exact chip/package capabilities rather than blanket brand support.
+Nucleo F446RE and nRF52840 DK remain initial reference targets; the same workflow on
+ESP32, K64 and RP2040 remains open. Read board/SoC sources, module/custom roots, bindings
+and vendor pin tables.
+An empty or missing application overlay must not hide the chip. Do not invent package
+pins, routes or physical pin placement; aliases are optional annotations.
 
-Zephyr Utilities is one local application with a Python backend and an English,
-offline browser interface. `zephyr-utils` starts the entire application. Memory
-Explorer and Project Creator's environment analysis, minimal application creation,
-configuration and single-image builds are implemented. Build Inspector owns advanced
-read-only build, source and binding inspection. Device Tree Editor supports existing-overlay
-status/property and source edits, local binding-aware property/reference forms, UART/I2C/SPI
-and GPIO topology forms, reviewed Save, draft recovery and explicit saved-source Configure
-through Projects. D8 adds Nordic pin forms for the exact verified nrf52840dk/nrf52840
-profile; other inherited hardware remains unknown. D9 adds vendor-independent local
-module recipes, a logical source-derived canvas and separately saved presentation layout.
-D8 is committed as `cfaf10e`; D0–D10 are implemented within their documented scoped limits.
-The D9 handoff records full checks, actual-binding smoke and browser verification.
-D9 is committed as `3cf6db1`. D10 adds source-linked resource diagnostics and guarded
-removal reviews with explicit optional-property repairs; full checks, browser verification
-and installed-package checks passed as recorded in the D10 handoff. D10 is committed as
-`6403e43`. D11a local single-specifier PWM consumers and PWM LED forms are complete
-within their scoped limits; full/browser/package checks passed in the D11 handoff.
-D11a is committed as `24e79e6`. D11b adds bounded local ADC consumers and common channel
-configuration; full/browser/package checks passed in the D11b handoff. D11b is committed as
-`2f070ad`. D11c adds three explicit interrupt GPIO consumer profiles; full/browser/package
-checks passed as recorded in the D11c handoff. D11c is committed as `40b3c0a`.
-The UI scroll/focus fixes are committed as `6b73fa8`. D11d adds scoped local CAN
-nominal settings and existing-transceiver selection; its handoff records verification.
-The editor application picker excludes unavailable
-registrations while Projects retains them for reconnect/removal. D11 remains partial;
-its remaining family matrix is in the master plan. Broader pin adapters, advanced composition
-and TinyML experiment analysis remain planned.
+Remove the old sensor/module recipes, placement UI, connection canvas, services and
+commands as part of the replacement. Existing saved overlays and recovery data remain
+user data; do not delete their sensor/LED declarations. Reuse canonical source editing,
+Undo/Redo, recovery, guarded Save, exact-target resolution and useful source diagnostics.
+Keep upstream board/SoC files unchanged. Unsupported actions retain a visible reason.
+Advanced peripherals and external-device composition are outside this first stage.
+
+The subsequent user request expands STM32 and Nordic through the selected Zephyr DTS,
+bindings and pin tables, without adding every chip manually. STM32 discovery uses one
+selected package table with understood encoding; Nordic discovery uses verified GPIO
+port/count/reservation evidence and distinguishes logical slots from physical pads.
+Family adapters offer GPIO/UART/I2C/SPI only when routing and ownership are understood.
+Unknown formats and cross-domain/core ownership remain visibly unavailable; a recognized
+brand or matching macro alone is not a guarantee. See the
+[automatic chip support handoff](docs/device-tree-editor-automatic-chip-support-handoff.md).
+Project selection opens one predicted overlay or automatically stages a validated absent destination, then runs
+bounded discovery. Opening persists a recoverable draft without creating application
+files or directories. Complete pin proposals generate one canonical overlay change, sharing source
+Undo/Redo, recovery and reviewed Save. New pin/resource conflicts are blocked; retaining
+an existing route can preserve its existing reservations or source conflicts with a notice.
+GPIO creates an application reference; application code sets direction and runtime value.
+The editor shows driver requirements without editing Kconfig. Sensor/module recipes,
+canvas, services and creation commands are removed. See the
+[pin activation handoff](docs/device-tree-editor-pin-activation-handoff.md).
+Safe first Save creates only the reviewed destination and includes it through the public
+Projects overlay provider when required. File publication and configuration inclusion
+have separate recovery evidence; an inclusion retry never republishes source. Undo after
+creation changes the draft and never deletes the file. Recovery schema 2 reads existing
+schema-1 records. See the [new-overlay handoff](docs/device-tree-editor-new-overlay-handoff.md)
+and [ADR 0025](docs/decisions/0025-new-overlay-save-and-project-inclusion.md).
+Do not restore per-chip allowlists or require manual extraction for additional supported
+source formats. The remaining three vendor adapters and five-vendor acceptance gates
+remain open; do not resume the old module plan. Historical handoffs describe earlier implementations
+and verification only.
+
+Zephyr Utilities remains one local Python application with an English, offline browser
+interface. `zephyr-utils` starts the entire application. Memory Explorer, Projects and
+Build Inspector retain their existing responsibilities; this redesign is scoped to
+Device Tree Editor and necessary public Projects handoffs.
 
 ## Start here
 

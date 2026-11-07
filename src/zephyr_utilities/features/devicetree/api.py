@@ -8,8 +8,6 @@ from .validation import ValidationService
 from .binding_service import BindingService
 from .peripherals import PeripheralService
 from .pins import PinService
-from .modules import ModuleService
-from .layout import LayoutService
 from .resources import ResourceService
 from .removal import RemovalService
 from .pwm import PWMService
@@ -17,7 +15,8 @@ from .adc import ADCService
 from .interrupt_gpio import InterruptGPIOService
 from .can import CANService
 from .board_topology import BoardTopologyService
-from .board_connections import BoardConnectionService
+from .chip_workspace import ChipWorkspaceService
+from .chip_activation import ChipActivationService
 
 
 def register(router, context):
@@ -35,9 +34,14 @@ def register(router, context):
     board = BoardTopologyService(drafts)
     context.services["devicetree_board"] = board
     router.add("POST", "/api/devicetree/editor/drafts/board", lambda request: board.inspect(request.body))
-    board_connections = BoardConnectionService(drafts, board)
-    drafts.board_connections = board_connections
-    context.services["devicetree_board_connections"] = board_connections
+    chip = ChipWorkspaceService(drafts)
+    context.services["devicetree_chip"] = chip
+    activation = ChipActivationService(drafts, chip)
+    drafts.chip_activation = activation
+    context.services["devicetree_chip_activation"] = activation
+    for suffix in ("start", "result", "cancel"):
+        router.add("POST", f"/api/devicetree/editor/chip/{suffix}",
+                   lambda request, operation=getattr(chip, suffix): operation(request.body))
     bindings = BindingService(drafts)
     drafts.bindings = bindings
     context.services["devicetree_bindings"] = bindings
@@ -66,14 +70,6 @@ def register(router, context):
     drafts.pins = pins
     context.services["devicetree_pins"] = pins
     router.add("POST", "/api/devicetree/editor/drafts/pins", lambda request: pins.inspect(request.body))
-    modules = ModuleService(drafts)
-    drafts.modules = modules
-    context.services["devicetree_modules"] = modules
-    router.add("POST", "/api/devicetree/editor/drafts/modules", lambda request: modules.inspect(request.body))
-    layout = LayoutService(drafts, modules, storage)
-    context.services["devicetree_layout"] = layout
-    router.add("POST", "/api/devicetree/editor/drafts/module-layout", lambda request: layout.read(request.body))
-    router.add("POST", "/api/devicetree/editor/drafts/module-layout/save", lambda request: layout.save(request.body))
     resources = ResourceService(drafts, pins)
     context.services["devicetree_resources"] = resources
     router.add("POST", "/api/devicetree/editor/drafts/resources", lambda request: resources.inspect(request.body))

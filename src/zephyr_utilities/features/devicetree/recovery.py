@@ -26,8 +26,11 @@ def identifier(value):
 
 def validate_record(value, workspace):
     """Validate every recovery field consumed by restoration before replacing data."""
-    if not isinstance(value, dict) or type(value.get("schema_version")) is not int or value["schema_version"] != 1:
+    if not isinstance(value, dict) or type(value.get("schema_version")) is not int or value["schema_version"] not in {1, 2}:
         raise ValueError("Unsupported recovery schema. The record was preserved unchanged.")
+    baseline_exists = value.get("baseline_exists", True) if value["schema_version"] == 1 else value.get("baseline_exists")
+    if type(baseline_exists) is not bool or value["schema_version"] == 1 and not baseline_exists:
+        raise ValueError("The recovery baseline identity is invalid; its record was preserved.")
     identifier(value.get("id"))
 
     def path_value(path):
@@ -82,6 +85,31 @@ def validate_record(value, workspace):
             identifier(context["configuration"]["id"])
     if observation.get("workspace") != workspace or observation.get("sha256") != value["base_sha256"] or observation.get("text") != value["base_text"]:
         raise ValueError("The recovery observation differs from its original baseline; its record was preserved.")
+    if type(observation.get("exists", True)) is not bool or observation.get("exists", True) != baseline_exists:
+        raise ValueError("The recovery destination existence differs from its baseline; its record was preserved.")
+    if not baseline_exists:
+        selected = [entry for entry in context["documents"] if isinstance(entry, dict)
+                    and entry.get("id") == value["document_id"] and entry.get("path") == value["path"]]
+        ancestors = observation.get("ancestors")
+        if (base or observation.get("identity") is not None or observation.get("attributes") != {}
+                or len(selected) != 1 or selected[0].get("availability") != "absent" or selected[0].get("can_create") is not True
+                or selected[0].get("sha256") != value["base_sha256"]
+                or not isinstance(ancestors, list) or not ancestors):
+            raise ValueError("The absent overlay recovery baseline is malformed; its record was preserved.")
+        for ancestor in ancestors:
+            if (not isinstance(ancestor, dict) or type(ancestor.get("device")) is not int or ancestor["device"] < 0
+                    or type(ancestor.get("inode")) is not int or ancestor["inode"] < 0):
+                raise ValueError("The absent overlay directory guard is malformed; its record was preserved.")
+            path_value(ancestor.get("path"))
+        missing = observation.get("missing_directories", [])
+        if not isinstance(missing, list):
+            raise ValueError("The absent overlay missing-directory guard is malformed; its record was preserved.")
+        for path in missing:
+            path_value(path)
+        existing = [ancestor["path"] for ancestor in ancestors]
+        expected_ancestors = [str(parent) for parent in reversed(destination.parents)]
+        if existing + missing != expected_ancestors or str(application_path) not in existing:
+            raise ValueError("The absent overlay directory chain does not match its destination; its record was preserved.")
     history = []
     for key in ("undo", "redo"):
         if not isinstance(value.get(key), list) or len(value[key]) > 32:
@@ -134,7 +162,7 @@ class DraftStore:
             value = json.loads(content)
         finally:
             os.close(descriptor)
-        if not isinstance(value, dict) or type(value.get("schema_version")) is not int or value["schema_version"] != 1:
+        if not isinstance(value, dict) or type(value.get("schema_version")) is not int or value["schema_version"] not in {1, 2}:
             raise ValueError("Unsupported recovery schema. The record was preserved unchanged.")
         if value.get("id") != name.removesuffix(".json"):
             raise ValueError("The recovery record identity is invalid; it was preserved.")

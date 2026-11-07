@@ -3,6 +3,9 @@ const PREFIX = "/api/devicetree/editor/drafts/";
 const encoder = new TextEncoder();
 
 export const editorText = (source) => source.replace(/\r\n?/g, "\n");
+export const needsOverlayCreation = (value) => value?.baseline_exists === false || value?.needs_creation === true;
+export const editableOverlay = (document) => document?.availability === "available" && document.baseline_exists !== false
+  || document?.availability === "absent" && document.can_create === true && document.baseline_exists === false;
 
 export function utf16ToUtf8(text, position) {
   let index = Math.max(0, Math.min(text.length, position));
@@ -99,6 +102,8 @@ export function createDraftSession({api, state, workspace, onChange, delay = 350
     if (response?.schema_version !== 1 || typeof response.id !== "string" || !response.id
         || response.context_fingerprint !== captured.fingerprint || response.document_id !== captured.document_id
         || response.path !== captured.path || response.base_sha256 !== captured.base_sha256
+        || (response.baseline_exists !== undefined && typeof response.baseline_exists !== "boolean")
+        || (response.baseline_exists !== false) !== captured.baseline_exists
         || !Number.isInteger(response.revision) || response.revision < 0 || typeof response.sha256 !== "string"
         || typeof response.text !== "string" || !Array.isArray(response.nodes)
         || !response.syntax || typeof response.syntax.blocked !== "boolean" || (expectedId && response.id !== expectedId)) {
@@ -143,7 +148,7 @@ export function createDraftSession({api, state, workspace, onChange, delay = 350
 
   function bind(context, document) {
     const key = draftKey(context, document);
-    if (!key || context.workspace !== workspace() || document.availability !== "available") {
+    if (!key || context.workspace !== workspace() || !editableOverlay(document)) {
       if (bindingTag) { detach(); publish(); }
       return Promise.resolve(false);
     }
@@ -152,7 +157,7 @@ export function createDraftSession({api, state, workspace, onChange, delay = 350
     detach(); bindingTag = tag;
     const captured = binding = {key, workspace: context.workspace, context_id: context.id,
       expected_revision: context.revision, fingerprint: context.fingerprint, document_id: document.id,
-      path: document.path, base_sha256: document.sha256};
+      path: document.path, base_sha256: document.sha256, baseline_exists: document.baseline_exists !== false};
     const token = ++generation;
     let value = state.draftCache[key];
     if (!value) {
@@ -346,12 +351,14 @@ export function createDraftSession({api, state, workspace, onChange, delay = 350
         || context.project?.id !== captured.context.project?.id || context.configuration?.id !== captured.context.configuration?.id
         || context.target?.requested !== captured.context.target?.requested
         || document.id !== captured.document.id || document.path !== captured.document.path
-        || context.editing_document?.id !== document.id || context.editing_document?.sha256 !== document.sha256) {
+        || context.editing_document?.id !== document.id || context.editing_document?.sha256 !== document.sha256
+        || !editableOverlay(document)
+        || (context.editing_document?.baseline_exists !== false) !== (document.baseline_exists !== false)) {
       throw new Error("The saved result belongs to another context. Reopen the application to reconcile; retained text is still available.");
     }
     const nextBinding = {key, workspace: context.workspace, context_id: context.id,
       expected_revision: context.revision, fingerprint: context.fingerprint, document_id: document.id,
-      path: document.path, base_sha256: document.sha256};
+      path: document.path, base_sha256: document.sha256, baseline_exists: document.baseline_exists !== false};
     verify(draft, nextBinding, old);
     const other = state.draftCache[key];
     if (other && other !== old && (isPending(other) || other.server?.dirty || other.server?.can_undo)) {

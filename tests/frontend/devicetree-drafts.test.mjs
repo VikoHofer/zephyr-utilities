@@ -86,6 +86,31 @@ test("opening and rebinding one context does not duplicate reads", async () => {
   app.session.dispose();
 });
 
+test("an approved absent document opens one empty unsaved draft and rejects a changed baseline", async () => {
+  const destination = {...document(), availability: "absent", can_create: true, baseline_exists: false, text: ""};
+  const calls = [];
+  const payload = response("a", {text: "", nodes: [], baseline_exists: false, needs_creation: true, dirty: true});
+  const app = harness(async (path) => { calls.push(path); return structuredClone(payload); });
+  assert.equal(await app.session.bind(context(), destination), true);
+  await app.session.bind(context(), destination);
+  assert.equal(calls.length, 1); assert.equal(app.current().text, "");
+  assert.equal(app.current().server.needs_creation, true); assert.equal(app.current().server.dirty, true);
+  app.session.dispose();
+  const changed = harness(async () => ({...payload, baseline_exists: true, needs_creation: false}));
+  assert.equal(await changed.session.bind(context(), destination), false);
+  assert.match(changed.current().error, /does not match/); assert.equal(changed.state.draftView.ready, false);
+  changed.session.dispose();
+});
+
+test("missing documents without explicit creation authority cannot open a draft", async () => {
+  let calls = 0; const app = harness(async () => { calls++; return response(); });
+  for (const item of [{availability: "missing"}, {availability: "absent", baseline_exists: false},
+    {availability: "absent", can_create: true, baseline_exists: true}]) {
+    assert.equal(await app.session.bind(context(), {...document(), ...item}), false);
+  }
+  assert.equal(calls, 0); assert.equal(app.state.draftView, null); app.session.dispose();
+});
+
 test("new typing during source submission is retained and serialized into the next revision", async () => {
   const backend = server(); const pending = deferred(); let sourceCalls = 0;
   const app = harness(async (path, options) => {
@@ -229,6 +254,23 @@ test("simultaneous undo attempts do not submit stale duplicate history requests"
   await Promise.all([app.session.undo(), app.session.undo()]);
   assert.equal(backend.calls.filter(([action]) => action === "undo").length, 1);
   app.session.dispose();
+});
+
+test("exhausted Undo and Redo reject repeated activation without changing canonical history", async () => {
+  const backend = server(); const app = harness(backend.api);
+  await app.session.bind(context(), document());
+  app.session.type("pin assignment"); await app.session.flush();
+  assert.equal(await app.session.undo(), true);
+  const undone = structuredClone(app.current().server); const afterUndo = backend.calls.length;
+  assert.equal(undone.can_undo, false); assert.equal(undone.can_redo, true);
+  assert.equal(await app.session.undo(), false);
+  assert.equal(backend.calls.length, afterUndo); assert.deepEqual(app.current().server, undone);
+  assert.equal(await app.session.redo(), true);
+  const redone = structuredClone(app.current().server); const afterRedo = backend.calls.length;
+  assert.equal(redone.can_redo, false); assert.equal(redone.can_undo, true);
+  assert.equal(await app.session.redo(), false);
+  assert.equal(backend.calls.length, afterRedo); assert.deepEqual(app.current().server, redone);
+  assert.equal(app.current().text, "pin assignment"); app.session.dispose();
 });
 
 test("oversized or NUL typing is retained for correction without a source request", async () => {

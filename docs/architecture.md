@@ -6,32 +6,24 @@ HTTP routes and scoped browser modules through an explicit registry.
 
 Memory Explorer, Project Creator's analyser/creation/build workflow, existing-build
 inspection in Build Inspector and limited Device Tree overlay editing are working features.
-The bounded Nordic pin workflow and local module catalogue/canvas are also implemented.
-The D9 handoff records passed verification. D10 resource diagnostics and removal reviews
-are complete within their documented graph limits, with full/browser/package checks passed.
-D11a local single-specifier PWM consumers and PWM LED forms are complete within their
-scoped limits, with full/browser/package checks passed. D11b adds local ADC consumers
-and common channel configuration; its verification is recorded in the D11b handoff.
-D11c adds three explicit interrupt GPIO signal profiles; full/browser/package checks
-passed as recorded in the D11c handoff. D11d adds bounded local CAN nominal settings
-and existing-transceiver connections; verification is in the D11d handoff. D11 remains partial.
-Broader pin adapters, advanced composition and TinyML experiments remain planned.
+The [chip workspace](device-tree-editor-automatic-chip-support-handoff.md) automatically
+loads STM32 pin-table alternatives and Nordic logical GPIO slots from the selected
+Zephyr source closure, bindings and verified encoding. Dynamic family/SoC/source metadata
+replaces the first two exact-chip catalogues; no per-chip entry is needed for an understood
+source format. GPIO/UART/I2C/SPI activation updates existing or automatically staged overlay
+drafts through canonical source/history and reviewed Save. First Save safely creates a
+missing overlay and uses the public Projects inclusion handoff when needed. The old
+sensor/module placement workflow is removed. Unresolved formats and routing/ownership
+models retain explicit unavailable reasons. Other vendor adapters remain planned under the
+[chip and pin redesign](device-tree-editor-pin-workspace-plan.md).
 
-The current priority is [controller-first visual editing](device-tree-editor-controller-first-plan.md):
-observe the selected board/SoC hardware across vendors before placing devices, and use
-scoped application overrides for inherited-controller connections. The older local-only
-module canvas is not sufficient for a new empty overlay.
-The first board observation and inherited I2C/GPIO connection slice is implemented;
-its [handoff](device-tree-editor-controller-first-handoff.md) records cross-vendor
-discovery, Nucleo connection/browser checks and remaining composition/routing limits.
-Exact CPU/core and nested-variant resolution uses the same pure bounded metadata
-helpers in `core/hardware_metadata.py` as Projects discovery. Features retain ownership
-of source reading, provenance, filesystem guards and tool execution; the shared helper
-does not import features or execute checkout code.
-The MVP now prioritizes five major controller brands and the integrated visual workspace.
-Observed controller/connection capabilities remain the support boundary. A visible
-under-construction blocker explains unavailable actions; the server independently
-rejects unsupported commands. Brand names do not grant mutation authority.
+Exact CPU/core and nested-variant resolution shares pure metadata helpers in
+`core/hardware_metadata.py` with Projects. Features retain source reading, provenance,
+filesystem guards and tooling ownership. Automatic discovery is recorded in
+[ADR 0024](decisions/0024-chip-pin-workspace.md); new-overlay publication and inclusion
+boundaries are recorded in [ADR 0025](decisions/0025-new-overlay-save-and-project-inclusion.md).
+Source/package evidence determines support; unavailable actions explain their reason.
+Broader peripherals, composition and TinyML experiments remain planned.
 
 ## Dependency direction
 
@@ -120,6 +112,7 @@ removing them requires a documented migration and regression coverage.
 | `builds.inspect/get/read_text/select_artifact` | Shared read-only observations, verified text and detached artifact selections |
 | `project_context.catalog/capture/revalidate` | Optional public read-only project-selection provider, supplied after Projects registration |
 | `project_validation.review/submit/result/cancel/handoff` | Optional Projects-owned saved-source Configure and navigation handoff; compilation stays separate |
+| `project_overlays.review/register` | Optional Projects-owned reviewed inclusion of a newly saved overlay; guarded configuration metadata update without source publication or Configure |
 
 A task receives `(emit, cancel)` and returns a result mapping. Progress goes through
 `emit`; long-running work checks the cancellation event and releases subprocesses and
@@ -242,11 +235,14 @@ its captured cache/profile and configuration revision before reconfiguring in pl
 Reviewed cleanup removes only an owned output tree and retains historical evidence.
 See [ADR 0017](decisions/0017-project-management-and-build-outputs.md).
 Application CMake and build logic run only for an explicit configure/build action.
-Explicit board-hardware discovery additionally permits bounded read-only preprocessing
+Automatic chip discovery permits bounded read-only preprocessing
 and the selected Zephyr devicetree parser, without running application or board CMake.
 This tooling exception, input guards and observation authority are described in
 [ADR 0023](decisions/0023-board-hardware-observation.md). Temporary output directories
 are not an execution sandbox.
+The chip workspace triggers that bounded read-only discovery automatically on
+project selection under [ADR 0024](decisions/0024-chip-pin-workspace.md); Configure and
+build execution retain their explicit boundary.
 
 Project/profile and attempt context remain feature-owned. The shared build-inspection
 service captures separate transient observations of existing outputs for Build Inspector
@@ -302,8 +298,8 @@ pending text separately across feature navigation and reconciles uncertain reque
 The D3 session-only boundary is recorded in the
 [D3 handoff](device-tree-editor-d3-handoff.md).
 
-D4 adds feature-owned `SavingService`, `DraftStore` and `OverlayPublisher`. Acknowledged
-drafts and histories use a version-1 envelope under `feature_data("devicetree")/drafts`.
+D4 added feature-owned `SavingService`, `DraftStore` and `OverlayPublisher`. Acknowledged
+drafts and histories originally used a version-1 envelope under `feature_data("devicetree")/drafts`.
 Bounded, expiring Save plans bind the exact draft, original file identity and ancestor
 chain. Linux publication locks the opened parent/destination, stages exact bytes,
 persists recovery evidence, exchanges atomically and verifies both the displaced original
@@ -312,13 +308,33 @@ Save returns a refreshed context/baseline while retaining unified undo history.
 Recovery, reload and discard require comparison with current source. No configure/build
 jobs are introduced. See [ADR 0020](decisions/0020-guarded-overlay-save-and-recovery.md)
 and the [D4 handoff](device-tree-editor-d4-handoff.md) for limits and failure semantics.
+The missing-overlay extension now writes schema-2 recovery records with explicit
+`baseline_exists`; schema-1 existing-file records remain readable. A validated virtual
+document opens as a recoverable empty draft without creating application paths. First
+Save uses Linux atomic no-replacement rename; missing parent subtrees are staged with
+the candidate. Schema-2 creation journals are distinct from schema-1 replacement journals.
+Undo/Redo retain source history across creation and never undo a file's existence.
+Repeated opening can reuse an untouched revision-zero empty recovery record with
+matching source/context and absence guards. Edited and undone-empty records always
+remain separate for explicit restoration.
+
+`core/project_overlays.py` defines the separate public `ProjectOverlayProvider` protocol.
+The composition root supplies Projects' implementation through `context.project_overlays`.
+Review stores private inclusion intent; register verifies the saved source and applies
+only the reviewed selected-configuration change with before/after record guards. Projects
+owns schema-1 inclusion records under `creator/overlay_registrations/`. File publication
+and configuration inclusion remain separate outcomes: failure retains the saved file,
+and a guarded retry completes only inclusion. Pending plans can be reviewed again after
+restart. Fresh context capture follows inclusion, while Configure remains explicit. See
+[ADR 0025](decisions/0025-new-overlay-save-and-project-inclusion.md).
 See the [foundation contract](device-tree-editor-contract.md) and
 [ADR 0019](decisions/0019-device-tree-editor-foundation.md) for the adopted staged design.
 
 D5 composes `ProjectsValidationProvider` through the public
 `core/project_validation.py` protocol. Editor `ValidationService` binds reviews to the
 canonical saved candidate and delegates execution to the existing Projects workflow.
-Only explicit submission runs Configure; Save and opening remain tool-free. The adapter
+Only explicit submission runs Configure. Opening may run read-only chip preprocessing;
+Save does not run Configure or builds. The adapter
 uses the original source layout and fresh managed outputs, preserving removals and
 relative includes. Unsaved staging is unsupported. Bounded application/source-tree/tool
 fingerprints, observed overlay participation and diagnostic links retain their evidence
@@ -328,92 +344,64 @@ invalidate unchanged project/source selections. See
 [ADR 0021](decisions/0021-editor-configuration-validation.md) and the
 [D5 handoff](device-tree-editor-d5-handoff.md).
 
-D6 adds feature-owned `BindingCatalog` and `BindingService`. Explicit binding inspection
-reads bounded local YAML as data from the selected application, Zephyr checkout and DTS
-roots. Supported includes, child schemas and bus-qualified matches produce metadata
-for declarations in the current overlay; this does not resolve inherited effective
-hardware. The observation binds its filesystem fingerprint to the exact context and
-canonical draft revision/hash. Every binding command revalidates that observation and
-uses the existing `DraftService.command` source-patch/history/recovery path. There is no
-parallel generated-source model or persistent binding cache.
+### Chip workspace and retained source services
 
-The frontend loads metadata explicitly, uses only proven local reference targets and
-actual provider cell layouts, and invalidates forms after source/context changes.
-Defaults and required properties are descriptive until Apply. Reset and explicit
-deletion have distinct commands. Unsupported schemas, expressions and unresolved
-references remain source-only; no board pin map or inherited value is inferred. Safe
-label addition is available, while label renaming is withheld without cross-file proof.
-The separate reviewed Save/Configure/Build boundaries remain unchanged. See the
-[D6 handoff](device-tree-editor-d6-handoff.md) for limits and verification status.
+`ChipWorkspaceService` captures editor context and optional canonical draft guards, then
+submits bounded read-only work to the shared job manager. `BoardTopologyService.observe`
+and `BoardSources` perform preprocessing outside editor/draft locks. Results revalidate
+context, source/binding closure and tools before publication and reads. Cancellation
+terminates the worker process group. Identical successful inputs may reuse an observation;
+failed or board-only fallback observations can be retried after dependencies are repaired.
+Rapid revisions of one context/draft coalesce into one shared job without saturating the
+queue; a superseded attempt stops and the latest captured input runs. Full draft guards
+on browser polling/cancellation reject requests for replaced attempts.
 
-D7 adds feature-owned `PeripheralService`, derived from the existing binding observation
-service. `drafts/peripherals` projects an accessible local topology and bounded bus-device
-candidates. `BindingCatalog.devices(bus)` uses resolved `on-bus` metadata, stable compatible
-ordering and a 256-candidate limit; ambiguity, unsupported schemas and truncation remain
-visible. Per-observation caches are detached data and reused only after filesystem
-revalidation. Controller identity comes from a single resolved `bus`, never a name guess.
+`chip_catalog.py` derives logical pin inventory, function evidence, assignments and known
+restrictions from understood local source formats. STM32 uses one selected HAL package
+pin table and verified pinmux encoding; Nordic uses resolved GPIO provider ports, counts
+and reservations with verified PSEL encoding. Family and SoC metadata select an adapter
+without a per-chip inventory allowlist. Catalogue evidence alone does not authorize a
+route edit. Nordic GPIO slots, package pin alternatives, physical pads and connector
+names remain distinct; missing package or ownership evidence is not inferred.
 
-Peripheral commands enter `DraftService.command` and the same source/history/recovery
-path. Atomic node updates preserve unit-address/`reg` consistency, labels and unrelated
-bytes. Single-cell I2C/SPI forms require explicit local cell layout, reject local address
-collisions and preserve shared chip-select arrays. Local path consumers constrain address
-changes; leaf removal checks known local references and retains controllers/providers.
-GPIO LED/key child forms use actual binding/provider metadata. Required creation values
-are explicit; defaults, pinctrl, inherited controller state and module wiring are not
-generated. The browser shares draft-observation lifecycle handling for binding and
-peripheral forms, with late-response invalidation and the same explicit Save/Configure
-boundaries. See the [D7 handoff](device-tree-editor-d7-handoff.md) for supported profiles,
-remaining limits and verification.
+`ChipActivationService` adds current activation capabilities to the chip observation.
+`chip_stm32.py` and `chip_nordic.py` validate complete GPIO/UART/I2C/SPI proposals against
+the selected table, provider and routing evidence; `chip_source.py` applies small overlay edits while preserving
+unrelated declarations. The existing draft command endpoint accepts `chip_assign` and
+`chip_gpio`. The service revalidates observation, context, source and draft guards,
+preprocesses changed candidates and verifies their resulting route before one canonical
+commit. Repeated unchanged assignments are no-ops. No upstream source is rewritten.
+New ownership, reservation and shared-instance conflicts are blocked; an unchanged
+active pin/signal can retain an existing reservation or conflict with a visible notice.
+GPIO creates an application reference, without setting runtime direction or value.
+Driver requirements and package recommendations remain information, not Kconfig edits.
+Unsupported encodings, state properties and Nordic domain/core ownership retain a visible
+reason. The [automatic chip support handoff](device-tree-editor-automatic-chip-support-handoff.md)
+records the implemented source formats and verification limits.
 
-D8 adds feature-owned `NordicEvidence`, `NordicSource` and `PinService`. The evidence
-adapter accepts the exact official `nrf52840dk/nrf52840` target and a versioned Zephyr
-4.4.2 profile of 41 hashed local files. It reads the matching board/SoC/pinctrl declarations,
-GPIO reservations and connector mappings without running a preprocessor or project tools.
-Present files and absent shadow paths are revalidated before commands. This bounded
-baseline is separate from D6/D7's local declaration model; it is not a general inherited
-tree resolver. Custom board roots, shields and multiple overlays are outside the profile.
+The browser's `chip.js` automatically follows context and acknowledged draft revisions.
+`chip-view.js` renders a scoped SVG, searchable pin list and inspector. `chip-assignment.js`
+keeps incomplete proposals local, preserves valid companion selections and submits one
+complete command through the existing draft session. Source and context changes invalidate
+pending proposals; Undo/Redo, recovery and Save retain their existing authority. Late responses are
+checked against captured identities, and pending/invalid source retains an explicitly
+stale view or board-default fallback. No manual hardware/pin/binding extraction is required.
+Missing overlays use a validated canonical draft for discovery and pin activation; no
+application file or directory is created on opening. Missing destinations without a
+saved exact-target configuration or unambiguous proposal remain unavailable for creation.
 
-`POST /api/devicetree/editor/drafts/pins` observes the guarded canonical draft and returns
-the supported target, pin table, controller states, local GPIO rows and diagnostics.
-`pin_assign`, `pin_unassign`, `pin_gpio` and `pin_gpio_unassign` use the existing draft
-command endpoint and produce one atomic source/history change. The source adapter keeps
-symbolic `NRF_PSEL`/GPIO expressions, preserves inherited/shared states by copying them,
-requires an explicit shared-state split, and cleans up only supported exclusive groups.
-Default and sleep states are distinct allocations for the same controller. Known board
-reservations, GPIO use and shared hardware instances constrain assignments; unavailable
-routes and electrical/package facts remain unknown. No metadata file becomes a build input.
+The module recipe service, board connection service and module-layout API are retired.
+Old presentation records remain inert and user overlays/recovery text are preserved.
+Generic peripheral and PWM consumer-creation commands are removed too. Source/binding,
+existing-device maintenance and resource/removal helpers remain for existing declarations;
+their old peripheral and advanced consumer form panels are removed. In particular, diagnostics
+still need provider/dependency interpretation for existing PWM, ADC, CAN and GPIO uses.
+Inspector's separate compatibility aliases remain unchanged.
 
-The pin panel reuses the draft-observation lifecycle, with explicit loading/cancellation,
-reconciliation, keyboard forms and a selectable table. Source, Undo/Redo, reviewed Save
-and explicit Configure retain their existing boundaries. The [D8 handoff](device-tree-editor-d8-handoff.md)
-records the exact supported profile and current verification. D8 is committed as `cfaf10e`.
-
-D9 adds `ModuleService`, a data-only built-in recipe catalogue and the module canvas.
-Recipes describe BME280 I2C/SPI leaves and GPIO LED/button leaves. The module service
-extends the existing peripheral observation and delegates its canonical commands to D7
-source plans. Required values come from the selected local binding catalogue; recipes
-do not infer inherited buses, routing, provider cells or software configuration. Each
-addition creates one leaf under an existing explicitly selected bus/group. Removal uses
-the existing reference, path and nested-declaration guards and leaves parents/providers
-intact. Consequently, no ownership metadata or exclusive dependency cleanup is required.
-Structural recipe matches are informational for handwritten and generated nodes alike.
-
-The graph is rebuilt from canonical source on every accepted observation. Unique local
-paths produce stable `node:/...` presentation keys; source occurrence IDs remain bound
-to a draft revision. Unmatched local compatible declarations can appear read-only.
-The canvas contains at most 256 nodes, with an explicit truncation diagnostic and no
-dangling edges. It does not claim to represent a complete inherited tree or physical wiring.
-
-`LayoutService` stores schema-version-1 records in the feature-owned `module-layouts`
-directory, independently of firmware, drafts, Undo/Redo and recovery. A scope identifies
-workspace identity, application, overlay path, project/configuration and target.
-Positions are integer grid coordinates from 0 to 31 and use current graph keys only.
-Layout writes require the current module observation and an optimistic layout revision;
-directory locking and atomic replacement protect concurrent application processes.
-Unknown versions and invalid records are preserved. The store permits 256 records,
-256 KiB per record and 256 positions per record; no older layout format needs migration.
-See [ADR 0022](decisions/0022-module-layout-and-source-identity.md) and the
-[D9 handoff](device-tree-editor-d9-handoff.md) for boundaries and verification status.
+The [D6](device-tree-editor-d6-handoff.md), [D7](device-tree-editor-d7-handoff.md),
+[D8](device-tree-editor-d8-handoff.md) and [D9](device-tree-editor-d9-handoff.md) handoffs
+record historical implementations. They do not describe current UI controls. No migration
+reinterprets the former `module-layouts` coordinates as chip geometry.
 
 ## Measurement boundary
 
@@ -458,8 +446,8 @@ human-readable messages. Diagnostic observations never become global editing or 
 Removal reviews bind a source candidate and individually selected optional-property repairs
 to the same observation. A confirmed `remove_reviewed` command enters `DraftService.command`
 and creates one source/history change. The application revalidates context, source,
-bindings and available pin evidence before applying it. Existing scoped peripheral/module
-removal commands remain guarded and compatible; the normal UI opens the broader review.
+bindings and available pin evidence before applying it. Existing scoped peripheral removal commands remain guarded; the old module commands
+and their UI are retired.
 No shared dependency is silently deleted or reassigned. Unknown or required consumers do
 not receive invented repairs. D10 adds no persistent format, cross-feature dependency or
 process boundary. See the [D10 handoff](device-tree-editor-d10-handoff.md).
@@ -467,11 +455,9 @@ process boundary. See the [D10 handoff](device-tree-editor-d10-handoff.md).
 D11a adds feature-owned `PWMService` using the existing binding observation, canonical
 command and source/history paths. Its provider profile requires a unique local matched
 binding and explicit matching `#pwm-cells`, with ordered `channel, period` or
-`channel, period, flags` cells. It edits one literal consumer specifier and creates
-binding-compatible PWM LED groups/children. Count and compatible values must satisfy
+`channel, period, flags` cells. It edits one literal consumer specifier for existing consumers. PWM LED/group creation is retired. Count and compatible values must satisfy
 their supported local binding constraints. `pwm_providers()` shares this evidence with
-resource diagnostics. The browser reuses retained observations,
-focus restoration and D10 removal reviews. PWM diagnostics join `ResourceService` without
+resource diagnostics. The earlier browser forms are removed from the chip workspace. PWM diagnostics join `ResourceService` without
 becoming global Save blockers. Channel ranges, timer coupling, electrical suitability and
 inherited hardware remain unknown unless separately established. Named PWM consumers need
 explicit repair before provider removal; removing `pwms` alone must not leave companion

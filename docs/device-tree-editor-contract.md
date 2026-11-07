@@ -1,5 +1,63 @@
 # Device Tree Editor foundation contract
 
+The [2026-11-07 chip and pin redesign](device-tree-editor-pin-workspace-plan.md) is the
+active product plan. This contract includes historical implementation details; the
+[chip workspace handoff](device-tree-editor-pin-workspace-handoff.md) records delivered
+automatic discovery and module-workflow retirement. Source/history/Save and
+data-preservation guarantees remain foundations. See [ADR 0024](decisions/0024-chip-pin-workspace.md)
+for discovery boundaries and [ADR 0025](decisions/0025-new-overlay-save-and-project-inclusion.md)
+for implemented absent-destination drafts, first Save and Projects inclusion. The
+[new-overlay handoff](device-tree-editor-new-overlay-handoff.md) records current delivery
+and verification; the D-stage sections below retain their original historical scope.
+
+## Current missing-overlay extension
+
+Registered/imported project context may include `overlay_creation` with a proposed
+application-relative path, exact target, composition support/reason and required
+registration evidence. Only a matching validated proposal becomes a virtual document
+with `availability: "absent"`, `can_create: true`, `baseline_exists: false`, an empty
+content hash and `usage: "planned"`. The document read returns empty text. Ordinary
+`missing` documents remain unavailable; directory-only contexts do not invent a target.
+The browser automatically opens the canonical draft and uses its guards for chip
+discovery and pin activation. Opening changes no application file or directory.
+
+The draft response remains schema 1 and adds `baseline_exists` and `needs_creation`.
+An absent baseline is always dirty, including empty source. Durable draft schema 2
+records baseline existence and absent destination/directory evidence; schema-1 records
+remain readable as existing baselines. Recovery comparison reports `baseline_exists`
+and `current_exists` separately. A still-absent destination can be explicitly restored
+or reset without creation; a newly appeared file requires current-source reconciliation.
+Automatic reopening may reuse only an untouched revision-zero empty recovery record
+with no history and identical destination/selection evidence. Edited or undone-empty
+records remain separate for explicit recovery. This avoids filling recovery storage
+through repeated restarts of an unused draft.
+
+When a proposed custom input and a different default overlay are both missing from an
+append selection, `overlay_creation.supported` is false with a reason naming the other
+missing input. Source editing and Save remain available; pin activation cannot claim a
+complete single-overlay composition until that dependency or configuration is resolved.
+
+The existing `review`/`save` routes support `plan.operation: "create"`; a blank new file
+has `no_changes: false`. Save binds the full absent observation and creates only after
+explicit confirmation. Linux no-replacement rename publishes either the staged file
+or its staged missing-parent subtree. Schema-2 creation journals remain separate from
+schema-1 replacement journals. Both preserve interrupted/uncertain evidence without
+automatic replay or rollback. The returned context/document/draft retains document
+identity and source history with an existing baseline; Undo never deletes the file.
+
+Save review may include a public Projects inclusion descriptor. The Projects-owned
+`ProjectOverlayProvider.review/register` protocol validates the exact saved selection
+and file, preserves unrelated inputs and configurations, and stores independent
+schema-1 inclusion records under `creator/overlay_registrations/`. Configuration changes
+never rewrite CMake. Save returns `registration.state: "included"` or `"failed"`
+separately from file publication. On partial success, the same original Save request
+can retry inclusion only; newer source requires a fresh review. Durable pending plans
+can be found by a fresh Save review after restart. Successful inclusion recaptures the
+editor context. Neither operation runs Configure/build; predicted inclusion remains
+distinct from captured configuration evidence.
+
+## Historical foundation status
+
 Status: D0–D11d and controller-first foundation contracts, 2026-11-06. D4 adds reviewed existing-overlay Save and durable
 draft recovery; D5 adds explicit saved-source Configure through Projects; D6 adds local
 binding-aware property/reference forms; D7 adds local peripheral and bus-device topology.
@@ -384,7 +442,8 @@ the earlier session-only state is not durable evidence.
 
 ## D4 reviewed Save, reconciliation and recovery
 
-D4 implements existing-overlay replacement only. All routes remain authenticated POST
+D4 originally implemented existing-overlay replacement only; the current extension
+above adds guarded creation. All routes remain authenticated POST
 requests under `/api/devicetree/editor/drafts/`. Ordinary draft mutations retain the D3
 guards. Recovery storage is feature-owned; no project code or configure/build tool runs.
 
@@ -406,7 +465,7 @@ usage and unknown effects on other configurations sharing the file. Successful S
 rebinds the same draft/history to the new baseline. Duplicate requests return a retained
 response without replaying publication; 64 completed responses are retained in session.
 
-The production draft payload reports persistence status and Save capability. Version-1
+The D4 draft payload reports persistence status and Save capability. Its original version-1
 records under `drafts/` retain base/source bytes, hashes, revision, bounded history and
 captured context/file observations. Recovery requires explicit comparison and never applies
 firmware changes. Existing recovery records have 64-record/32-MiB total and 16-MiB per-record
@@ -423,8 +482,9 @@ for locks, identity checks, metadata support and the remaining external-writer r
 
 ## Later persistent change-plan extensions
 
-The following earlier design envelope also describes later create/multi-file extensions;
-the preceding D4 section and ADR 0020 define the delivered existing-file format.
+The following earlier design envelope describes the original create/multi-file proposal;
+the current single-file creation contract is defined above and in ADR 0025. The preceding
+D4 section and ADR 0020 define the delivered existing-file format.
 Source bytes are authoritative; the hardware graph is derived. Byte offsets belong to
 the server's UTF-8 source representation, not JavaScript UTF-16 indices. D3 converts
 editor positions explicitly and tests non-ASCII comments before using text selections.

@@ -383,12 +383,13 @@ class RegisteredEditorContextTests(unittest.TestCase):
         self.assertEqual(selected["configuration"]["revision"], 3)
         self.assertEqual(selected["target"]["requested"], "demo@2.0/chip/core")
         self.assertIsNone(selected["default_overlay"])
-        self.assertIsNone(selected["editing_document"])
+        self.assertEqual(selected["editing_document"]["availability"], "absent")
+        self.assertEqual(selected["editing_document"]["relative_path"], "overlays/demo_rev_2.0_chip_core.overlay")
         self.assertEqual(original["environment"]["id"], self.fixture.observation["id"])
         self.assertEqual(selected["environment"]["id"], original["environment"]["id"])
         self.assertNotEqual(selected["fingerprint"], original["fingerprint"])
 
-    def test_replacement_recipe_requires_explicit_destination_when_default_is_not_selected(self):
+    def test_single_predicted_replacement_overlay_is_selected_automatically(self):
         fragments = automatic_fragments()
         fragments["overlays"] = {"mode": "replace", "files": ["app.overlay"]}
         named = self.fixture.configuration(revision=4, profile={**self.fixture.profile, "fragments": fragments})
@@ -398,9 +399,9 @@ class RegisteredEditorContextTests(unittest.TestCase):
         default = next(item for item in opened["documents"] if item["relative_path"] == opened["default_overlay"]["path"])
         self.assertEqual(default["availability"], "available")
         self.assertEqual(default["usage"], "unknown")
-        self.assertIsNone(opened["editing_document"])
         document = next(item for item in opened["documents"] if item["relative_path"] == "app.overlay")
         self.assertEqual(document["usage"], "predicted")
+        self.assertEqual(opened["editing_document"]["id"], document["id"])
         request = {"workspace": str(self.workspace), "context_id": opened["id"],
                    "expected_revision": opened["revision"], "document_id": document["id"]}
         selected = self.call("select", request)
@@ -429,6 +430,16 @@ class RegisteredEditorContextTests(unittest.TestCase):
         self.assertNotIn(hidden.name, {item["relative_path"] for item in opened["documents"]})
         self.assertIsNone(opened["editing_document"])
         self.assertIn("overlay-unavailable", {item["code"] for item in opened["diagnostics"]})
+
+    def test_multiple_predicted_inputs_do_not_choose_an_arbitrary_overlay(self):
+        (self.fixture.source / "extra.overlay").write_text("/* second selected input */\n")
+        fragments = automatic_fragments()
+        fragments["overlays"] = {"mode": "replace", "files": ["app.overlay", "extra.overlay"]}
+        named = self.fixture.configuration(revision=4, profile={**self.fixture.profile, "fragments": fragments})
+        opened = self.open(named["id"])
+        self.assertIsNone(opened["editing_document"])
+        self.assertEqual({doc["relative_path"] for doc in opened["documents"] if doc["usage"] == "predicted"},
+                         {"app.overlay", "extra.overlay"})
 
 
 class EditorContextHttpTests(unittest.TestCase):
@@ -511,13 +522,13 @@ class EditorContextHttpTests(unittest.TestCase):
         self.assertEqual(source_bytes(self.source), before)
         self.assertEqual(self.server.app.context.jobs.list(), [])
 
-    def test_pwm_creation_edit_save_and_reopen_use_the_canonical_http_draft(self):
+    def test_existing_pwm_edit_save_and_reopen_use_the_canonical_http_draft(self):
         def post(operation, body):
             with self.request(PREFIX + operation, method="POST", body=body) as response:
                 return json.load(response)
 
         overlay = self.source / "app.overlay"
-        original = '/ { pwm0: pwm { compatible = "test,pwm"; #pwm-cells = <3>; }; };\n'
+        original = '/ { pwm0: pwm { compatible = "test,pwm"; #pwm-cells = <3>; }; pwm_leds { compatible = "pwm-leds"; status_led: status { pwms = <&pwm0 2 20000000 256>; }; }; };\n'
         overlay.write_text(original)
         bindings = self.source / "dts/bindings"
         bindings.mkdir(parents=True)
@@ -532,13 +543,6 @@ class EditorContextHttpTests(unittest.TestCase):
             return {**binding, "draft_id": value["id"], "expected_draft_revision": value["revision"],
                     "expected_draft_sha256": value["sha256"]}
 
-        observed = post("drafts/pwm", guard(draft))
-        draft = post("drafts/command", {**guard(draft), "command": {
-            "kind": "pwm_group_add", "schema_id": observed["schema_id"], "name": "pwm_leds"}})
-        observed = post("drafts/pwm", guard(draft))
-        draft = post("drafts/command", {**guard(draft), "command": {
-            "kind": "pwm_led_add", "schema_id": observed["schema_id"], "parent_id": observed["groups"][0]["node_id"],
-            "name": "status", "label": "status_led", "entry": {"reference": "&pwm0", "cells": [2, 20000000, 256]}}})
         self.assertEqual(overlay.read_text(), original)
         created = draft["text"]
         observed = post("drafts/pwm", guard(draft))
@@ -553,14 +557,15 @@ class EditorContextHttpTests(unittest.TestCase):
         stale.exception.close()
         restored = post("drafts/undo", guard(changed))
         self.assertEqual(restored["text"], created)
+        restored = post("drafts/redo", guard(restored))
         review = post("drafts/review", guard(restored))
         saved = post("drafts/save", {**guard(restored), "plan_id": review["plan"]["id"]})
         self.assertEqual(saved["status"], "saved")
-        self.assertEqual(overlay.read_text(), created)
+        self.assertEqual(overlay.read_text(), changed["text"])
         binding.update(context_id=saved["context"]["id"], expected_revision=saved["context"]["revision"])
         reopened = post("drafts/open", {**binding, "document_id": saved["draft"]["document_id"]})
         observed = post("drafts/pwm", guard(reopened))
-        self.assertEqual(observed["consumers"][0]["entry"], {"reference": "&pwm0", "cells": [2, 20000000, 256]})
+        self.assertEqual(observed["consumers"][0]["entry"], {"reference": "&pwm0", "cells": [2, 10000000, 257]})
         self.assertEqual(self.server.app.context.jobs.list(), [])
 
     def test_adc_channel_create_assign_edit_undo_save_and_reopen(self):

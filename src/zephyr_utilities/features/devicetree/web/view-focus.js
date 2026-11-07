@@ -1,5 +1,5 @@
 /** Restore an explicit action's keyboard position after a same-view form refresh. */
-export async function retainActionFocus(root, operation, current, signal, {returnTo} = {}) {
+export async function retainActionFocus(root, operation, current, signal, {returnTo, fallbackTo} = {}) {
   const document = root.ownerDocument; const startingActive = document.activeElement;
   const intended = returnTo || startingActive;
   const contains = (element) => {
@@ -10,6 +10,8 @@ export async function retainActionFocus(root, operation, current, signal, {retur
   const key = intended?.dataset?.focusKey;
   if ((!key && !returnTo) || !contains(intended)) return operation();
   const name = formName(intended);
+  const usable = (element) => element && contains(element) && !element.disabled && !element.closest?.("[hidden]")
+    && element.isConnected !== false && element.getClientRects?.().length !== 0;
   const candidates = () => [...root.querySelectorAll("input, select, textarea, button")]
     .filter((item) => key && item.dataset.focusKey === key && formName(item) === name);
   const index = candidates().indexOf(intended);
@@ -27,10 +29,10 @@ export async function retainActionFocus(root, operation, current, signal, {retur
     // Do not move focus after navigation, another user action, or a background
     // update. A removed focused node normally leaves focus on the document body.
     if (!signal?.aborted && current() && !moved && (!document.hasFocus || document.hasFocus())
-      && (active === startingActive || !active || active === document.body) && !(active === intended && contains(intended))) {
+      && (active === startingActive || !active || active === document.body) && !(active === intended && usable(intended))) {
       const replacement = contains(intended) ? intended : candidates()[index];
-      if (replacement && !replacement.disabled && !replacement.closest?.("[hidden]")
-          && replacement.isConnected !== false && replacement.getClientRects?.().length !== 0) replacement.focus?.({preventScroll: true});
+      if (usable(replacement)) replacement.focus?.({preventScroll: true});
+      else if (usable(fallbackTo)) fallbackTo.focus?.({preventScroll: true});
     }
   }
 }

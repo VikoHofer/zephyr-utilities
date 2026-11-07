@@ -27,16 +27,23 @@ research master plan, not a general coding-assistant integration.
 
 ## Feature ownership and next useful slices
 
-Device Tree Editor's MVP focuses on ST/STM32, Nordic, Espressif, NXP and Raspberry Pi.
-Generic discovery and initial connections are delivered; unsupported capabilities get
-an under-construction blocker with their reason. The integrated visual workspace is
-the next feature priority. Exhaustive controller, revision/composition support and
-further D11 depth are deferred; see the [controller-first plan](device-tree-editor-controller-first-plan.md).
+The 2026-11-07 Device Tree Editor direction replaces the earlier connection/module plans:
+automatically load the selected chip, display its pins, and generate overlay assignments
+from pin selections. The first stage covers GPIO, UART, I2C and SPI on representative
+STM32, Nordic, Espressif, NXP and Raspberry Pi microcontrollers. Retire the old sensor/module
+workflow as part of the replacement. See the [chip and pin redesign plan](device-tree-editor-pin-workspace-plan.md)
+for researched data sources, exact initial profiles, removal scope and acceptance gates.
+Automatic chip loading, old-workflow removal and GPIO/UART/I2C/SPI activation include
+missing-overlay drafts and first Save. The subsequent request expands STM32/Nordic
+from selected Zephyr DTS, bindings and pin tables rather than manual chip entries; see
+the [automatic chip support handoff](device-tree-editor-automatic-chip-support-handoff.md).
+Additional source formats, routing/ownership models and the other three vendor adapters
+remain bounded by observed evidence. The five-vendor matrix remains open. Historical stage checks remain below.
 
 | Feature | State | Initial implementation direction |
 | --- | --- | --- |
 | Memory Explorer (`memory`) | Available | Existing-build reports, visualization, snapshots and comparisons |
-| Device Tree Editor (`devicetree`) | Existing-overlay editing, binding/peripheral forms, bounded pins, local module canvas, resource diagnostics/removal reviews, reviewed Save/recovery and explicit Configure | D0–D10 complete within documented scopes; D11a PWM, D11b local ADC and D11c interrupt GPIO forms delivered; D11d adds nominal CAN settings and existing local transceiver connections; D11 remains partial |
+| Device Tree Editor (`devicetree`) | Automatic STM32/Nordic source discovery and capability-gated GPIO/UART/I2C/SPI editing with existing/new-overlay Save and recovery; sensor/module workflow removed | Extend understood routing/ownership formats; ESP32/K64/RP2040 adapters and the five-vendor acceptance matrix remain open |
 | Project Creator (`projects`) | Applications, creation/build and environment discovery available | Maintain the delivered everyday workflow and add focused public editor handoffs |
 | Build Inspector (`inspector`) | Advanced build, resolved-tree, current source and binding navigation available | Preserve available inspection; further depth deferred |
 | TinyML Experiments (`tinyml`) | Planned | Connect model/build/run identities and compare imported experiment measurements |
@@ -63,17 +70,19 @@ the selected image. Generated header records are distinguished from current cand
 include links and direct property summaries do not perform schema resolution or validation.
 Applications can also be opened before configuration to browse current sources and local
 bindings. Conventional include locations are candidates, not configured search paths.
-The Device Tree Editor now supports existing-overlay source and literal property editing,
-local binding-aware properties/references, UART/I2C/SPI and GPIO topology, bounded Nordic
-pin/signal assignment, local hardware-module placement, reviewed Save and draft recovery.
-Its broader goal includes wider target coverage and advanced composition. Following the delivered everyday
-Project Creator workflow, the [Device Tree Editor master plan](device-tree-editor-masterplan.md)
-is the next product direction. It defines D0–D15 with separate implementation prompts
-and exit gates: source-preserving edits and guarded saving first, then peripherals,
-pins, modules and advanced composition. Hardware UI actions immediately update the
-overlay draft; an explicit Save publishes source changes. Inspection capabilities can
-support it, but a source reader is not the editor itself. Further advanced inspection
-depth remains deferred.
+Device Tree Editor automatically opens a supported selected chip and its configured pins,
+with a logical diagram, pin inspector and retained source/history/Save/recovery. The old
+sensor/module workflow and its creation commands are removed. The
+[chip and pin redesign](device-tree-editor-pin-workspace-plan.md) is the active direction;
+visual pin commands and missing-overlay creation use automatic STM32/Nordic discovery
+with source-format and ownership checks. Further advanced inspection
+and peripheral authoring remain outside this stage.
+
+### Historical editor stages
+
+The following records describe earlier implementations and their original checks. Removed
+forms and services mentioned here are no longer available. These records do not authorize
+continuing the former roadmap.
 
 D0 foundation is complete: the [editor contract](device-tree-editor-contract.md) fixes
 ownership, context/version proposals and source-preservation limits, with a tested
@@ -151,8 +160,8 @@ declared-limit diagnostics and guarded dependency removal. See the
 the remaining family matrix stay planned.
 
 The [Project Creator and environment analyser master plan](project-creator-masterplan.md)
-provides the earlier shared-context proposal; the editor master plan now defines its
-staged implementation needs. A resolved tree belongs to an application configuration
+provides the earlier shared-context proposal; the chip and pin redesign defines the
+current editor delivery gates. A resolved tree belongs to an application configuration
 and image/domain, not just a board selection.
 
 Treat generated build outputs as inspection artifacts. Do not present generated files as

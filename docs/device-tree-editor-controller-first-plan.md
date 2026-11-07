@@ -1,5 +1,9 @@
 # Device Tree Editor: controller-first delivery
 
+**Superseded on 2026-11-07 by the [chip and pin redesign](device-tree-editor-pin-workspace-plan.md).**
+This document records the former sensor/module connection direction. Its delivery order
+and next-work instructions are inactive. Retain it as historical context only.
+
 Accepted product direction: 2026-11-06. This supersedes the earlier sequential D-stage
 delivery order. Existing D0–D11 implementations remain useful foundations; their scoped
 completion labels do not establish a complete visual editor for beginners.

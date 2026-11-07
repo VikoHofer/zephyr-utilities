@@ -1,5 +1,5 @@
 /** Explicit saved-source configuration; jobs survive leaving the editor. */
-import {editorText} from "./drafts.js";
+import {editorText, needsOverlayCreation} from "./drafts.js";
 
 const PREFIX = "/api/devicetree/editor/drafts/validation/";
 const active = (result) => ["queued", "running"].includes(result?.job?.status);
@@ -83,7 +83,7 @@ export function createValidationSession({api, state, workspace, drafts, onChange
     const captured = capture();
     view.error = ""; view.message = "";
     if (!captured) { view.error = "Open an overlay draft first."; publish(); return false; }
-    if (drafts.pending() || entry().server.dirty) {
+    if (drafts.pending() || entry().server.dirty || needsOverlayCreation(entry().server)) {
       view.message = "Save this draft before configuring. Unsaved candidate staging is not supported for this layout.";
       publish(); return false;
     }

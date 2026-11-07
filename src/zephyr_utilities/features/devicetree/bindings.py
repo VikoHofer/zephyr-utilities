@@ -30,6 +30,7 @@ _SPACE = re.compile(r"[a-zA-Z_][a-zA-Z_0-9\-]*")
 _TYPES = {"boolean", "int", "array", "uint8-array", "string", "string-array",
           "phandle", "phandles", "phandle-array", "path", "compound"}
 _PROP_KEYS = {"description", "type", "required", "enum", "const", "default", "deprecated", "specifier-space"}
+_SafeLoader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 
 
 def _fingerprint(value):
@@ -42,7 +43,7 @@ class _ResolutionError(ValueError):
         self.state = state
 
 
-class _Loader(yaml.SafeLoader):
+class _Loader(_SafeLoader):
     def construct_mapping(self, node, deep=False):
         result = {}
         for key_node, value_node in node.value:
@@ -59,7 +60,7 @@ def binding_mapping(text):
         raise ValueError("Binding YAML exceeds the 256 KiB file limit.")
     try:
         depth = 0
-        for count, event in enumerate(yaml.parse(text, Loader=yaml.SafeLoader)):
+        for count, event in enumerate(yaml.parse(text, Loader=_SafeLoader)):
             if count >= MAX_EVENTS or isinstance(event, yaml.AliasEvent) or getattr(event, "anchor", None):
                 raise ValueError("Binding YAML anchors, aliases or event limits are unsupported.")
             if getattr(event, "tag", None):

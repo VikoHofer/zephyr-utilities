@@ -1,18 +1,16 @@
-"""Local bus topology and atomic peripheral commands using observed binding schemas."""
+"""Existing local device observations and guarded source maintenance."""
 
 from copy import deepcopy
 import re
 import time
 
 from .binding_service import BindingService, _literal, _properties
-from .source import PropertyValue, SourceError
+from .source import SourceError
 
 
-COMMANDS = frozenset({"peripheral_controller", "peripheral_add", "peripheral_update", "peripheral_remove",
-                      "gpio_group_add", "gpio_add", "gpio_update"})
+COMMANDS = frozenset({"peripheral_controller", "peripheral_update", "peripheral_remove", "gpio_update"})
 GROUPS = {"led": "gpio-leds", "button": "gpio-keys"}
 SIMPLE = {"boolean", "int", "string", "array", "string-array", "uint8-array"}
-NODE_NAME = re.compile(r"[A-Za-z][A-Za-z0-9,._+\-]{0,62}")
 SCOPE = ("Topology covers unique declarations in this overlay. Inherited devices, external consumers, "
          "electrical limits and pin routing remain unknown. Save and Configure are separate actions.")
 
@@ -280,9 +278,7 @@ class PeripheralService(BindingService):
         command = body["command"]
         kind = command["kind"]
         fields = {"peripheral_controller": {"node_id", "values"},
-                  "peripheral_add": {"parent_id", "name", "label", "compatible", "address", "values"},
                   "peripheral_update": {"node_id", "address", "values"}, "peripheral_remove": {"node_id"},
-                  "gpio_group_add": {"group_kind", "name"}, "gpio_add": {"parent_id", "name", "label", "values"},
                   "gpio_update": {"node_id", "values"}}[kind] | {"kind", "schema_id"}
         if set(command) != fields or not isinstance(command["schema_id"], str):
             raise ValueError("Choose the exact supported peripheral command fields.")
@@ -294,18 +290,7 @@ class PeripheralService(BindingService):
         payload = observed["payload"]
         document = draft.document
         parents = [*payload["controllers"], *payload["gpio_groups"]]
-        if kind == "gpio_group_add":
-            option = next((item for item in payload["group_options"] if item["kind"] == command["group_kind"]), None)
-            if not option or not option["available"]:
-                raise ValueError("Choose an available GPIO group with a supported local binding.")
-            self._name(command["name"])
-            compatible = GROUPS[option["kind"]]
-            compatible_field = option["compatible_field"]
-            if compatible_field:
-                self._typed_value(compatible_field, [compatible] if compatible_field["type"] == "string-array" else compatible, payload)
-            root = next(node for node in document.syntax.nodes if node.name == "/" and node.parent_id is None)
-            change = document.plan_add_node(root.id, command["name"], properties=[("compatible", PropertyValue.string(compatible))])
-        elif kind == "peripheral_controller":
+        if kind == "peripheral_controller":
             parent = next((item for item in payload["controllers"] if item["node_id"] == command["node_id"]), None)
             if not parent or not parent["editable"]:
                 raise ValueError("Choose a unique supported local controller.")
@@ -316,34 +301,6 @@ class PeripheralService(BindingService):
                 raise ValueError("Choose okay or disabled for controller status.")
             props = self._properties(command["values"], parent["fields"], payload)
             change = document.plan_update_node(parent["node_id"], properties=props)
-        elif kind in {"peripheral_add", "gpio_add"}:
-            expected = payload["controllers"] if kind == "peripheral_add" else payload["gpio_groups"]
-            parent = next((item for item in expected if item["node_id"] == command["parent_id"]), None)
-            if not parent or not parent["addable"]:
-                raise ValueError(parent["add_reason"] if parent else "Choose a supported local parent.")
-            self._name(command["name"])
-            if not isinstance(command["label"], str):
-                raise ValueError("Enter a literal node label or leave it empty.")
-            if kind == "peripheral_add":
-                candidate = next((item for item in parent["candidates"] if item["compatible"] == command["compatible"]), None)
-                if not candidate or not candidate["addable"]:
-                    raise ValueError("Choose a supported device binding for this bus.")
-                self._check_address(document, parent, parent["kind"], command["address"])
-                if parent["kind"] != "uart":
-                    self._typed_value(candidate["address_field"], [command["address"]], payload)
-                compatible_field = candidate["compatible_field"]
-                if compatible_field:
-                    self._typed_value(compatible_field, [candidate["compatible"]] if compatible_field["type"] == "string-array"
-                                      else candidate["compatible"], payload)
-                props = [("compatible", PropertyValue.string(candidate["compatible"]))]
-                props += self._properties(command["values"], candidate["fields"], payload, required=True)
-                if parent["kind"] != "uart":
-                    props.append(("reg", PropertyValue.cells([command["address"]])))
-                name = command["name"] + (f"@{command['address']:x}" if parent["kind"] != "uart" else "")
-            else:
-                props = self._properties(command["values"], parent["add_fields"], payload, required=True)
-                name = command["name"]
-            change = document.plan_add_node(parent["node_id"], name, label=command["label"] or None, properties=props)
         else:
             found = [(parent, child) for parent in parents for child in parent["children"] if child["node_id"] == command["node_id"]]
             if len(found) != 1:
@@ -369,8 +326,3 @@ class PeripheralService(BindingService):
                     change = document.plan_update_node(child["node_id"], properties=props)
         observed["catalog"].revalidate()
         return change
-
-    @staticmethod
-    def _name(value):
-        if not isinstance(value, str) or not NODE_NAME.fullmatch(value):
-            raise ValueError("Enter a node base name starting with a letter, without a unit-address or path.")

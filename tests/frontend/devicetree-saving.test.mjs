@@ -5,33 +5,40 @@ import {createSaveSession} from "../../src/zephyr_utilities/features/devicetree/
 
 const original = '&uart0 { status = "disabled"; };\r\n';
 const edited = original.replace("disabled", "okay");
+const newSource = edited.replace(/\r\n/g, "\n");
 function deferred() { let resolve; const promise = new Promise((done) => { resolve = done; }); return {promise, resolve}; }
-function initial() {
-  const document = {id: "overlay", path: "/workspace/app/board.overlay", sha256: "base", text: original, availability: "available"};
+function initial({creating = false} = {}) {
+  const document = {id: "overlay", path: "/workspace/app/board.overlay", sha256: "base", text: creating ? "" : original,
+    availability: creating ? "absent" : "available", baseline_exists: !creating, can_create: creating};
   const context = {schema_version: 1, id: "context", revision: 1, workspace: "/workspace", fingerprint: "fingerprint",
     application: {path: "/workspace/app"}, project: {id: "project"}, configuration: {id: null, name: "Original"},
     target: {requested: "board/chip"}, editing_document: {...document}, documents: [{...document}]};
   return {context, document};
 }
-function backend() {
-  const start = initial();
-  const calls = []; const undo = []; const receipts = new Map();
-  let context = start.context; let document = start.document; let disk = original; let revision = 0; let source = original;
+function backend(options = {}) {
+  const start = initial(options);
+  const calls = []; const undo = []; const redo = []; const receipts = new Map();
+  let context = start.context; let document = start.document; let disk = options.creating ? null : original;
+  let revision = 0; let source = start.document.text;
   let digest = "base"; let baseDigest = "base";
   const payload = () => ({schema_version: 1, id: "draft", context_fingerprint: context.fingerprint, document_id: document.id,
-    path: document.path, revision, sha256: digest, base_sha256: baseDigest, text: source, dirty: source !== disk,
-    can_undo: Boolean(undo.length), can_redo: false, syntax: {state: "complete", blocked: false, diagnostics: []}, nodes: [],
+    path: document.path, revision, sha256: digest, base_sha256: baseDigest, text: source, dirty: disk === null || source !== disk,
+    baseline_exists: disk !== null, needs_creation: disk === null,
+    can_undo: Boolean(undo.length), can_redo: Boolean(redo.length), syntax: {state: "complete", blocked: false, diagnostics: []}, nodes: [],
     diff: {text: source === disk ? "" : "changed", truncated: false}, capabilities: {save: true}});
   function envelope(status) {
     const nextContext = {...context, id: `context-${revision}`, fingerprint: `fingerprint-${revision}`, revision: 2};
-    document = {...document, text: disk, sha256: baseDigest};
+    document = {...document, text: disk ?? "", sha256: baseDigest, baseline_exists: disk !== null,
+      can_create: disk === null, availability: disk === null ? "absent" : "available"};
     context = {...nextContext, editing_document: {...document}, documents: [{...document}]};
     return {status, context: structuredClone(context), document: {...document}, draft: payload(), receipt: {status}};
   }
-  const comparison = () => ({status: source === disk ? "current" : "conflict", path: document.path,
-    base_text: original, text: source, current_text: disk, current_sha256: baseDigest, comparison_id: "comparison",
+  const comparison = () => ({status: disk === null || source === disk ? "current" : "conflict", path: document.path,
+    base_text: options.creating ? "" : original, text: source, current_text: disk ?? "", current_exists: disk !== null,
+    current_sha256: baseDigest, comparison_id: "comparison",
     can_reload: true, diff: {text: "comparison diff", truncated: false}, message: "Current source observed."});
-  const record = {id: "recovery", path: document.path, revision: 8, text: edited, base_text: original};
+  const record = {id: "recovery", path: document.path, revision: 8, text: edited,
+    base_text: options.creating ? "" : original, baseline_exists: !options.creating};
   async function api(path, {body}) {
     const route = path.replace("/api/devicetree/editor/drafts/", ""); calls.push([route, structuredClone(body)]);
     if (route === "recovery/list") return {records: [record], diagnostics: []};
@@ -41,14 +48,16 @@ function backend() {
     if (route === "open" || route === "get") return payload();
     if (route === "save" && receipts.has(body.plan_id)) return structuredClone(receipts.get(body.plan_id));
     assert.equal(body.expected_draft_revision, revision); assert.equal(body.expected_draft_sha256, digest);
-    if (route === "source") { undo.push(source); source = body.text; revision++; digest = `hash-${revision}`; return payload(); }
-    if (route === "undo") { source = undo.pop(); revision++; digest = `hash-${revision}`; return payload(); }
+    if (route === "source") { undo.push(source); redo.length = 0; source = body.text; revision++; digest = `hash-${revision}`; return payload(); }
+    if (route === "undo") { redo.push(source); source = undo.pop(); revision++; digest = `hash-${revision}`; return payload(); }
+    if (route === "redo") { undo.push(source); source = redo.pop(); revision++; digest = `hash-${revision}`; return payload(); }
     if (route === "review") return {status: "ready", plan: {id: "plan", path: document.path, candidate_text: source,
       candidate_sha256: digest, base_sha256: baseDigest, expires_at: Date.now() / 1000 + 600,
+      operation: disk === null ? "create" : "replace", no_changes: disk !== null && disk === source,
       diff: {text: "review diff", truncated: false}}};
     if (route === "compare") return comparison();
     if (route === "reload") {
-      if (body.mode === "discard") { source = disk; undo.length = 0; }
+      if (body.mode === "discard") { source = disk ?? ""; undo.length = 0; redo.length = 0; }
       revision++; digest = `hash-${revision}`; return envelope("reloaded");
     }
     if (route === "save") {
@@ -59,8 +68,8 @@ function backend() {
   }
   return {api, calls, payload, comparison, record, disk: () => disk};
 }
-async function harness(wrap = (api) => api) {
-  const server = backend(); const first = initial(); let workspace = "/workspace";
+async function harness(wrap = (api) => api, options = {}) {
+  const server = backend(options); const first = initial(options); let workspace = "/workspace";
   const state = {data: first.context, document: first.document}; let saving;
   const publish = () => saving?.sync();
   const drafts = createDraftSession({api: wrap(server.api), state, workspace: () => workspace, onChange: publish,
@@ -89,6 +98,137 @@ test("Save flushes pending typing, adopts new context, and Undo becomes an unsav
   assert.equal(app.state.saveView.message, "");
   assert.equal(app.server.disk(), edited);
   app.dispose();
+});
+
+test("a new empty overlay opens as unsaved and first Save explicitly creates it", async () => {
+  const app = await harness(undefined, {creating: true});
+  assert.equal(app.current().text, ""); assert.equal(app.current().server.dirty, true);
+  assert.equal(app.current().server.needs_creation, true); assert.equal(app.server.disk(), null);
+  assert.deepEqual(app.server.calls.map(([route]) => route), ["open"]);
+  assert.equal(await app.saving.reviewSave(), true);
+  assert.equal(app.state.saveView.review.data.operation, "create");
+  assert.equal(app.state.saveView.review.data.no_changes, false);
+  assert.equal(app.server.disk(), null);
+  assert.equal(await app.saving.confirm(), true);
+  assert.equal(app.server.disk(), ""); assert.equal(app.current().server.needs_creation, false);
+  assert.equal(app.state.document.baseline_exists, true);
+  assert.match(app.state.saveView.message, /created and saved.*does not delete/);
+  app.dispose();
+});
+
+test("new overlay Undo/Redo before and after creation changes only canonical source", async () => {
+  const app = await harness(undefined, {creating: true});
+  app.drafts.type(newSource); await app.drafts.flush();
+  assert.equal(await app.drafts.undo(), true); assert.equal(app.current().text, "");
+  assert.equal(app.current().server.needs_creation, true); assert.equal(app.server.disk(), null);
+  assert.equal(await app.drafts.redo(), true); assert.equal(app.current().text, newSource);
+  await app.saving.reviewSave(); await app.saving.confirm();
+  assert.equal(await app.drafts.undo(), true); assert.equal(app.current().text, "");
+  assert.equal(app.current().server.needs_creation, false); assert.equal(app.server.disk(), newSource);
+  assert.equal(await app.drafts.redo(), true); assert.equal(app.current().text, newSource);
+  assert.equal(app.server.disk(), newSource); app.dispose();
+});
+
+test("cancelling first Save keeps the destination absent and preserves its draft", async () => {
+  const app = await harness(undefined, {creating: true}); app.drafts.type(newSource);
+  await app.saving.reviewSave(); app.saving.cancel();
+  assert.equal(await app.saving.confirm(), false); assert.equal(app.server.disk(), null);
+  assert.equal(app.current().text, newSource); assert.equal(app.current().server.needs_creation, true);
+  assert.equal(app.server.calls.some(([route]) => route === "save"), false); app.dispose();
+});
+
+test("new drafts reject a replacement review instead of presenting it as first Save", async () => {
+  const app = await harness((api) => async (...args) => {
+    const result = await api(...args);
+    if (args[0].endsWith("/review")) result.plan.operation = "replace";
+    return result;
+  }, {creating: true});
+  assert.equal(await app.saving.reviewSave(), false);
+  assert.match(app.state.saveView.error, /does not match/);
+  assert.equal(app.state.saveView.review, null); assert.equal(app.server.disk(), null); app.dispose();
+});
+
+test("recovery of an absent destination remains an unsaved new draft", async () => {
+  const app = await harness(undefined, {creating: true});
+  await app.saving.listRecoveries(); assert.equal(app.state.saveView.recoveries.records[0].baseline_exists, false);
+  assert.equal(await app.saving.reviewRecovery("recovery"), true);
+  assert.equal(app.state.saveView.review.data.comparison.current_exists, false);
+  assert.equal(await app.saving.confirm(), true);
+  assert.equal(app.current().text, edited); assert.equal(app.current().server.needs_creation, true);
+  assert.equal(app.server.disk(), null); assert.equal(app.state.document.availability, "absent");
+  assert.equal(await app.saving.reviewSave(), true); assert.equal(app.state.saveView.review.data.operation, "create");
+  app.dispose();
+});
+
+test("resetting an absent draft keeps an empty unsaved destination without writing", async () => {
+  const app = await harness(undefined, {creating: true});
+  app.drafts.type(edited); await app.drafts.flush();
+  assert.equal(await app.saving.reviewReload(), true); assert.equal(await app.saving.confirm(), true);
+  assert.equal(app.current().text, ""); assert.equal(app.current().server.needs_creation, true);
+  assert.equal(app.current().server.can_undo, false); assert.equal(app.server.disk(), null); app.dispose();
+});
+
+test("partial creation exposes an explicit configuration retry without another source publication", async () => {
+  let attempts = 0;
+  const app = await harness((api) => async (...args) => {
+    const result = await api(...args);
+    if (args[0].endsWith("/save")) result.registration = ++attempts === 1
+      ? {state: "failed", id: "registration", message: "Configuration changed; overlay file was retained."}
+      : {state: "included", id: "registration", message: "Overlay included in Original."};
+    return result;
+  }, {creating: true});
+  app.drafts.type(newSource); await app.saving.reviewSave(); await app.saving.confirm();
+  assert.equal(app.server.disk(), newSource); assert.equal(app.current().server.needs_creation, false);
+  assert.match(app.state.saveView.message, /file was retained/);
+  assert.equal(Boolean(app.saving.canRetryRegistration()), true);
+  assert.equal(attempts, 1);
+  assert.equal(await app.saving.retryRegistration(), true);
+  const saves = app.server.calls.filter(([route]) => route === "save");
+  assert.deepEqual(saves[0][1], saves[1][1]); assert.equal(app.server.disk(), newSource);
+  assert.equal(app.state.saveView.registrationRetry, null); assert.match(app.state.saveView.message, /inclusion confirmed/);
+  app.dispose();
+});
+
+test("configuration retry refuses changed drafts and clears the action after switching projects", async () => {
+  let attempts = 0;
+  const app = await harness((api) => async (...args) => {
+    if (args[0].endsWith("/save")) attempts++;
+    const result = await api(...args);
+    if (args[0].endsWith("/save")) result.registration = {state: attempts === 1 ? "failed" : "included", id: "registration", message: "Review configuration inclusion."};
+    return result;
+  }, {creating: true});
+  app.drafts.type(edited); await app.saving.reviewSave(); await app.saving.confirm();
+  app.drafts.type(edited + "/* newer */");
+  assert.equal(Boolean(app.saving.canRetryRegistration()), false);
+  assert.equal(await app.saving.retryRegistration(), false); assert.equal(attempts, 1);
+  app.drafts.type(edited);
+  // Even reverting text cannot reuse a review after its local generation changed.
+  assert.equal(Boolean(app.saving.canRetryRegistration()), false);
+  app.dispose();
+  const second = await harness((api) => async (...args) => {
+    const result = await api(...args);
+    if (args[0].endsWith("/save")) result.registration = {state: "failed", id: "registration", message: "Inclusion is pending."};
+    return result;
+  }, {creating: true});
+  await second.saving.reviewSave(); await second.saving.confirm();
+  second.workspace("/another-workspace");
+  assert.equal(second.state.saveView.registrationRetry, null);
+  assert.equal(await second.saving.retryRegistration(), false); second.dispose();
+});
+
+test("a late configuration retry cannot adopt its result after workspace navigation", async () => {
+  const wait = deferred(); const started = deferred(); let attempts = 0;
+  const app = await harness((api) => async (...args) => {
+    if (args[0].endsWith("/save") && ++attempts === 2) { started.resolve(); await wait.promise; }
+    const result = await api(...args);
+    if (args[0].endsWith("/save")) result.registration = {state: attempts === 1 ? "failed" : "included", id: "registration"};
+    return result;
+  }, {creating: true});
+  await app.saving.reviewSave(); await app.saving.confirm();
+  const before = app.state.data; const retry = app.saving.retryRegistration(); await started.promise;
+  app.workspace("/elsewhere"); wait.resolve();
+  assert.equal(await retry, false); assert.equal(app.state.data, before);
+  assert.equal(app.state.saveView.registrationRetry, null); assert.equal(app.server.disk(), ""); app.dispose();
 });
 
 test("success notices expire when source typing or the selected binding changes", async () => {

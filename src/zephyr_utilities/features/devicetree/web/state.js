@@ -1,4 +1,6 @@
 /** Read-only editor requests stay bound to one workspace and context revision. */
+import {editableOverlay} from "./drafts.js";
+
 const PREFIX = "/api/devicetree/editor/";
 const array = (value) => Array.isArray(value) ? value : [];
 
@@ -90,7 +92,7 @@ export function createEditorSession({api, state, workspace, onChange}) {
 
   async function readDocument(data, captured, path, signal) {
     const selected = data.editing_document;
-    if (!selected || selected.availability !== "available") return;
+    if (!editableOverlay(selected)) return;
     Object.assign(state, {documentLoading: true, document: null, documentError: ""}); publish();
     try {
       const response = await api(PREFIX + "document", {method: "POST", signal,
@@ -99,6 +101,8 @@ export function createEditorSession({api, state, workspace, onChange}) {
       const document = response.document;
       if (response.context_id !== data.id || response.revision !== data.revision || document?.id !== selected.id
           || document.path !== selected.path || typeof document.text !== "string"
+          || !editableOverlay(document)
+          || (document.baseline_exists !== false) !== (selected.baseline_exists !== false)
           || (selected.sha256 && document.sha256 !== selected.sha256)) {
         throw new Error("The overlay changed. Open the application again before reading it.");
       }
@@ -189,7 +193,9 @@ export function createEditorSession({api, state, workspace, onChange}) {
     if (disposed || data?.workspace !== workspace() || state.workspace !== workspace()) return false;
     verifyContext(data, state.workspace, null, state.selection);
     if (!document || data.editing_document?.id !== document.id || data.editing_document?.path !== document.path
-        || data.editing_document?.sha256 !== document.sha256 || typeof document.text !== "string") {
+        || data.editing_document?.sha256 !== document.sha256 || typeof document.text !== "string"
+        || !editableOverlay(document)
+        || (data.editing_document?.baseline_exists !== false) !== (document.baseline_exists !== false)) {
       throw new Error("The refreshed overlay does not match the saved context. Open the application again.");
     }
     generation++; request?.abort();

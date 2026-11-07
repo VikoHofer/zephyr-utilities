@@ -130,7 +130,11 @@ class EditorService:
         fragments = payload.get("fragments")
         explicit = fragments["overlays"]["files"] if fragments else []
         default = payload.get("default_overlay")
-        wanted = [*explicit, *([default["path"]] if default and default.get("path") else [])]
+        creation = payload.get("overlay_creation")
+        creation_path = creation.get("path") if (isinstance(creation, dict) and payload.get("target")
+                         and creation.get("target") == payload["target"]["requested"]) else None
+        wanted = [*explicit, *([default["path"]] if default and default.get("path") else []),
+                  *([creation_path] if creation_path else [])]
         for value in wanted:
             try:
                 paths.add(self._path_in_application(reader, application, value))
@@ -143,6 +147,11 @@ class EditorService:
         captured = payload.get("input_evidence", {}).get("captured", [])
         for path in sorted(paths):
             summary = self._document_observation(reader, application, path)
+            if summary["relative_path"] == creation_path and summary["availability"] == "missing":
+                summary.update(availability="absent", can_create=True, baseline_exists=False,
+                               sha256=hashlib.sha256(b"").hexdigest(), usage="planned",
+                               reason="New overlay draft. The file and any missing directories are created only by reviewed Save.")
+                summary["origins"].append("Proposed application overlay")
             if summary["relative_path"] in explicit:
                 summary["origins"].append("Selected fragment recipe")
             if default and summary["relative_path"] == default.get("path"):
@@ -197,6 +206,14 @@ class EditorService:
                                                  if doc["relative_path"] == default.get("path")
                                                  and doc["availability"] == "available"
                                                  and doc["usage"] == "predicted"), None)
+        if payload["editing_document"] is None:
+            predicted = [doc for doc in payload["documents"] if doc["usage"] == "predicted"]
+            if len(predicted) == 1 and predicted[0]["availability"] == "available":
+                payload["editing_document"] = deepcopy(predicted[0])
+        if payload["editing_document"] is None:
+            proposed = [doc for doc in payload["documents"] if doc["availability"] == "absent" and doc.get("can_create")]
+            if len(proposed) == 1:
+                payload["editing_document"] = deepcopy(proposed[0])
         payload["fingerprint"] = _fingerprint({"workspace": workspace,
                                                "workspace_identity": payload["workspace_identity"],
                                                "application": str(application),
@@ -259,7 +276,8 @@ class EditorService:
         if not isinstance(document_id, str):
             raise ValueError("Choose an overlay from this editor context.")
         selected = next((doc for doc in scope.payload["documents"] if doc["id"] == document_id), None)
-        if selected is None or selected["availability"] != "available":
+        if selected is None or not (selected["availability"] == "available" or
+                                    selected["availability"] == "absent" and selected.get("can_create") is True):
             raise ValueError("Choose an available overlay from this editor context.")
         return selected
 
@@ -275,7 +293,8 @@ class EditorService:
         with self.lock:
             scope, reader = self._scope(body, ("document_id",))
             selected = self._selected(scope, body["document_id"])
-            document = reader.read_text(reader.path(selected["path"]), limit=MAX_DOCUMENT_BYTES)
+            document = ({"text": "", "sha256": hashlib.sha256(b"").hexdigest()} if selected["availability"] == "absent" else
+                        reader.read_text(reader.path(selected["path"]), limit=MAX_DOCUMENT_BYTES))
             if document["sha256"] != selected["sha256"]:
                 raise ValueError("The overlay changed. Open the application again.")
             if self._source_directory(reader, reader.path(scope.payload["application"]["path"])) != scope.source_guard:
@@ -284,6 +303,33 @@ class EditorService:
                 raise ValueError("The selected workspace changed. Open the editor context again.")
             return {"context_id": scope.payload["id"], "revision": scope.payload["revision"],
                     "document": {**deepcopy(selected), "text": document["text"]}}
+
+    def review_creation(self, context, selected):
+        """Ask Projects for the narrow, separately reviewed configuration inclusion."""
+        provider = self.context.project_overlays
+        creating = selected.get("availability") == "absent" and selected.get("can_create") is True
+        if provider is None:
+            if creating:
+                raise ValueError("New-overlay Save needs the Projects configuration handoff.")
+            return None
+        scope = self.contexts.get(context["id"])
+        if scope is None or scope.selection is None:
+            return None
+        return provider.review(scope.selection, selected["relative_path"], creating=creating)
+
+    def register_creation(self, registration, workspace, path, sha256):
+        """Reopen only the Projects selection returned by its guarded write handoff."""
+        provider = self.context.project_overlays
+        if provider is None:
+            raise ValueError("Projects configuration inclusion is unavailable; the saved file is retained.")
+        receipt = provider.register(registration, workspace, path, sha256)
+        selection = receipt["selection"]
+        context = self.open({"workspace": workspace, "project_id": selection["project"]["id"],
+                             "configuration_id": selection["configuration"]["id"]})
+        document_id = hashlib.sha256(str(path).encode()).hexdigest()[:32]
+        context = self.select({"workspace": workspace, "context_id": context["id"],
+                               "expected_revision": context["revision"], "document_id": document_id})
+        return {**receipt, "context": context}
 
     def close(self):
         with self.lock:

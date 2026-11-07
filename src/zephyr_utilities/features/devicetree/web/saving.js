@@ -1,11 +1,12 @@
 /** Reviewed source publication and explicit recovery; never writes on passive render. */
-import {draftKey} from "./drafts.js";
+import {draftKey, needsOverlayCreation} from "./drafts.js";
 
 const PREFIX = "/api/devicetree/editor/drafts/";
 const array = (value) => Array.isArray(value) ? value : [];
 
 export function createSaveSession({api, state, workspace, drafts, adopt, onChange}) {
-  state.saveView = {busy: false, review: null, error: "", message: "", recoveries: null, recoveryLoading: false, recoveryError: ""};
+  state.saveView = {busy: false, review: null, error: "", message: "", recoveries: null, recoveryLoading: false, recoveryError: "",
+    registrationRetry: null, retryingRegistration: false};
   const view = state.saveView;
   let disposed = false;
   let generation = 0;
@@ -39,11 +40,19 @@ export function createSaveSession({api, state, workspace, drafts, adopt, onChang
     expected_revision: captured.context.revision});
   const guard = (captured) => ({...binding(captured), draft_id: captured.entry.server.id,
     expected_draft_revision: captured.revision, expected_draft_sha256: captured.sha256});
+  const sameDestination = (captured) => captured && captured.workspace === workspace()
+    && captured.context.application?.path === state.data?.application?.path
+    && captured.context.project?.id === state.data?.project?.id
+    && captured.context.configuration?.id === state.data?.configuration?.id
+    && captured.document.path === state.document?.path;
+  const canRetryRegistration = () => !disposed && !view.busy && !view.review && view.registrationRetry
+    && matches(view.registrationRetry.captured) && !drafts.pending() && !currentEntry()?.flight
+    && !currentEntry()?.historyOperation && !currentEntry()?.externalOperation && !currentEntry()?.uncertain && !currentEntry()?.conflict;
 
   function unlock() { const done = release; release = null; done?.(); }
   function cancel({message = ""} = {}) {
     generation++;
-    view.review = null; view.busy = false; view.error = "";
+    view.review = null; view.busy = false; view.retryingRegistration = false; view.error = "";
     if (message) view.message = message;
     unlock(); publish();
   }
@@ -57,6 +66,7 @@ export function createSaveSession({api, state, workspace, drafts, adopt, onChang
       currentWorkspace = workspace(); listGeneration++;
       view.recoveries = null; view.recoveryLoading = false; view.recoveryError = ""; view.message = "";
     }
+    if (view.registrationRetry && !sameDestination(view.registrationRetry.captured)) view.registrationRetry = null;
     const review = view.review;
     if (review && (review.workspace !== workspace() || review.captured && !matches(review.captured, {revision: !view.busy && review.kind !== "outcome"}))) {
       generation++;
@@ -90,7 +100,8 @@ export function createSaveSession({api, state, workspace, drafts, adopt, onChang
       if (kind === "save" && data.status === "ready") {
         const plan = data.plan;
         if (!plan?.id || plan.path !== captured.document.path || plan.candidate_text !== captured.entry.server.text
-            || plan.candidate_sha256 !== captured.sha256 || typeof plan.expires_at !== "number") {
+            || plan.candidate_sha256 !== captured.sha256 || typeof plan.expires_at !== "number"
+            || (plan.operation === "create") !== needsOverlayCreation(captured.entry.server)) {
           throw new Error("The review does not match this draft. Open a new review.");
         }
         view.review = {kind, data: plan, captured, workspace: captured.workspace};
@@ -173,11 +184,19 @@ export function createSaveSession({api, state, workspace, drafts, adopt, onChang
       drafts.adopt(data, captured, {preserveLocal});
       view.review = null;
       adopt(data.context, data.document);
-      view.message = data.status === "saved" ? "Overlay saved. Undo creates an unsaved inverse change."
+      view.registrationRetry = review.kind === "save" && data.registration?.state === "failed"
+        ? {request: {...guard(captured), plan_id: review.data.id}, captured: capture(), message: data.registration.message}
+        : null;
+      view.message = data.status === "saved" ? review.data.operation === "create"
+        ? "Overlay created and saved. Undo changes the draft; it does not delete the file."
+        : "Overlay saved. Undo creates an unsaved inverse change."
         : data.status === "unchanged" ? "The overlay already matches this draft. No replacement was needed."
           : data.status === "restored" ? "Recovery restored as an unsaved draft. Review and Save when ready."
-            : review.kind === "reload" ? "Draft discarded and current file reloaded. No file was written."
+            : review.kind === "reload" ? needsOverlayCreation(data.draft)
+              ? "New overlay draft reset. No application file was created."
+              : "Draft discarded and current file reloaded. No file was written."
               : "Draft retained against the current file. Review the complete diff before saving.";
+      view.message = [...new Set([view.message, data.message, data.registration?.message].filter(Boolean))].join(" ");
       return true;
     } catch (error) {
       if (token === generation && matches(captured, {revision: false})) {
@@ -193,6 +212,37 @@ export function createSaveSession({api, state, workspace, drafts, adopt, onChang
       return false;
     } finally {
       if (token === generation) { view.busy = false; if (!view.review) unlock(); publish(); }
+    }
+  }
+
+  async function retryRegistration() {
+    const pending = view.registrationRetry;
+    if (!pending || !canRetryRegistration()) return false;
+    const captured = pending.captured;
+    release = drafts.pause();
+    if (!release) return false;
+    const token = ++generation;
+    view.busy = true; view.retryingRegistration = true; view.error = ""; view.message = "Retrying configuration inclusion…"; publish();
+    try {
+      const data = await post("save", pending.request);
+      if (token !== generation || !matches(captured, {revision: false})) return false;
+      if (!["saved", "unchanged"].includes(data.status) || !data.context || !data.document || !data.draft
+          || !["included", "failed"].includes(data.registration?.state)) {
+        throw new Error(data.message || "Configuration inclusion could not be confirmed. The saved overlay is retained; review Save again to reconcile.");
+      }
+      drafts.adopt(data, captured);
+      adopt(data.context, data.document);
+      view.registrationRetry = data.registration?.state === "failed"
+        ? {...pending, captured: capture(), message: data.registration.message} : null;
+      view.message = [...new Set([data.registration?.state === "failed"
+        ? "The overlay is saved; configuration inclusion is still pending."
+        : "Overlay configuration inclusion confirmed. No overlay source was republished.", data.message, data.registration?.message].filter(Boolean))].join(" ");
+      return data.registration?.state !== "failed";
+    } catch (error) {
+      if (token === generation && matches(captured, {revision: false})) view.error = error.message || String(error);
+      return false;
+    } finally {
+      if (token === generation) { view.busy = false; view.retryingRegistration = false; unlock(); publish(); }
     }
   }
 
@@ -236,7 +286,7 @@ export function createSaveSession({api, state, workspace, drafts, adopt, onChang
   }
 
   return {reviewSave: () => begin("save"), compare: () => begin("compare"), reviewReload: () => begin("reload"),
-    confirm, cancel, sync, listRecoveries, reviewRecovery,
+    confirm, cancel, sync, listRecoveries, reviewRecovery, retryRegistration, canRetryRegistration,
     reviewRecoveryDiscard() {
       if (view.busy || view.review?.kind !== "recovery") return false;
       view.review = {...view.review, kind: "discard-recovery"}; view.error = ""; publish(); return true;

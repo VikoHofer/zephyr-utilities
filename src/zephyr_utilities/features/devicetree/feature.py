@@ -1,4 +1,4 @@
-"""Source-preserving overlay editor with local modules and target-specific pins."""
+"""Automatic chip discovery with source-preserving overlay drafts."""
 
 from pathlib import Path
 
@@ -8,7 +8,7 @@ from .api import register
 FEATURE = FeatureDefinition(
     id='devicetree',
     title='Device Tree Editor',
-    description='Discover your board hardware, connect supported sensors and LEDs, and see the overlay take shape. Review and Save your changes; advanced source and peripheral tools remain available.',
+    description='Open a project to discover its chip, inspect known pins and assignments, and edit its overlay source. Review and Save changes with Undo, Redo and draft recovery.',
     entry_path="/#/devicetree/editor",
     frontend=FrontendDefinition(Path(__file__).parent / "web"),
     register=register,

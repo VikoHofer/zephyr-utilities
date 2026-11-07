@@ -1,18 +1,8 @@
 import {createEditorSession} from "./state.js";
-import {createDraftSession, editorText, nodeSelection, propertySelection, restoreNodeSelection,
-  restorePropertySelection, sourceOffset, sourceSelection} from "./drafts.js";
+import {createDraftSession, editableOverlay, editorText, needsOverlayCreation, sourceSelection} from "./drafts.js";
 import {createSaveSession} from "./saving.js";
 import {createValidationSession, diagnosticSelection} from "./validation.js";
-import {mountBindingPanel} from "./binding-view.js";
-import {mountPeripheralPanel} from "./peripheral-view.js";
-import {mountPinPanel} from "./pin-view.js";
-import {mountModulePanel} from "./module-view.js";
-import {mountResourcePanel} from "./resource-view.js";
-import {mountPWMPanel} from "./pwm-view.js";
-import {mountADCPanel} from "./adc-view.js";
-import {mountInterruptGPIOPanel} from "./interrupt-gpio-view.js";
-import {mountCANPanel} from "./can-view.js";
-import {mountBoardPanel} from "./board-view.js";
+import {mountChipPanel} from "./chip-view.js";
 import {retainActionFocus} from "./view-focus.js";
 import {announceResult} from "./view-feedback.js";
 
@@ -30,23 +20,12 @@ export function mount(host, context) {
   let renderedWorkspace;
   let renderedCatalog;
   let renderedData;
-  let renderedDraftControls;
   let presentedDraft = false;
-  let declarationsAvailable = false;
   let session;
   let drafts;
   let saving;
   let validation;
-  let bindings;
-  let peripherals;
-  let pins;
-  let modules;
-  let resources;
-  let pwm;
-  let adc;
-  let interruptGPIO;
-  let can;
-  let board;
+  let chip;
   let shownReview;
   let reviewTrigger;
   let shownConfigure;
@@ -63,19 +42,13 @@ export function mount(host, context) {
   function option(select, value, label) {
     const element = node("option", "", label); element.value = value; select.append(element);
   }
-  const visualFeedback = node("p", "dte-muted", "");
-  visualFeedback.setAttribute("role", "status"); visualFeedback.hidden = true;
-  $("visual-controls").append(visualFeedback);
-  for (const name of ["node", "property", "property-name", "property-kind", "property-value", "apply-property", "remove-property", "enable", "disable", "show-source"]) {
-    $(name).dataset.focusKey = name;
-  }
-  for (const name of ["open-project", "open-directory", "select-overlay", "recheck", "undo", "redo", "sync", "reconcile", "use-local", "use-server", "source", "save", "compare", "reload", "refresh-recovery", "review-recovery", "validate", "validation-refresh", "validation-cancel"]) {
+  for (const name of ["open-project", "open-directory", "recheck", "undo", "redo", "reconcile", "use-local", "use-server", "source", "save", "registration-retry", "compare", "reload", "refresh-recovery", "review-recovery", "validate", "validation-refresh", "validation-cancel"]) {
     $(name).dataset.focusKey = name;
   }
   const feedback = (target, options) => announceResult(target, context.notify, options);
   function clearOpenFeedback() {
     for (const name of ["project", "directory", "overlay"]) {
-      $(name + "-feedback").hidden = true; $(name + "-next").hidden = true;
+      $(name + "-feedback").hidden = true;
     }
   }
   function fact(parent, label, value, path = false) {
@@ -191,22 +164,25 @@ export function mount(host, context) {
     if (data.application?.availability?.reason) notice(diagnostics, data.application.availability.reason);
     for (const entry of array(data.diagnostics)) notice(diagnostics, entry.message || entry);
 
+    const availableDocuments = array(data.documents).filter(editableOverlay);
     const select = $("overlay"); select.replaceChildren(); option(select, "", "Choose an overlay");
     for (const entry of array(data.documents)) option(select, entry.id,
-      `${entry.relative_path || entry.path}${entry.availability !== "available" ? ` · ${entry.availability}` : ""}`);
+      `${entry.relative_path || entry.path}${needsOverlayCreation(entry) && editableOverlay(entry) ? " · New overlay" : entry.availability !== "available" ? ` · ${entry.availability}` : ""}`);
     select.value = data.editing_document?.id || "";
-    select.disabled = !array(data.documents).length;
+    select.disabled = !availableDocuments.length || availableDocuments.length === 1 && Boolean(data.editing_document);
     const selected = data.editing_document;
+    $("context-panel").open = !selected && availableDocuments.length > 1;
     $("overlay-status").textContent = data.application?.availability?.state !== "available"
       ? data.application?.availability?.reason || "Application sources are unavailable. Restore the selected source directory and reopen it."
-      : !array(data.documents).length ? "No application overlays were found. Source creation is planned for a later stage."
+      : !availableDocuments.length ? data.overlay_creation?.reason || "No writable overlay destination is available for this selection. Chip inspection uses board sources; see the context details for missing target or source evidence."
+      : needsOverlayCreation(selected) ? "A new overlay draft is ready for this target. Review and Save creates the displayed file; opening and editing do not write application source."
       : selected ? "Save changes only this overlay. Selecting or saving it does not activate it in the build recipe."
-        : "Choose the overlay to inspect. A file being present does not prove that the selected build uses it.";
+        : "Choose the application overlay to edit; it opens automatically. A file being present does not prove that the selected build uses it.";
     const documentFacts = $("document-facts"); documentFacts.replaceChildren();
     if (selected) {
       fact(documentFacts, "Selected overlay", selected.relative_path || selected.path, true);
       fact(documentFacts, "Selection evidence", selected.usage);
-      fact(documentFacts, "Availability", selected.availability);
+      fact(documentFacts, "Availability", needsOverlayCreation(selected) ? "New file, not saved" : selected.availability);
       if (selected.reason) notice(documentFacts, selected.reason);
       if (array(selected.origins).length) fact(documentFacts, "Origin", selected.origins.join(" · "));
     }
@@ -223,66 +199,37 @@ export function mount(host, context) {
   }
 
   function draftEntry() { return state.draftView?.entry; }
-  function selectedNode() {
-    const entry = draftEntry();
-    return array(entry?.server?.nodes)[entry?.selectedNodeIndex || 0];
-  }
-  function selectedProperty() {
-    const entry = draftEntry();
-    return entry?.selectedPropertyIndex >= 0 ? array(selectedNode()?.properties)[entry.selectedPropertyIndex] : null;
-  }
-  function populateProperty() {
-    const property = selectedProperty();
-    $("property-name").value = property?.name || "";
-    $("property-kind").value = ["string", "cells", "boolean"].includes(property?.value?.kind) ? property.value.kind : "string";
-    $("property-value").value = property?.value?.kind === "cells" ? array(property.value.value).join(" ")
-      : property?.value?.kind === "string" ? property.value.value : "";
-    propertyControls();
-  }
-  function propertyControls() {
-    const node = selectedNode();
-    const property = selectedProperty();
-    const simple = !property || ["string", "cells", "boolean"].includes(property.value?.kind);
-    const disabled = !declarationsAvailable || !node || node.editable === false || Boolean(property && !property.editable) || !simple;
-    for (const name of ["property-name", "property-kind", "property-value", "apply-property"]) $(name).disabled = disabled;
-    $("property-name").readOnly = Boolean(property);
-    $("remove-property").disabled = disabled || !property;
-    $("value-label").hidden = $("property-kind").value === "boolean";
-    $("property-help").textContent = !simple ? "Use the binding form below for this value type, or edit it in source."
-      : property && !property.editable ? "This source value is opaque or conflicts with another declaration. Edit it in source."
-      : $("property-kind").value === "cells" ? "Enter unsigned 32-bit integers separated by spaces. Decimal and 0x hexadecimal are accepted."
-        : $("property-kind").value === "boolean" ? "A boolean property is present without an assigned value."
-          : "String contents are escaped as data. Removing a local property may reveal an inherited value.";
-  }
   function renderDraft() {
     const view = state.draftView;
     const entry = view?.entry;
     const server = entry?.server;
     const pending = drafts?.pending();
+    const creating = needsOverlayCreation(server);
     const busy = Boolean(view?.loading || entry?.flight || entry?.historyOperation || entry?.externalOperation);
     const error = state.saveView?.review ? view?.error || entry?.error || "" : state.saveView?.error || view?.error || entry?.error || "";
-    const available = Boolean(view?.ready && server && !pending && !busy && !entry.uncertain && !entry.conflict && !server.syntax.blocked);
-    declarationsAvailable = available;
     $("draft-status").textContent = view?.loading ? "Opening and revalidating the draft…"
       : entry?.uncertain ? "The last request needs reconciliation. Your local text is retained."
         : entry?.externalOperation ? "Reviewing the current draft. Source editing resumes when the review closes."
           : busy ? "Updating the draft…" : pending ? "Local typing is waiting to sync. Visual controls are paused."
-            : server ? `Draft revision ${server.revision}.${server.dirty ? " Changes have not been saved to the overlay." : " Draft matches its observed file."}${server.history_truncated ? " Earlier undo history reached its limit." : ""}`
-              : "Choose an available overlay to begin.";
-    $("dirty").textContent = pending || server?.dirty ? "Unsaved changes" : "Unchanged";
+            : server ? `Draft revision ${server.revision}.${creating ? " New overlay draft. No application file has been created; Review and Save creates it." : server.dirty ? " Changes have not been saved to the overlay." : " Draft matches its observed file."}${server.history_truncated ? " Earlier undo history reached its limit." : ""}`
+              : "No writable overlay is selected. Chip inspection remains available.";
+    $("dirty").textContent = creating ? "New overlay · Unsaved" : pending || server?.dirty ? "Unsaved changes" : "Unchanged";
+    $("new-overlay-path").hidden = !creating;
+    $("new-overlay-path").textContent = creating ? `Save destination: ${server.path}` : "";
     $("draft-error").hidden = !error; $("draft-error").textContent = error;
     $("conflict").hidden = !entry?.conflict;
     $("server-source").textContent = entry?.conflict ? server?.text || "" : "";
     $("use-local").disabled = busy; $("use-server").disabled = busy;
     $("reconcile").hidden = !entry?.uncertain || entry?.conflict;
     $("reconcile").disabled = busy;
-    $("sync").disabled = !view?.ready || busy || !pending || entry?.conflict;
-    $("undo").disabled = !view?.ready || busy || entry?.conflict || (!pending && !server?.can_undo);
-    $("redo").disabled = !view?.ready || busy || entry?.conflict || (!pending && !server?.can_redo);
+    $("undo").disabled = false; $("redo").disabled = false;
+    $("undo").setAttribute("aria-disabled", String(!view?.ready || busy || Boolean(entry?.conflict) || (!pending && !server?.can_undo)));
+    $("redo").setAttribute("aria-disabled", String(!view?.ready || busy || Boolean(entry?.conflict) || (!pending && !server?.can_redo)));
     $("save").disabled = !view?.ready || busy || entry?.conflict;
-    $("save").textContent = state.saveView?.busy && !state.saveView?.review ? "Preparing review…" : "Review and Save";
+    $("save").textContent = state.saveView?.busy && !state.saveView?.review && !state.saveView?.retryingRegistration ? "Preparing review…" : "Review and Save";
     $("compare").disabled = !server || busy;
     $("reload").disabled = !server || busy;
+    $("reload").textContent = creating ? "Reset new draft" : "Reload / discard draft";
     $("export").disabled = !entry;
     $("save-status").hidden = !state.saveView?.message;
     $("save-status").textContent = state.saveView?.message || "";
@@ -298,57 +245,15 @@ export function mount(host, context) {
     }
     $("source-path").textContent = entry?.path || state.document?.path || state.data?.editing_document?.path || "";
     $("source-error").hidden = !state.documentError; $("source-error").textContent = state.documentError || "";
-    $("source-status").textContent = server ? "Typing updates this draft after a short pause. Both source and visual changes share Undo/Redo."
-      : state.documentLoading ? "Reading current overlay source…" : "Choose an available overlay to read its source.";
-    $("visual-controls").hidden = !view?.ready || !array(server?.nodes).length;
-    $("visual-notice").hidden = available && array(server?.nodes).length > 0;
-    $("visual-notice").textContent = !view?.ready ? "Open an overlay to inspect its declarations."
-      : pending || busy ? "Waiting for the current source revision; previous declarations remain visible with editing paused."
-        : entry?.uncertain || entry?.conflict ? "Reconcile the draft before making visual changes."
-          : server?.syntax.blocked ? "The current source is incomplete or outside visual support. Your text is retained; correct it in source or use Undo."
-            : "This overlay has no node declarations. Add a node or reference block in source to use visual controls.";
+    $("source-status").textContent = server ? "Typing updates this draft after a short pause. Acknowledged source changes share Undo/Redo."
+      : state.documentLoading ? "Reading current overlay source…" : "Choose an existing application overlay to edit its source.";
     const diagnostics = $("syntax-diagnostics"); diagnostics.replaceChildren();
     if (!pending) for (const item of array(server?.syntax?.diagnostics)) notice(diagnostics, item.message || item.code);
-    const oldHint = entry?.nodeHint;
-    if (entry && server && entry.renderedRevision !== server.revision) {
-      entry.renderedRevision = server.revision;
-      if (oldHint) {
-        entry.selectedNodeIndex = restoreNodeSelection(server.nodes, oldHint);
-        if (entry.selectedNodeIndex < 0 && !server.syntax.blocked) { entry.nodeHint = null; entry.selectionLost = true; }
-      } else {
-        entry.selectedNodeIndex = entry.selectionLost ? -1 : 0;
-        entry.nodeHint = nodeSelection(server.nodes, entry.selectedNodeIndex);
-      }
-      entry.selectedPropertyIndex = restorePropertySelection(array(selectedNode()?.properties), entry.propertyHint);
-      if (entry.selectedPropertyIndex < 0 && !server.syntax.blocked) entry.propertyHint = null;
-    }
-    const controlKey = `${server?.id}:${server?.revision}:${entry?.selectedNodeIndex || 0}:${entry?.selectedPropertyIndex ?? -1}`;
-    if (available && renderedDraftControls !== controlKey) {
-      renderedDraftControls = controlKey;
-      const select = $("node"); select.replaceChildren();
-      array(server.nodes).forEach((item, index) => option(select, String(index), `${item.labels?.length ? item.labels.join(", ") + ": " : ""}${item.name} · occurrence ${index + 1}`));
-      select.value = String(entry.selectedNodeIndex || 0);
-      const node = selectedNode();
-      const statuses = array(node?.properties).filter((property) => property.name === "status");
-      $("node-status").textContent = !node ? "Choose a node occurrence to edit its properties." : statuses.length > 1 ? "Multiple local status assignments; choose a property occurrence below."
-        : statuses.length ? `Local status: ${text(statuses[0].value?.value, "Opaque or deleted")}` : "Local status: not specified in this block.";
-      const properties = $("property"); properties.replaceChildren(); option(properties, "", "New property");
-      array(node?.properties).forEach((item, index) => option(properties, String(index), `${item.name}${!item.editable ? " · source only" : ""}`));
-      properties.value = entry.selectedPropertyIndex >= 0 ? String(entry.selectedPropertyIndex) : "";
-      populateProperty();
-    }
-    if (available) {
-      const selected = selectedNode(); const statuses = array(selected?.properties).filter((property) => property.name === "status");
-      $("node").disabled = $("property").disabled = false;
-      $("enable").disabled = $("disable").disabled = !selected || selected.editable === false || statuses.length > 1 || statuses[0]?.editable === false;
-      $("show-source").disabled = !selected; propertyControls();
-    } else {
-      for (const control of $("visual-controls").querySelectorAll("input, select, textarea, button")) control.disabled = true;
-    }
     $("diff").textContent = server?.diff?.text || "No acknowledged source changes.";
     $("diff-status").textContent = pending ? "The diff reflects the last acknowledged draft; your latest typing is still pending."
       : server?.diff?.truncated ? "The diff is shortened to keep this view responsive. The complete draft remains in the source editor."
-        : "Compared with the original overlay bytes. This does not write the file.";
+        : creating ? "Proposed source for a new overlay. No file has been created."
+          : "Compared with the original overlay bytes. This does not write the file.";
     renderRetained();
   }
   function renderRetained() {
@@ -357,7 +262,7 @@ export function mount(host, context) {
     $("retained-summary").textContent = `Retained drafts (${entries.length})`;
     const selected = $("retained").value;
     const select = $("retained"); select.replaceChildren();
-    for (const [key, entry] of entries) option(select, key, `${entry.label} · ${entry.path}${entry.text !== entry.server?.text || entry.server?.dirty ? " · Changed" : ""}`);
+    for (const [key, entry] of entries) option(select, key, `${entry.label} · ${entry.path}${needsOverlayCreation(entry.server) ? " · New overlay" : entry.text !== entry.server?.text || entry.server?.dirty ? " · Changed" : ""}`);
     if (entries.some(([key]) => key === selected)) select.value = selected;
     if (!$("retained-source").hidden) $("retained-source").value = editorText(state.draftCache[select.value]?.text || "");
   }
@@ -385,6 +290,15 @@ export function mount(host, context) {
     const view = state.saveView;
     if (!view) return;
     $("save-status").hidden = !view.message; $("save-status").textContent = view.message;
+    $("registration-retry-panel").hidden = !view.registrationRetry;
+    const canRetry = saving.canRetryRegistration();
+    $("registration-retry").setAttribute("aria-disabled", String(!canRetry));
+    $("registration-retry").textContent = view.retryingRegistration ? "Retrying inclusion…" : "Retry configuration inclusion";
+    $("registration-retry-status").textContent = view.registrationRetry ? view.registrationRetry.message
+      || "The overlay file is saved, but its configuration inclusion is pending." : "";
+    if (view.registrationRetry && !canRetry && !view.busy && !view.review) {
+      $("registration-retry-status").textContent += " The draft or context changed; review Save again to retry with current evidence.";
+    }
     const recoveries = view.recoveries?.workspace === context.workspace.path ? view.recoveries : null;
     $("refresh-recovery").disabled = view.recoveryLoading;
     $("refresh-recovery").textContent = view.recoveryLoading ? "Finding drafts…" : "Find recoverable drafts";
@@ -395,7 +309,7 @@ export function mount(host, context) {
     $("recoveries-controls").hidden = !recoveries?.records.length;
     const select = $("recoveries"); const selected = select.value;
     select.replaceChildren();
-    for (const record of recoveries?.records || []) option(select, record.id, `${record.path} · revision ${record.revision}${record.status ? " · " + record.status : ""}`);
+    for (const record of recoveries?.records || []) option(select, record.id, `${record.path} · revision ${record.revision}${needsOverlayCreation(record) ? " · New overlay" : ""}${record.status ? " · " + record.status : ""}`);
     if (recoveries?.records.some((record) => record.id === selected)) select.value = selected;
     $("review-recovery").disabled = view.busy || !select.value;
     $("publications-panel").hidden = !array(recoveries?.publications).length;
@@ -412,15 +326,22 @@ export function mount(host, context) {
     const data = review.data;
     const recovery = ["recovery", "discard-recovery"].includes(review.kind);
     const deleting = review.kind === "discard-recovery";
+    const creating = review.kind === "save" && data.operation === "create";
+    const absent = recovery ? needsOverlayCreation(data.record) : needsOverlayCreation(review.captured?.entry?.server);
     const comparison = recovery ? data.comparison : data;
+    const resetAbsent = absent && comparison.current_exists === false;
     const candidate = recovery ? data.record.text : review.kind === "save" ? data.candidate_text : data.text;
-    $("review-title").textContent = review.kind === "save" ? "Review and Save overlay" : deleting ? "Delete recoverable draft" : recovery ? "Review recoverable draft"
+    $("review-title").textContent = review.kind === "save" ? creating ? "Create and Save overlay" : "Review and Save overlay" : deleting ? "Delete recoverable draft" : recovery ? "Review recoverable draft"
       : review.kind === "outcome" ? "Save outcome needs reconciliation"
-      : review.kind === "reload" ? "Discard draft and reload file" : review.blocked ? "Save needs attention" : "Compare draft with disk";
-    $("review-summary").textContent = review.kind === "save" ? "Save the exact candidate below to this existing overlay."
+      : review.kind === "reload" ? resetAbsent ? "Reset new overlay draft" : "Discard draft and reload file" : review.blocked ? "Save needs attention" : "Compare draft with disk";
+    $("review-summary").textContent = review.kind === "save" ? creating
+      ? "Create this new overlay with the exact source below. Save will stop if a file has appeared at this destination."
+      : "Save the exact candidate below to this existing overlay."
       : deleting ? "Permanently delete this recovery record. Export its source first if you need a copy. This does not change the overlay file or an open session draft."
-        : recovery ? "Restore this retained source as an unsaved draft for the matching open overlay. Discard any existing edited session draft first. Restoration does not write the file."
-        : review.kind === "reload" ? "Discard this draft and its edit history, including unsent typing, and load the reviewed file. The file on disk is not changed."
+        : recovery ? `Restore this retained source as an unsaved draft for the matching ${absent ? "new overlay destination" : "open overlay"}. Discard any existing edited session draft first. Restoration does not write the file.`
+        : review.kind === "reload" ? resetAbsent
+          ? "Clear this new draft and its edit history, including unsent typing. The empty draft remains available; no application file is created."
+          : "Discard this draft and its edit history, including unsent typing, and load the reviewed file. The file on disk is not changed."
           : review.message || comparison.message || "Compare the draft against the current file. Continuing retains this draft as unsaved source based on the reviewed file.";
     $("review-path").textContent = data.path || data.record?.path || comparison.path || "";
     const notices = $("review-notices"); notices.replaceChildren();
@@ -428,6 +349,7 @@ export function mount(host, context) {
       notice(notices, data.validation?.message || "Build and hardware validation have not run.");
       notice(notices, `Overlay usage: ${data.usage?.state || "unknown"}. ${data.usage?.message || "Saving does not change overlay selection."}`);
       notice(notices, data.effects?.message || "Other configurations may share this overlay.");
+      if (data.registration?.message && data.registration.message !== data.usage?.message) notice(notices, data.registration.message);
       notice(notices, `This review expires ${new Date(data.expires_at * 1000).toLocaleTimeString()}.`);
     } else if (review.kind === "outcome") {
       notice(notices, "This plan will not be repeated. Close this review to compare the current file or inspect recoverable drafts. Keep all recovery files until the result is reconciled.");
@@ -435,20 +357,22 @@ export function mount(host, context) {
       if (review.receipt?.recovery?.journal) notice(notices, `Recovery record: ${review.receipt.recovery.journal}`);
       if (review.receipt?.recovery?.staged_path) notice(notices, `Retained source: ${review.receipt.recovery.staged_path}`);
     } else if (recovery && (!state.data || data.record.path !== state.document?.path)) {
-      notice(notices, "Open this overlay in its original application/configuration, then review recovery again to restore it. Export remains available.");
+      notice(notices, "Open the original application/configuration and this overlay destination, then review recovery again to restore it. Export remains available.");
     } else if (comparison.message) notice(notices, comparison.message);
     if (!recovery && review.captured.entry.text !== review.captured.entry.server.text) {
       notice(notices, "This comparison describes acknowledged source. Newer local typing is retained and can be exported before discarding it.");
     }
     const diff = review.kind === "save" ? data.diff : comparison.diff;
     $("review-diff").textContent = diff?.text || "No source differences in this comparison.";
-    $("review-diff-status").textContent = diff?.truncated ? "The diff is shortened. Review complete candidate and current source below." : "Compared with the observed file.";
+    $("review-diff-status").textContent = diff?.truncated ? "The diff is shortened. Review complete candidate and current source below."
+      : creating ? "Complete source proposed for a new file." : absent && comparison.current_exists === false
+        ? "The destination is still absent; no application file has been created." : "Compared with the observed file.";
     $("review-source").textContent = candidate || "";
     $("review-disk-panel").hidden = review.kind === "save" || comparison.current_text == null;
     $("review-disk").textContent = comparison.current_text || "";
     $("review-error").hidden = !view.error; $("review-error").textContent = view.error;
-    $("review-confirm").textContent = view.busy ? "Working…" : review.kind === "save" ? review.uncertain ? "Check save result" : "Save overlay"
-      : deleting ? "Delete recovery record" : recovery ? "Restore as unsaved draft" : review.kind === "reload" ? "Discard and reload" : "Continue draft against current file";
+    $("review-confirm").textContent = view.busy ? "Working…" : review.kind === "save" ? review.uncertain ? "Check save result" : creating ? "Create overlay" : "Save overlay"
+      : deleting ? "Delete recovery record" : recovery ? "Restore as unsaved draft" : review.kind === "reload" ? resetAbsent ? "Reset draft" : "Discard and reload" : "Continue draft against current file";
     $("review-confirm").hidden = review.kind === "outcome";
     $("review-confirm").disabled = view.busy || (review.kind === "save" || deleting ? false
       : !comparison.can_reload || !comparison.comparison_id || (recovery && (!review.captured || data.record.path !== state.document?.path))
@@ -484,7 +408,7 @@ export function mount(host, context) {
         : active ? `${result?.job?.status === "queued" ? "Configure queued" : "Configure running"}. Leaving this view does not cancel it. Later source changes can make this result stale.`
           : result?.status === "ready" && !result.job ? "Configuration has not started. Review Configure again when ready."
           : result?.message || `Configuration status: ${result?.status || "awaiting result"}.`
-      : "Save the overlay before reviewing configuration. Opening and saving never run project tools.");
+      : "Save the overlay before reviewing configuration. Opening and saving do not run Configure, builds or application CMake.");
     $("validation-error").hidden = !view.error; $("validation-error").textContent = view.error;
     $("validation-actions").hidden = !run;
     $("validation-refresh").disabled = view.busy || view.refreshing;
@@ -569,11 +493,9 @@ export function mount(host, context) {
     const reading = state.loading || state.documentLoading;
     $("open-directory").disabled = reading;
     $("open-directory").textContent = reading && state.selection?.kind === "application" ? "Opening…" : "Open directory";
-    for (const name of ["project", "directory", "overlay"]) $(name + "-next").disabled = reading || !state.data;
     $("results").inert = reading;
     $("results").setAttribute("aria-busy", String(reading));
     $("recheck").textContent = reading ? "Checking…" : "Recheck context";
-    $("select-overlay").textContent = reading ? "Reading…" : "Open overlay draft";
     if (reading && renderedData) return;
     renderContext(state.data);
     void drafts?.bind(state.data, state.document);
@@ -581,12 +503,10 @@ export function mount(host, context) {
     $("error").hidden = !state.error; $("error").textContent = state.error || "";
     $("empty").hidden = Boolean(state.data || state.loading || state.error);
     $("results").hidden = !state.data;
+    root.setAttribute("data-has-project", String(Boolean(state.data)));
     $("open-directory").disabled = state.loading;
     $("open-directory").textContent = state.loading && state.selection?.kind === "application" ? "Opening…" : "Open directory";
     $("recheck").disabled = state.loading || state.documentLoading;
-    $("select-overlay").disabled = state.loading || state.documentLoading || state.draftView?.loading || !$("overlay").value;
-    $("select-overlay").textContent = state.documentLoading || state.draftView?.loading ? "Reading…" : "Open overlay draft";
-    $("overlay-next").disabled = !state.draftView?.ready;
     $("draft-panel").inert = Boolean(state.draftView?.loading);
     $("draft-panel").setAttribute("aria-busy", String(Boolean(state.draftView?.loading)));
     if (state.draftView?.loading && presentedDraft) return;
@@ -594,16 +514,7 @@ export function mount(host, context) {
     presentedDraft = Boolean(state.draftView?.ready);
     renderSaving();
     renderValidation();
-    bindings?.render();
-    peripherals?.render();
-    pins?.render();
-    modules?.render();
-    pwm?.render();
-    adc?.render();
-    interruptGPIO?.render();
-    can?.render();
-    board?.render();
-    resources?.render();
+    chip?.render();
   }
   async function action(operation, destination, options = {}) {
     const captured = ++actionGeneration;
@@ -611,7 +522,7 @@ export function mount(host, context) {
     const current = () => !disposed && captured === actionGeneration && workspace === context.workspace.path;
     if (options.open) {
       if (options.open !== "overlay") {
-        $("overlay-feedback").hidden = true; $("overlay-next").hidden = true;
+        $("overlay-feedback").hidden = true;
       }
       const status = $(options.open + "-feedback"); status.textContent = "Opening…"; status.className = "dte-muted"; status.hidden = false;
     }
@@ -621,7 +532,7 @@ export function mount(host, context) {
         await drafts.bind(state.data, state.document);
       }
       return accepted;
-    }, current, lifetime.signal);
+    }, current, lifetime.signal, {fallbackTo: options.fallbackTo});
     if (!current()) return;
     if (!options.open && !accepted && !state.error && !state.documentError && !state.draftView?.error && !draftEntry()?.error) return;
     const target = state.error ? $("error") : state.documentError ? $("source-error")
@@ -633,16 +544,20 @@ export function mount(host, context) {
         || options.open === "overlay" && !state.draftView?.ready
         || state.data?.application?.availability?.state !== "available");
       status.textContent = failed ? target?.textContent || "The application could not be opened."
-        : options.open === "overlay" ? "Overlay opened. The draft is ready below."
-          : "Application opened. Choose an overlay below.";
+        : options.open === "overlay" ? "Overlay ready. Chip assignments refresh automatically."
+          : "Application opened. Chip discovery starts automatically.";
       status.className = failed ? "dte-error" : "dte-muted"; status.hidden = false;
-      $(options.open + "-next").hidden = failed;
       feedback(status, {error: failed});
     } else if (target) feedback(target, {message: options.message, error: Boolean(state.error || state.documentError || state.draftView?.error || draftEntry()?.error || state.catalogError)});
   }
   const listen = (element, event, callback) => element.addEventListener(event, callback, {signal: lifetime.signal});
-  listen($("project"), "change", () => { state.formProjectId = $("project").value; state.formConfigurationId = null; configurations(); });
-  listen($("configuration"), "change", () => { state.formConfigurationId = $("configuration").value || null; });
+  const openSelectedProject = () => {
+    if ($("project").value && $("configuration").options.length) {
+      void action(() => session.openProject($("project").value, $("configuration").value || null), () => $("overlay-status"), {open: "project"});
+    }
+  };
+  listen($("project"), "change", () => { state.formProjectId = $("project").value; state.formConfigurationId = null; configurations(); openSelectedProject(); });
+  listen($("configuration"), "change", () => { state.formConfigurationId = $("configuration").value || null; openSelectedProject(); });
   listen($("project-form"), "submit", (event) => {
     event.preventDefault();
     void action(() => session.openProject($("project").value, $("configuration").value || null), () => $("overlay-status"), {open: "project"});
@@ -650,18 +565,23 @@ export function mount(host, context) {
   listen($("directory-form"), "submit", (event) => {
     event.preventDefault(); void action(() => session.openApplication($("directory").value), () => $("overlay-status"), {open: "directory"});
   });
-  listen($("overlay"), "change", () => { $("select-overlay").disabled = !$("overlay").value || state.loading || state.documentLoading; });
+  listen($("overlay"), "change", () => {
+    if ($("overlay").value && !state.loading && !state.documentLoading) {
+      void action(() => session.selectDocument($("overlay").value), () => $("draft-status"), {open: "overlay"});
+    }
+  });
   listen($("overlay-form"), "submit", (event) => {
     event.preventDefault(); void action(() => session.selectDocument($("overlay").value), () => $("draft-status"), {open: "overlay"});
   });
   listen($("refresh-catalog"), "click", () => {
     void action(() => session.catalog(), () => state.catalogError ? $("catalog-error") : null);
   });
-  for (const name of ["project", "directory"]) listen($(name + "-next"), "click", () => context.reveal?.($("overlay")));
-  listen($("overlay-next"), "click", () => context.reveal?.($("draft-panel")));
   listen($("recheck"), "click", () => { void action(() => session.revalidate(), () => $("overlay-status")); });
   listen($("source"), "input", () => { drafts.type($("source").value); });
-  const history = (kind) => action(() => drafts[kind](), () => $("draft-status"));
+  const history = (kind) => {
+    if ($(kind).getAttribute("aria-disabled") === "true") return Promise.resolve(false);
+    return action(() => drafts[kind](), () => $("draft-status"));
+  };
   listen($("source"), "keydown", (event) => {
     if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
     const key = event.key.toLowerCase();
@@ -669,77 +589,12 @@ export function mount(host, context) {
   });
   listen($("undo"), "click", () => { void history("undo"); });
   listen($("redo"), "click", () => { void history("redo"); });
-  listen($("sync"), "click", () => { void action(() => drafts.flush(), () => $("draft-status")); });
+  listen($("registration-retry"), "click", () => {
+    if (saving.canRetryRegistration()) void action(() => saving.retryRegistration(), () => $("save-status"), {fallbackTo: $("save")});
+  });
   listen($("reconcile"), "click", () => { void action(() => drafts.reconcile(), () => $("draft-status")); });
   listen($("use-local"), "click", () => { void action(() => drafts.resolveConflict("local"), () => $("draft-status")); });
   listen($("use-server"), "click", () => { void action(() => drafts.resolveConflict("server"), () => $("draft-status")); });
-  listen($("node"), "change", () => {
-    const entry = draftEntry(); entry.selectedNodeIndex = Number($("node").value); entry.selectedPropertyIndex = -1; entry.propertyHint = null;
-    entry.nodeHint = nodeSelection(array(entry.server?.nodes), entry.selectedNodeIndex); entry.selectionLost = false;
-    renderDraft();
-  });
-  listen($("property"), "change", () => {
-    const entry = draftEntry(); entry.selectedPropertyIndex = $("property").value === "" ? -1 : Number($("property").value);
-    entry.propertyHint = propertySelection(array(selectedNode()?.properties), entry.selectedPropertyIndex);
-    renderDraft();
-  });
-  listen($("property-kind"), "change", propertyControls);
-  function visualMessage(message, failed = false) {
-    visualFeedback.className = failed ? "dte-error" : "dte-muted";
-    visualFeedback.textContent = message; visualFeedback.hidden = !message;
-  }
-  const sendCommand = async (command) => {
-    if (!declarationsAvailable) return false;
-    const captured = ++actionGeneration; const workspace = context.workspace.path;
-    visualMessage("Updating the overlay draft…");
-    const accepted = await retainActionFocus($("visual-controls"), () => drafts.command(command),
-      () => !disposed && captured === actionGeneration && workspace === context.workspace.path, lifetime.signal);
-    if (disposed || captured !== actionGeneration || workspace !== context.workspace.path) return false;
-    visualMessage(draftEntry()?.error || (accepted ? "The overlay draft was updated. Save remains separate." : "The draft could not be updated."), !accepted);
-    return accepted;
-  };
-  listen($("enable"), "click", () => { void sendCommand({kind: "set_status", node_id: selectedNode().id, status: "okay"}); });
-  listen($("disable"), "click", () => { void sendCommand({kind: "set_status", node_id: selectedNode().id, status: "disabled"}); });
-  listen($("property-form"), "submit", (event) => {
-    event.preventDefault();
-    const name = $("property-name").value;
-    if (name.length > 256 || !/^[A-Za-z_#][A-Za-z_0-9,#.+?-]*$/.test(name)) {
-      draftEntry().error = "Enter a supported property name, such as status, current-speed or vendor,option.";
-      renderDraft(); visualMessage(draftEntry().error, true); return;
-    }
-    const kind = $("property-kind").value;
-    let value = kind === "boolean" ? null : $("property-value").value;
-    if (kind === "cells") {
-      const parts = value.trim().split(/[\s,]+/);
-      if (!parts.length || parts.length > 64 || parts.some((part) => !/^(?:0[xX][\da-fA-F]+|\d+)$/.test(part) || Number(part) > 0xffffffff)) {
-        draftEntry().error = "Enter one to 64 unsigned 32-bit integer cells, separated by spaces."; renderDraft(); visualMessage(draftEntry().error, true); return;
-      }
-      value = parts.map(Number);
-    }
-    const command = {kind: "set_property", node_id: selectedNode().id, name, value: {kind, value}};
-    if (selectedProperty()) command.property_id = selectedProperty().id;
-    void sendCommand(command);
-  });
-  listen($("remove-property"), "click", () => { void sendCommand({kind: "remove_property", property_id: selectedProperty().id}); });
-  listen($("show-source"), "click", () => {
-    const selected = selectedProperty() || selectedNode(); const entry = draftEntry();
-    if (!selected || !entry?.server || drafts.pending()) return;
-    const [start, end] = sourceSelection(entry.text, selected.start, selected.end);
-    context.reveal?.($("source")); $("source").setSelectionRange(start, end);
-  });
-  function linkSource() {
-    const entry = draftEntry();
-    if (!entry?.server || drafts.pending() || entry.flight || entry.uncertain || entry.server.syntax.blocked) return;
-    const offset = sourceOffset(entry.text, $("source").selectionStart);
-    const nodes = entry.server.nodes.map((node, index) => ({node, index})).filter(({node}) => node.start <= offset && offset <= node.end);
-    nodes.sort((left, right) => (left.node.end - left.node.start) - (right.node.end - right.node.start));
-    const found = nodes[0]; if (!found) return;
-    entry.selectedNodeIndex = found.index; entry.nodeHint = nodeSelection(entry.server.nodes, found.index); entry.selectionLost = false;
-    entry.selectedPropertyIndex = array(found.node.properties).findIndex((property) => property.start <= offset && offset <= property.end);
-    entry.propertyHint = propertySelection(array(found.node.properties), entry.selectedPropertyIndex);
-    renderDraft();
-  }
-  listen($("source"), "click", linkSource); listen($("source"), "keyup", linkSource);
   listen($("view-retained"), "click", () => {
     $("retained-source").hidden = false; $("retained-source").value = editorText(state.draftCache[$("retained").value]?.text || "");
     context.reveal?.($("retained-source"));
@@ -802,41 +657,14 @@ export function mount(host, context) {
   saving = createSaveSession({api: context.api, state, workspace: () => context.workspace.path, drafts,
     adopt: (data, document) => session.adopt(data, document), onChange: render});
   validation = createValidationSession({api: context.api, state, workspace: () => context.workspace.path, drafts, onChange: render});
-  function resourceSource(location, observation) {
-    const entry = draftEntry(); const current = entry?.server;
-    if (disposed || !current || drafts.pending() || entry.flight || entry.uncertain || entry.conflict
-        || observation?.draft_id !== current.id || observation.revision !== current.revision || observation.sha256 !== current.sha256
-        || !Number.isInteger(location?.start) || !Number.isInteger(location?.end) || location.start < 0 || location.end < location.start) return;
-    const range = sourceSelection(entry.text, location.start, location.end);
-    if (!range) return;
-    context.reveal?.($("source")); $("source").setSelectionRange(...range);
-  }
-  resources = mountResourcePanel($("resources"), {api: context.api, state, workspace: () => context.workspace.path,
-    drafts, notify: context.notify, onChange: render, onSource: resourceSource});
-  bindings = mountBindingPanel($("bindings"), {api: context.api, state, workspace: () => context.workspace.path,
+  chip = mountChipPanel($("chip"), {api: context.api, state, workspace: () => context.workspace.path,
     drafts, notify: context.notify, onChange: render});
-  peripherals = mountPeripheralPanel($("peripherals"), {api: context.api, state, workspace: () => context.workspace.path,
-    drafts, notify: context.notify, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
-  pwm = mountPWMPanel($("pwm"), {api: context.api, state, workspace: () => context.workspace.path,
-    drafts, notify: context.notify, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
-  adc = mountADCPanel($("adc"), {api: context.api, state, workspace: () => context.workspace.path,
-    drafts, notify: context.notify, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
-  interruptGPIO = mountInterruptGPIOPanel($("interrupt-gpio"), {api: context.api, state, workspace: () => context.workspace.path,
-    drafts, notify: context.notify, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
-  can = mountCANPanel($("can"), {api: context.api, state, workspace: () => context.workspace.path,
-    drafts, notify: context.notify, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
-  board = mountBoardPanel($("board"), {api: context.api, state, workspace: () => context.workspace.path,
-    drafts, notify: context.notify, onChange: render, onOpenProjects: () => context.navigate("projects/applications")});
-  pins = mountPinPanel($("pins"), {api: context.api, state, workspace: () => context.workspace.path,
-    drafts, notify: context.notify, onChange: render});
-  modules = mountModulePanel($("modules"), {api: context.api, state, workspace: () => context.workspace.path,
-    drafts, notify: context.notify, onChange: render, onRemove: (nodeId, trigger) => resources.reviewRemoval(nodeId, trigger)});
   render();
   return {
-    navigate(view) { actionGeneration++; visualMessage(""); saving.cancel(); validation.closeReview(); validation.resume(); bindings.navigate(); peripherals.navigate(); pins.navigate(); modules.navigate(); resources.navigate(); pwm.navigate(); adc.navigate(); interruptGPIO.navigate(); can.navigate(); board.navigate(); return session.navigate(view); },
+    navigate(view) { actionGeneration++; saving.cancel(); validation.closeReview(); validation.resume(); chip.navigate(); return session.navigate(view); },
     dispose() {
       disposed = true; actionGeneration++; lifetime.abort(); saving.dispose(); closeReview({restoreFocus: false});
-      validation.dispose(); closeConfigure({restoreFocus: false}); bindings.dispose(); peripherals.dispose(); pins.dispose(); modules.dispose(); resources.dispose(); pwm.dispose(); adc.dispose(); interruptGPIO.dispose(); can.dispose(); board.dispose(); session.dispose(); drafts.dispose();
+      validation.dispose(); closeConfigure({restoreFocus: false}); chip.dispose(); session.dispose(); drafts.dispose();
       for (const url of downloadUrls) URL.revokeObjectURL(url);
     },
   };

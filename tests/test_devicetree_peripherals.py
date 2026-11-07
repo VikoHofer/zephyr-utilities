@@ -149,9 +149,6 @@ class PeripheralTests(unittest.TestCase):
         self.draft = self.drafts.source(self.guard(text=text))
         self.load()
 
-    def add(self, bus, address, *, name="sensor", label="", values=None, compatible="test,temperature"):
-        return self.command("peripheral_add", parent_id=self.parent(bus)["node_id"], name=name, label=label,
-                            compatible=compatible, address=address, values=values or {})
 
     def test_explicit_topology_uses_schemas_without_tools_or_disk_changes(self):
         with patch("subprocess.Popen", side_effect=AssertionError("No tools")):
@@ -176,79 +173,49 @@ class PeripheralTests(unittest.TestCase):
             with self.subTest(values=values), self.assertRaises(ValueError):
                 self.command("peripheral_controller", node_id=self.parent("uart")["node_id"], values=values)
 
-    def test_two_i2c_devices_share_bus_and_address_edits_do_not_duplicate_nodes(self):
-        self.load()
-        self.add("i2c", 0x49, label="second")
-        self.assertIn("second: sensor@49", self.draft["text"])
-        self.assertNotIn("rate =", self.draft["text"])
-        self.load()
-        child = self.parent("i2c")["children"][0]
+    def test_existing_i2c_devices_share_bus_and_updates_preserve_source(self):
+        self.source(SOURCE.replace('        first: sensor@48 {', '        second: sensor@49 { compatible = "test,temperature"; reg = <0x49>; };\n        first: sensor@48 {'))
+        child = next(item for item in self.parent("i2c")["children"] if item["label"] == "first")
         self.command("peripheral_update", node_id=child["node_id"], address=0x50, values={})
         self.assertIn("first: sensor@50", self.draft["text"])
-        self.assertNotIn("sensor@48", self.draft["text"])
         self.assertIn("handwritten = <SOME_MACRO(2)>;", self.draft["text"])
         self.load()
         self.assertEqual(len(self.parent("i2c")["children"]), 2)
-        self.command("peripheral_update", node_id=self.parent("i2c")["children"][0]["node_id"], address=0x50, values={})
-        self.assertEqual(self.draft["revision"], 2)
+        before = self.draft["revision"]
+        child = next(item for item in self.parent("i2c")["children"] if item["label"] == "first")
+        self.command("peripheral_update", node_id=child["node_id"], address=0x50, values={})
+        self.assertEqual(self.draft["revision"], before)
         self.assertEqual(self.overlay.read_text(), SOURCE)
 
-    def test_duplicate_and_reserved_i2c_addresses_are_rejected(self):
-        self.load()
-        for address in (0x48, 0, 7, 0x78, 0x100, True, "0x49"):
+    def test_existing_device_updates_reject_duplicate_and_reserved_addresses(self):
+        self.source(SOURCE.replace('        first: sensor@48 {', '        other@49 { compatible = "test,temperature"; reg = <0x49>; status = "disabled"; };\n        first: sensor@48 {'))
+        child = next(item for item in self.parent("i2c")["children"] if item["label"] == "first")
+        before = self.draft["text"]
+        for address in (0x49, 0, 7, 0x78, 0x100, True, "0x50"):
             with self.subTest(address=address), self.assertRaises(ValueError):
-                self.add("i2c", address, name="another")
-        self.assertEqual(self.draft["text"], SOURCE)
-        self.source(SOURCE.replace('reg = <0x48>;', 'reg = <0x48>; status = "disabled";'))
-        with self.assertRaisesRegex(ValueError, "already uses"):
-            self.add("i2c", 0x48)
+                self.command("peripheral_update", node_id=child["node_id"], address=address, values={})
+        self.assertEqual(self.draft["text"], before)
 
-    def test_spi_frequency_and_real_chip_select_slots_are_required(self):
-        self.load()
-        for values in ({}, {"spi-max-frequency": 123}):
-            with self.assertRaises(ValueError):
-                self.add("spi", 0, values=values)
-        self.add("spi", 0, label="spi_first", values={"spi-max-frequency": 1000000})
-        self.load()
-        with self.assertRaisesRegex(ValueError, "already uses"):
-            self.add("spi", 0, values={"spi-max-frequency": 1000000})
+    def test_existing_spi_device_updates_validate_frequency_and_chip_select(self):
+        self.source(SOURCE.replace('cs-gpios = <&gpio0 1 0>, <&gpio0 2 0>;', 'cs-gpios = <&gpio0 1 0>, <&gpio0 2 0>; sensor@0 { compatible = "test,temperature"; reg = <0>; spi-max-frequency = <1000000>; };'))
+        child = self.parent("spi")["children"][0]
+        with self.assertRaises(ValueError):
+            self.command("peripheral_update", node_id=child["node_id"], address=0, values={"spi-max-frequency": 123})
         with self.assertRaisesRegex(ValueError, "cs-gpios"):
-            self.add("spi", 2, values={"spi-max-frequency": 1000000})
-        self.add("spi", 1, label="spi_second", values={"spi-max-frequency": 4000000})
-        self.load()
-        self.assertEqual(len(self.parent("spi")["children"]), 2)
+            self.command("peripheral_update", node_id=child["node_id"], address=2, values={})
+        self.command("peripheral_update", node_id=child["node_id"], address=1, values={"spi-max-frequency": 4000000})
+        self.assertIn("sensor@1", self.draft["text"])
+        self.assertIn("4000000", self.draft["text"])
 
-    def test_uart_child_has_no_fabricated_address_or_pins(self):
-        self.load()
-        self.add("uart", None, name="gps", compatible="test,gps")
-        self.assertIn('gps {\n', self.draft["text"])
-        self.assertNotIn("gps@", self.draft["text"])
-        self.assertNotIn("pinctrl", self.draft["text"])
 
-    def test_gpio_led_and_button_use_actual_provider_cells_and_explicit_code(self):
-        self.load()
-        self.assertEqual(self.parent("led")["add_fields"][0]["providers"][0]["cells"], ["pin", "flags"])
-        self.command("gpio_add", parent_id=self.parent("led")["node_id"], name="status", label="status_led",
-                     values={"gpios": [{"reference": "&gpio0", "cells": [7, 1]}], "label": "Status"})
-        self.assertIn("gpios = <&gpio0 7 1>;", self.draft["text"])
-        self.load()
-        self.command("gpio_group_add", group_kind="button", name="buttons")
-        self.load()
-        with self.assertRaisesRegex(ValueError, "required"):
-            self.command("gpio_add", parent_id=self.parent("button")["node_id"], name="user", label="",
-                         values={"gpios": [{"reference": "&gpio0", "cells": [8, 1]}]})
-        self.command("gpio_add", parent_id=self.parent("button")["node_id"], name="user", label="user_button",
-                     values={"gpios": [{"reference": "&gpio0", "cells": [8, 1]}], "zephyr,code": 11})
-        self.load()
+    def test_existing_gpio_button_update_keeps_provider_and_identity(self):
+        self.source(SOURCE.replace('    leds { compatible = "gpio-leds"; };', '    buttons { compatible = "gpio-keys"; user: user { gpios = <&gpio0 8 1>; zephyr,code = <11>; }; };'))
         self.command("gpio_update", node_id=self.parent("button")["children"][0]["node_id"], values={"zephyr,code": 12})
         self.assertIn("zephyr,code = <12>;", self.draft["text"])
+        self.assertIn("gpios = <&gpio0 8 1>;", self.draft["text"])
 
     def test_removal_preserves_shared_parent_and_chip_select_array(self):
-        self.load()
-        self.add("spi", 0, values={"spi-max-frequency": 1000000})
-        self.load()
-        self.add("spi", 1, values={"spi-max-frequency": 4000000})
-        self.load()
+        self.source(SOURCE.replace('cs-gpios = <&gpio0 1 0>, <&gpio0 2 0>;', 'cs-gpios = <&gpio0 1 0>, <&gpio0 2 0>; sensor@0 { compatible = "test,temperature"; reg = <0>; spi-max-frequency = <1000000>; }; sensor@1 { compatible = "test,temperature"; reg = <1>; spi-max-frequency = <4000000>; };'))
         self.command("peripheral_remove", node_id=self.parent("spi")["children"][0]["node_id"])
         self.assertIn("cs-gpios = <&gpio0 1 0>, <&gpio0 2 0>;", self.draft["text"])
         self.assertIn("sensor@1", self.draft["text"])
@@ -274,8 +241,6 @@ class PeripheralTests(unittest.TestCase):
                      SOURCE.replace('sensor@48', 'sensor@49'), SOURCE.replace('#address-cells = <1>;', '#address-cells = <3>;', 1)):
             self.source(text)
             self.assertFalse(self.parent("i2c")["addable"])
-            with self.assertRaises(ValueError):
-                self.add("i2c", 0x50)
 
     def test_collisions_in_imported_source_are_reported(self):
         text = SOURCE.replace('        first: sensor@48 {', '        other@48 { compatible = "test,temperature"; reg = <0x48>; };\n        first: sensor@48 {')
@@ -286,22 +251,20 @@ class PeripheralTests(unittest.TestCase):
         self.source(SOURCE.replace('cs-gpios = <&gpio0 1 0>, <&gpio0 2 0>;', 'cs-gpios = <&external 1 0>;') + '\n&external_uart { status = "okay"; };\n')
         self.assertFalse(self.parent("spi")["addable"])
         self.assertEqual(len(self.schema["controllers"]), 3)
-        with self.assertRaises(ValueError):
-            self.add("spi", 0, values={"spi-max-frequency": 1000000})
 
     def test_schema_draft_expiry_and_workspace_guards(self):
         self.load()
         (self.bindings_dir / "base.yaml").write_text(BINDINGS["base.yaml"] + '  changed: {type: int}\n')
         with self.assertRaisesRegex(ValueError, "changed"):
-            self.add("i2c", 0x49)
+            self.command("peripheral_controller", node_id=self.parent("uart")["node_id"], values={"status": "okay"})
         self.load()
         self.peripherals.observations[self.schema["schema_id"]]["expires"] = 0
         with self.assertRaisesRegex(ValueError, "expired"):
-            self.add("i2c", 0x49)
+            self.command("peripheral_controller", node_id=self.parent("uart")["node_id"], values={"status": "okay"})
         self.load()
         self.draft = self.drafts.source(self.guard(text=SOURCE + "/* new revision */"))
         with self.assertRaisesRegex(ValueError, "earlier"):
-            self.add("i2c", 0x49)
+            self.command("peripheral_controller", node_id=self.parent("uart")["node_id"], values={"status": "okay"})
         other = self.root / "other"
         other.mkdir()
         self.app.context.workspace.set(other)
@@ -316,12 +279,10 @@ class PeripheralTests(unittest.TestCase):
             self.command("peripheral_remove", node_id=self.parent("i2c")["node_id"], path="/untrusted")
         self.assertEqual(self.overlay.read_text(), SOURCE)
 
-    def test_generated_address_obeys_binding_constraints_on_add_and_update(self):
+    def test_existing_device_address_obeys_binding_constraints(self):
         path = self.bindings_dir / "temp-i2c.yaml"
         path.write_text(path.read_text().replace('reg: {type: array, required: true}', 'reg: {type: array, required: true, const: [72]}'))
         self.load()
-        with self.assertRaisesRegex(ValueError, "constant"):
-            self.add("i2c", 0x49)
         with self.assertRaisesRegex(ValueError, "constant"):
             self.command("peripheral_update", node_id=self.parent("i2c")["children"][0]["node_id"], address=0x49, values={})
         self.assertEqual(self.draft["text"], SOURCE)
@@ -371,15 +332,3 @@ class PeripheralTests(unittest.TestCase):
         target = next(child for child in self.parent("i2c")["children"] if child["label"] == "first")
         self.assertFalse(target["removable"])
         self.assertFalse(target["address_editable"])
-
-    def test_group_creation_does_not_skip_required_fields_or_compatible_constraints(self):
-        path = self.bindings_dir / "keys.yaml"
-        path.write_text(BINDINGS["keys.yaml"] + 'properties:\n  supply: {type: phandle, required: true}\n')
-        self.load()
-        with self.assertRaises(ValueError):
-            self.command("gpio_group_add", group_kind="button", name="buttons")
-        path.write_text(BINDINGS["keys.yaml"] + 'properties:\n  compatible: {type: string-array, const: [test,wrong]}\n')
-        self.load()
-        with self.assertRaisesRegex(ValueError, "constant"):
-            self.command("gpio_group_add", group_kind="button", name="buttons")
-        self.assertEqual(self.draft["text"], SOURCE)

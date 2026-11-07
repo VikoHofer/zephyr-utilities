@@ -7,19 +7,16 @@ workspace selection and background jobs. Memory Explorer and Project Creator's e
 analysis, minimal C/C++ creation, curated local sample cloning and explicit configure/build workflow are available.
 Advanced Build Inspector reads existing outputs, resolved Device Trees, current sources
 and bindings, and carries the selected image into Memory Explorer for report generation.
-Device Tree Editor starts with selected-board hardware discovery and basic BME280 I2C
-sensor / GPIO LED connections that generate overlay declarations. Discovery reads local
-board, SoC and module sources without requiring aliases or local controller copies.
-It also supports visual status/property edits, local binding-aware forms and
-references, local UART/I2C/SPI and GPIO topology, editable overlay source, reviewed
-single-file Save, draft recovery and explicit saved-source Configure. Nordic pin assignment
-supports the exact verified nrf52840dk/nrf52840 profile. A vendor-independent module
-catalogue places BME280 I2C/SPI devices and GPIO indicators/buttons under supported local
-parents. Its logical canvas reconstructs devices from source and saves coordinates
-separately. Resource diagnostics and explicit removal reviews show known consumers,
-source locations and guarded repair choices. Broader pin adapters and advanced composition
-remain planned. See the [D10 handoff](docs/device-tree-editor-d10-handoff.md) for verified
-scope and limitations.
+Device Tree Editor automatically loads the selected project's chip and known pin assignments.
+STM32 and Nordic discovery reads the selected Zephyr DTS, bindings and pin tables without
+requiring a separate entry for every chip. Its logical pin diagram supports GPIO, UART,
+I2C and SPI assignments where those sources establish the required routing capabilities,
+in existing or automatically staged overlay drafts,
+alongside search, zoom, keyboard selection, source editing, Undo/Redo, reviewed Save and
+recovery. First Save safely creates a missing overlay and includes it in the selected
+configuration when needed. Sensor/module placement and
+creation workflows have been removed; existing saved declarations remain intact. See the
+[automatic chip support handoff](docs/device-tree-editor-automatic-chip-support-handoff.md).
 TinyML model/experiment analysis also remains planned.
 
 ## Start
@@ -164,8 +161,8 @@ creation and explicit configure/build jobs. See the
 
 Project Creator opens **Applications**. Its sidebar links separate application management,
 **Create application**, **Custom boards**, and **Environment**. Detailed build/source inspection lives in
-the optional **Advanced → Build Inspector** area. **Device Tree Editor** edits existing
-application overlays; hardware modules and pin assignment are later stages.
+the optional **Advanced → Build Inspector** area. **Device Tree Editor** automatically displays supported chips and their configured pins,
+and applies supported GPIO/UART/I2C/SPI assignments to existing or new overlay drafts.
 
 Use **Create application** or `/#/projects/create` after analysis. Choose the name, new
 destination, C/C++ template or supported local sample, exact target and installed GNU SDK; inspect **Preview application**, then
@@ -288,228 +285,65 @@ The analysis modules are independent of HTTP. See the [platform contract](docs/p
 [Project Creator contract](docs/project-creator.md),
 [memory API contract](docs/implementation-contract.md) and
 [Memory Explorer master plan](docs/memory-explorer-masterplan.md) for details.
-The [controller-first plan](docs/device-tree-editor-controller-first-plan.md) prioritizes
-board discovery and basic visual connections before further advanced editor families.
-It supersedes the delivery order in the [original master plan](docs/device-tree-editor-masterplan.md).
-Open a registered application with an exact board configuration and overlay, select
-**Load board hardware**, then **Add BME280 sensor** or **Add LED** and a connection.
-The source appears directly below the hardware workspace; older local forms remain
-under **Advanced overlay tools**. Discovery and connections use the same path across
-vendors. Board composition and pin-routing coverage still have explicit limits; see
-the [controller-first handoff](docs/device-tree-editor-controller-first-handoff.md).
-CPU/core and nested-variant targets now use current board/SoC metadata for exact DTS
-selection, including single-SoC shortened filenames. The
-[qualified-target handoff](docs/device-tree-editor-controller-targets-handoff.md) records
-ten real-source discovery cases and an ESP32 sensor connection/Save/reopen check.
-The MVP prioritizes ST/STM32, Nordic, Espressif, NXP and Raspberry Pi. Unsupported
-controller/configuration or connection workflows show an under-construction notice
-and their specific reason. Support is checked per capability; the brand focus does
-not guarantee every feature on every controller. The integrated visual workspace is
-the next development priority, ahead of exhaustive controller coverage.
+The [chip and pin redesign](docs/device-tree-editor-pin-workspace-plan.md) replaces the
+former sensor/module workflow. Select an application/configuration once: its unambiguous
+predicted overlay or empty new-overlay draft opens and chip discovery starts automatically. There are no separate
+hardware, pin or binding extraction steps. Projects handoffs use the same flow.
 
-Its [D0 foundation](docs/device-tree-editor-d0-handoff.md) defines the contracts and
-tests a bounded source-edit prototype.
-The [D1 read-only preview](docs/device-tree-editor-d1-handoff.md) adds project/configuration
-context loading and overlay inspection through explicit development/test injection.
-The [D2 source engine](docs/device-tree-editor-d2-handoff.md) adds pure in-memory,
-reversible operations for literal properties, status and source node declarations.
-It preserves surrounding overlay bytes. The [D3 draft preview](docs/device-tree-editor-d3-handoff.md)
-connects visual status/property controls and editable source with diff and undo/redo.
-The [D4 workflow](docs/device-tree-editor-d4-handoff.md) makes this limited editor available
-in the normal application. Open a project/configuration or application directory, choose
-an existing overlay, edit it, then use **Review and Save**. The review shows the destination,
-source diff and unresolved validation before writing. Saving does not configure, build,
-activate the overlay or change a recipe. Undo after Save produces another unsaved draft.
-The **Registered applications** picker shows available applications only. If saved
-locations are missing or replaced, **Manage saved applications** opens Project Creator
-to reconnect or remove those entries. Refreshing the picker preserves the open draft
-and never deletes saved history.
+The logical chip view discovers STM32 alternatives from the selected HAL package table
+and Nordic GPIO slots from the selected DTS and binding counts. New chips using understood
+formats need no manual chip registration. Physical package pads and board accessibility
+remain separate from these source facts. Click a pin or use the searchable pin list, choose **Application
+GPIO** or a UART/I2C/SPI signal, and complete the required companion pins. **Apply
+assignment** generates one undoable change in the current overlay draft. Valid existing
+companions are retained; other pins require an explicit choice. Unavailable functions
+explain their restrictions. Pin positions are logical rather than physical package pads.
+STM32F1 remap encoding and Nordic routing/ownership models that cannot be established
+from the selected sources remain visibly unavailable. The current Nordic activation
+adapter covers understood nRF51/nRF52/nRF53/nRF91 primary-core routing; an nRF54 diagram
+does not establish support for its dedicated or cross-domain pin assignments.
+The ESP32, K64 and RP2040 profiles remain planned; support is specific to the selected
+chip/package evidence, not every product from a vendor.
 
-Routine editor actions and row selections keep the current reading position and
-keyboard focus. Loading, success and error messages appear beside the action; an
-offscreen result also produces a visible notice. **Open application**, **Open directory**
-and **Open overlay draft** show inline feedback, followed by explicit **Go to overlay
-selection** or **Go to overlay draft** controls. Use those controls when ready to move
-to the destination. During context and draft reads, the previous layout stays visible
-but cannot be edited. Explicit source navigation and review dialogs still open their
-requested destinations. See the [scroll-stability handoff](docs/ui-scroll-stability-handoff.md)
-for the interaction changes and verification.
+New conflicts with active assignments, protected pins or shared hardware are blocked.
+An unchanged active route can retain existing reservations or source conflicts, with a
+notice; the editor does not silently disable another controller or change board wiring.
+Application GPIO creates a reference under `/zephyr,user`; application code sets its
+direction and runtime value. Driver requirements are shown, but Kconfig and application
+code are not edited. SPI retains existing chip-select settings and creates no device.
 
-The [D5 workflow](docs/device-tree-editor-d5-handoff.md) adds **Review Configure** for
-a saved overlay in a registered project/configuration. Review the candidate, selected
-environment and command, then explicitly run Configure. Results retain candidate/input
-identity, logs, cancellation and verified source diagnostic links. **Open in Projects**
-selects the matching configuration attempt; compilation requires its separate Build
-review. Unsaved staging is unsupported, so Save first. A successful Configure records
-whether the overlay was observed; partial input coverage remains unknown freshness,
-not proof of hardware behavior or a complete validation pass.
+A project with an unambiguous missing overlay destination automatically gets a recoverable
+**New overlay · Unsaved** draft. Its path stays visible; opening creates no application
+files or directories. Pin activation and **Overlay source and changes** share automatic
+draft synchronisation, chip refresh and Undo/Redo. **Review and Save** shows the first
+creation and any required configuration inclusion before **Create overlay**. A file that
+appears at the destination is never silently replaced. Undo after first Save changes the
+draft without deleting the saved file.
 
-The [D6 workflow](docs/device-tree-editor-d6-handoff.md) adds **Load binding properties**
-for the current overlay draft. Select a local node and binding property to inspect its
-type, required/default/constant values and supported enumerations. Apply changes through
-the shared source draft and Undo/Redo history; defaults and required fields are never
-added by loading. **Reset local override** removes that local declaration and may reveal
-an unknown inherited value or default. **Delete property in overlay** writes an explicit
-deletion directive where supported.
+If configuration inclusion fails after creation, the file stays saved and **Retry
+configuration inclusion** retries that step only. After restart, review Save again to
+reconcile pending inclusion. Unsupported or ambiguous application composition remains
+labelled; a directory without a saved exact-target configuration does not gain a guessed
+destination. Configure remains separate under **Configure saved source**. Loading never
+runs application CMake, builds or flashing.
 
-Supported forms cover booleans, unsigned integers, strings, numeric/string/byte arrays,
-local node references and provider-specific phandle arrays. Provider cell names come
-from the actual local provider binding and declared cell count. Add safe node labels and
-set/remove aliases or chosen references to unique declarations in this overlay. Label
-renaming, inherited effective-tree resolution, macro evaluation and pin maps are outside
-this stage. Missing/ambiguous bindings and unsupported fields remain explained and
-source-editable. Inspection can be cancelled; Save, Configure and Build remain separate.
-
-The [D7 workflow](docs/device-tree-editor-d7-handoff.md) adds **Load peripherals** and an
-accessible list of local UART, I2C and SPI controllers, their children, and GPIO LED/button
-groups. Configure supported controller fields, add a binding-selected device with its
-explicit required values, or update/remove an existing leaf. Address changes update the
-same node's unit-address and `reg` together. Duplicate local addresses/chip selects and
-known local consumers prevent unsafe changes. All actions share the overlay draft and
-Undo/Redo history.
-
-Simple I2C/SPI forms require one resolved bus and explicit local address/size cell counts
-of 1/0. I2C supports non-reserved 7-bit addresses `0x08`–`0x77`. Existing SPI GPIO
-chip-select arrays keep their order and entries; native chip-select capacity remains
-unknown. Device lists are bounded to 256 compatible candidates with explicit truncation.
-GPIO fields use actual local provider cells, and new buttons require an explicit input
-code for the selected GPIO-key driver. Loading adds no defaults or required properties.
-Inherited controllers, pin routing and module placement remain outside this stage.
-The D7 handoff records full checks, browser/package verification and the real Configure smoke.
-
-The [D8 workflow](docs/device-tree-editor-d8-handoff.md) adds **Load pin assignments** for a
-registered `nrf52840dk/nrf52840` configuration with one selected overlay. This first adapter
-requires the supported Zephyr 4.4.2 source profile: 41 local evidence files are checked by
-hash before board/controller facts are used. Changed or missing evidence, custom board
-roots, shields and unsupported composition leave the forms unavailable with an explanation.
-Opening a directory alone does not establish this exact target.
-
-Choose a UART, I2C or SPI controller, its `default` or `sleep` state and a signal role, then
-assign, reassign or unassign a pin. A pin table shows 48 SoC pins, observed board connector
-names, reservations and uses. Selecting a table row fills the form; applying it updates
-the same overlay draft and Undo/Redo history. Existing inherited states are copied into
-the overlay when changed. A shared state requires an explicit split and retains its other
-consumers. The editor preserves symbolic `NRF_PSEL` calls and GPIO constants, surrounding
-source and required includes. It never enables or relocates a different controller.
-
-GPIO forms edit supported local `gpios`/`*-gpios` entries referring directly to `gpio0`
-or `gpio1`, including explicit symbolic flags. Removing the final entry emits a property
-deletion so an inherited assignment cannot return silently. Read-only PWM/QSPI routes
-contribute evidence, and known pin conflicts, reservations and shared controller instances
-are checked. Package pads, solder bridges, electrical suitability and external wiring
-remain unknown. Other pin encodings and opaque source remain available in the source editor.
-D0–D8 are implemented within these scoped limits; D8 is committed as `cfaf10e` and its
-verification is recorded in its handoff.
-
-The [D9 workflow](docs/device-tree-editor-d9-handoff.md) adds **Load modules** and a
-vendor-independent logical canvas. Place a BME280 I2C/SPI device or GPIO LED/button using
-an explicitly selected existing local bus/group and the actual binding's required fields.
-Software requirements are shown separately. The action adds one leaf to the canonical
-draft; updating/removing a device shares source Undo/Redo and preserves shared parents
-and providers. Handwritten nodes are recognized without recipe conversion. Missing local
-bindings, inherited connections, physical wiring and driver readiness remain unknown.
-
-Select cards and use the directional controls to arrange the graph. **Save layout** stores
-positions separately under `.features/devicetree/module-layouts/`; it does not change the
-overlay or its history. **Review and Save** still publishes firmware source, from which
-the graph is rebuilt on reopen even without layout data. D9 also retains forms, canvas
-positions and keyboard focus during guarded refreshes. Full checks, actual-binding smoke
-and browser verification passed. D9 is committed as `3cf6db1`.
-
-The [D10 workflow](docs/device-tree-editor-d10-handoff.md) adds **Load diagnostics** for
-known local references, bus addresses, GPIO limits and supported pin/controller conflicts.
-Errors, warnings and unknown evidence are distinct, with source locations for known
-consumers. Shared bus lines are charged to their controller, and alternate pinctrl states
-on that controller are not simultaneous owners. Diagnostics never block Save globally.
-
-**Review removal** shows the selected declaration, its descendants and known consumers
-before any change. Optional literal reference properties and alias/chosen entries may be
-offered as explicit repair choices. Required, mixed, ambiguous and unsafe dependencies
-must be repaired separately. **Apply removal to draft** commits the reviewed candidate as
-one undoable draft action; it does not save or configure. Unknown external or inherited
-consumers outside verified adapter evidence remain visible limitations. D10's full checks,
-browser verification, actual-binding smoke and installed-package checks passed. D10 is
-committed as `6403e43`.
-
-The first [D11 slice](docs/device-tree-editor-d11-handoff.md) adds **Load PWM consumers**.
-Edit one literal PWM specifier on an existing consumer, or create a PWM LED group and
-child. Choose a local provider, channel, positive period in nanoseconds and flags when
-the provider declares them. Polarity changes preserve other numeric flag bits. Changes
-share draft Undo/Redo, reviewed Save and D10 removal reviews.
-
-These forms use matched local bindings with explicit two- or three-cell PWM layouts,
-independently of vendor. Inherited providers, macros and multi-specifier properties remain
-available through source or the applicable generic binding form. Channel numbering and
-shared timer restrictions are not inferred from a channel count. D11a full checks,
-browser verification, actual-binding smoke and installed-package checks passed. Removal of a provider
-with named PWM consumers requires explicit consumer repair so companion `pwm-names`
-cannot silently lose their entries.
-
-The [D11b slice](docs/device-tree-editor-d11b-handoff.md) adds **Load ADC channels**.
-Assign one literal `io-channels` specifier on a binding-matched consumer, or add and edit
-local ADC channel children. Choose gain and reference from the local binding and enter
-the encoded acquisition time explicitly. Existing channel IDs stay fixed so their
-consumers retain the same configuration. Optional settings and handwritten content are
-preserved. Removal reviews protect implicit channel consumers and companion
-`io-channel-names`.
-
-ADC providers require a unique local binding with the common ADC channel schema,
-`io-channel-cells: [input]` and explicit matching cell counts. Channel creation also
-requires explicit address/size cells. The forms check API representation limits
-(channel IDs 0–31 and acquisition values 0–65535); hardware channel availability,
-electrical suitability, gain/reference support and physical routing remain unknown.
-Inherited providers, unbound `/zephyr,user` consumers, macros and multiple specifiers
-remain source/generic-binding workflows. Other advanced peripheral families and
-system resources remain planned; D11 is partial.
-
-The [D11c slice](docs/device-tree-editor-d11c-handoff.md) adds **Load interrupt GPIOs**
-for three explicit signal profiles: `bosch,bmi270` / `irq-gpios` (INT1),
-`ti,hdc2010` / `int-gpios` (DRDY/INT), and `adi,max30210` / `interrupt-gpios`
-(INT1). Edit one literal specifier or assign an absent property supported by the local
-binding. The consumer must explicitly declare its literal compatible; child-binding
-metadata alone does not establish a signal profile. Select a unique local GPIO provider,
-pin and numeric flags explicitly.
-Changing logical active high/low changes only flag bit 0 and preserves the remaining
-numeric flags. GPIO polarity does not select the driver's interrupt edge or level.
-
-Providers need a matched local binding, `gpio-controller`, explicit `#gpio-cells = <2>`
-and ordered `pin, flags` cells. The form checks pin IDs 0–31, flags 0–65535, and any
-known local `ngpios` or reserved ranges. Missing range evidence remains unknown;
-malformed ranges, opaque/multiple specifiers, inherited providers and local GPIO hogs
-withhold the specialized form. Other GPIO properties remain available through binding
-or source editing. Driver triggers, Kconfig, physical routing, pull resistors and
-electrical suitability remain unverified. Each edit is one undoable draft change;
-reviewed Save and Configure stay separate. D11c full checks, browser verification,
-actual-binding smoke and installed-package checks passed within this scope; the wider
-D11 stage remains partial.
-
-The [D11d slice](docs/device-tree-editor-d11d-handoff.md) adds **Load CAN controllers**
-for explicit local `zephyr,can-loopback`, `microchip,mcp2515`, and `nxp,flexcan`
-declarations. Select only the fields to set in this action: nominal `bitrate`,
-`sample-point`, or an existing local `can-transceiver-gpio` connection through `phys`.
-Unchecked fields and defaults stay unchanged. Nominal bitrate is bounded to
-1–1,000,000 bit/s and sample point to 0–999 per mille; 0 explicitly requests the
-driver's automatic sample-point policy. Known local transceiver limits constrain
-rate/connection changes. Missing controller timing, clocks, routing and runtime behavior
-remain unknown; passing declared limits does not prove the requested bitrate is achievable.
-
-Existing active `phys` connections take precedence over passive `can-transceiver`
-children. Passive limits are read-only in this slice. Deprecated speed aliases,
-unresolved/opaque declarations and inherited controllers retain source/generic editing.
-No controller/transceiver nodes, GPIO wiring, pinctrl or Kconfig settings are created.
-CAN-FD data timing is preserved, with known declared data rates considered when changing
-the transceiver connection. Resource reviews protect implicit passive-child dependencies and
-the last transceiver GPIO control. Save/Configure remain explicit and routine actions
-stay in place. See the D11d handoff for final verification and remaining scope.
+The old BME280/LED recipes, module canvas, layout API and creation commands have been
+removed. Saved sensor/LED source and recovery histories remain intact. Legacy module
+layout records are preserved inertly. The [automatic chip support handoff](docs/device-tree-editor-automatic-chip-support-handoff.md)
+records implemented scope, verification and the remaining acceptance gates. Earlier
+D-stage handoffs are historical evidence, not current usage instructions.
 
 Acknowledged drafts are retained under `.features/devicetree/drafts/` in the data directory.
-**Find recoverable drafts** compares retained text with current files before an explicit restore;
+**Find recoverable drafts** compares retained text with the current file or absent destination before an explicit restore;
 it never replays firmware writes. Keep or export pending text if recovery storage fails.
-Linux Save uses guarded atomic exchange, retaining original/candidate evidence under
-`.features/devicetree/publications/` and a hidden original beside the overlay. Conflicts or
+Linux Save uses guarded atomic exchange for existing files and no-replacement rename for
+new files. It retains publication evidence under
+`.features/devicetree/publications/` and, for replacements, a hidden original beside the overlay. Conflicts or
 interrupted publication require comparison; files may already contain the candidate after
 an uncertain exchange. Known incomplete syntax stays recoverable but cannot be saved.
-Missing files, links, changed directories and unsupported permissions fail closed.
+Only a reviewed new-overlay destination can be created; unexpected missing files, links,
+changed directories and unsupported permissions fail closed. Draft recovery schema 2
+retains absence explicitly and continues to read existing schema-1 records.
 
 Existing snapshot layouts, IDs, exports and legacy memory endpoints are preserved.
 `--data-dir` remains the memory-history directory; environment observations use

@@ -13,7 +13,7 @@ from .drafts import _BINDING_FIELDS, _GUARD_FIELDS
 from .source import SourceDocument
 
 
-SCOPE = ("Hardware describes the selected board DTS and this one overlay, resolved by explicit read-only preprocessing. "
+SCOPE = ("Hardware describes the selected board DTS and the reported overlay coverage, resolved by read-only preprocessing. "
          "No Configure, build or firmware execution is performed. GPIO slot counts are not package pin counts; "
          "electrical suitability, physical connections and driver readiness remain unverified.")
 
@@ -130,46 +130,55 @@ class BoardTopologyService:
         self.drafts = drafts
         self.observations = {}
 
+    @staticmethod
+    def observe(context, draft=None, *, cancel=None):
+        """Resolve a captured selection without holding editor or draft locks."""
+        board = deepcopy(context.get("board") or (context.get("environment") or {}).get("board") or {})
+        board.setdefault("name", (context.get("target") or {}).get("board") or "Selected board")
+        payload = {"schema_version": 1, "observation_id": uuid.uuid4().hex, "target": deepcopy(context.get("target")), "board": board,
+                   "supported": False, "reason": "", "coverage": ("board+selected-overlay" if draft.baseline_exists else "board+unsaved-overlay") if draft else "board-only",
+                   "nodes": [], "controllers": [], "gpio_providers": [], "pinctrl_states": [], "connector_maps": [],
+                   "allocations": [], "diagnostics": [SCOPE], "pin_routing_complete": False, "unknown_pinctrl_states": [],
+                   "draft_id": draft.id if draft else None, "revision": draft.revision if draft else None,
+                   "sha256": hashlib.sha256(draft.source).hexdigest() if draft else None, "fingerprint": None}
+        observed = {"payload": payload, "expires": time.monotonic() + 1800,
+                    "sources": None, "catalog": None, "document": None, "projection": None}
+        try:
+            if draft is not None and (draft.document is None or draft.document.syntax.blocked):
+                raise ValueError("Repair incomplete overlay source before observing application assignments.")
+            sources = BoardSources(context, draft, cancel=cancel) if cancel is not None else BoardSources(context, draft)
+            worker = sources.run(draft)
+            document = SourceDocument.parse(worker["source"].encode())
+            if document.syntax.blocked:
+                raise ValueError("The resolved board exceeds the supported topology syntax; its source remains available.")
+            catalog = BindingCatalog(context["workspace"], sources.binding_roots)
+            projection, topology = _projection(document, catalog, worker, draft.path if draft else None)
+            payload.update(topology, supported=True, selection=deepcopy(sources.selection))
+            payload["diagnostics"].append(f"Board source: {sources.selection['board_source']}; target architecture: {sources.selection['architecture']}.")
+            payload["diagnostics"].extend(catalog.diagnostics)
+            if sources.composition_reason:
+                payload["diagnostics"].append(sources.composition_reason)
+            payload["fingerprint"] = hashlib.sha256(json.dumps({"files": {key: value["sha256"] for key, value in sources.files.items()},
+                "absent": sorted(sources.absent), "tools": sources.tools, "bindings": catalog.fingerprint,
+                "draft": payload["sha256"], "target": context.get("target")}, sort_keys=True).encode()).hexdigest()
+            observed.update(sources=sources, catalog=catalog, document=document, projection=projection)
+            sources.revalidate()
+            catalog.revalidate()
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            payload.update(supported=False, reason=str(exc))
+            payload["diagnostics"].append(str(exc))
+        return observed
+
     def inspect(self, body):
         binding = self.drafts._body(body, _GUARD_FIELDS)
         with self.drafts.editor.lock, self.drafts.lock:
             context = self.drafts._context(binding)
             draft = self.drafts._scope(body, context)
             self.drafts._guard(body, draft)
-            board = deepcopy(context.get("board") or (context.get("environment") or {}).get("board") or {})
-            board.setdefault("name", (context.get("target") or {}).get("board") or "Selected board")
-            payload = {"schema_version": 1, "observation_id": uuid.uuid4().hex, "target": deepcopy(context.get("target")), "board": board,
-                       "supported": False, "reason": "", "coverage": "board+selected-overlay", "nodes": [], "controllers": [],
-                       "gpio_providers": [], "pinctrl_states": [], "connector_maps": [], "allocations": [], "diagnostics": [SCOPE],
-                       "pin_routing_complete": False, "unknown_pinctrl_states": [],
-                       "draft_id": draft.id, "revision": draft.revision, "sha256": draft.document.sha256 if draft.document else None,
-                       "connection_options": {}, "fingerprint": None}
-            observed = {"guard": deepcopy(body), "payload": payload, "expires": time.monotonic() + 1800,
-                        "sources": None, "catalog": None, "document": None, "projection": None}
-            try:
-                if draft.document is None or draft.document.syntax.blocked:
-                    raise ValueError("Repair incomplete overlay source before discovering board hardware.")
-                sources = BoardSources(context, draft)
-                worker = sources.run(draft)
-                document = SourceDocument.parse(worker["source"].encode())
-                if document.syntax.blocked:
-                    raise ValueError("The resolved board exceeds the supported editable topology syntax; its source remains available.")
-                catalog = BindingCatalog(context["workspace"], sources.binding_roots)
-                projection, topology = _projection(document, catalog, worker, draft.path)
-                payload.update(topology, supported=True, selection=deepcopy(sources.selection))
-                payload["diagnostics"].append(f"Board source: {sources.selection['board_source']}; target architecture: {sources.selection['architecture']}.")
-                payload["diagnostics"].extend(catalog.diagnostics)
-                payload["fingerprint"] = hashlib.sha256(json.dumps({"files": {key: value["sha256"] for key, value in sources.files.items()},
-                    "absent": sorted(sources.absent), "tools": sources.tools, "bindings": catalog.fingerprint,
-                    "draft": draft.document.sha256, "target": context.get("target")}, sort_keys=True).encode()).hexdigest()
-                observed.update(sources=sources, catalog=catalog, document=document, projection=projection)
-                from .board_connections import connection_options
-                payload["connection_options"] = connection_options(document, projection, catalog, payload, draft.document)
-                sources.revalidate()
-                catalog.revalidate()
-            except (OSError, ValueError, KeyError, TypeError) as exc:
-                payload.update(supported=False, reason=str(exc))
-                payload["diagnostics"].append(str(exc))
+        observed = self.observe(context, draft)
+        observed["guard"] = deepcopy(body)
+        payload = observed["payload"]
+        with self.drafts.editor.lock, self.drafts.lock:
             self.drafts._scope(body, self.drafts._context(binding))
             self.drafts._guard(body, self.drafts.drafts[draft.id])
             self.observations = {key: value for key, value in self.observations.items() if value["expires"] > time.monotonic()}
@@ -185,7 +194,7 @@ class BoardTopologyService:
         observation = self.observations.get(body["observation_id"])
         guard = {key: value for key, value in body.items() if key != "observation_id"}
         if observation is None or observation["guard"] != guard or observation["expires"] <= time.monotonic():
-            raise ValueError("Board hardware belongs to an earlier draft/context or expired. Load board hardware again.")
+            raise ValueError("Board hardware belongs to an earlier draft/context or expired. Retry chip discovery.")
         self.drafts._guard(guard, draft)
         if not observation["payload"]["supported"]:
             raise ValueError(observation["payload"]["reason"])

@@ -1,9 +1,9 @@
 <section class="dte-workspace" data-dte-root>
   <header class="dte-heading">
-    <div><p class="dte-eyebrow">Device Tree Editor</p><h1>Visual hardware editor</h1></div>
-    <span class="dte-badge">Board hardware and connections</span>
+    <div><p class="dte-eyebrow">Device Tree Editor</p><h1>Chip and pin editor</h1></div>
+    <span class="dte-badge">Automatic chip discovery</span>
   </header>
-  <p class="dte-intro">Start with your board, choose a device and connect it to a bus or GPIO. Connections update the overlay draft below; review and Save when you are ready.</p>
+  <p class="dte-intro">Open a project to see its chip and current pin assignments. Select a pin to assign supported GPIO, UART, I2C or SPI functions. Apply updates the overlay draft; Undo/Redo and Review and Save use the same source history.</p>
 
   <section class="dte-card dte-picker" aria-labelledby="dte-project-heading">
     <div class="dte-section-heading"><h2 id="dte-project-heading">Registered applications</h2><button type="button" data-dte-refresh-catalog>Refresh list</button></div>
@@ -13,7 +13,6 @@
       <button type="submit" class="dte-primary" data-dte-open-project>Open application</button>
     </form>
     <p class="dte-muted" role="status" data-dte-project-feedback hidden></p>
-    <button type="button" data-dte-project-next hidden>Go to overlay selection</button>
     <p class="dte-muted" role="status" data-dte-catalog-status></p>
     <p class="dte-notice" data-dte-unavailable-projects hidden><span data-dte-unavailable-projects-summary></span> <a href="#/projects/applications">Manage saved applications</a></p>
     <p class="dte-error" role="alert" data-dte-catalog-error hidden></p>
@@ -25,24 +24,22 @@
         <button type="submit" data-dte-open-directory>Open directory</button>
       </form>
       <p class="dte-muted" role="status" data-dte-directory-feedback hidden></p>
-      <button type="button" data-dte-directory-next hidden>Go to overlay selection</button>
       <p class="dte-muted">Opening a directory does not register it or configure the project.</p>
     </details>
   </section>
 
   <p class="dte-status" role="status" data-dte-loading hidden>Opening the selected context…</p>
   <p class="dte-error" role="alert" data-dte-error hidden></p>
-  <p class="dte-empty" data-dte-empty>Open an application to inspect its editing context. No project tools run when opening it.</p>
+  <p class="dte-empty" data-dte-empty>Select an application. Its chip is discovered automatically from local board, SoC and pin data; opening does not configure or build firmware.</p>
 
   <section class="dte-results" data-dte-results hidden>
-    <section class="dte-card" data-dte-context-panel>
+    <details class="dte-card dte-project-details" data-dte-context-panel>
+      <summary>Target and application overlay</summary>
       <div class="dte-section-heading"><p class="dte-context-title" data-dte-context-title></p><button type="button" data-dte-recheck>Recheck context</button></div>
       <form data-dte-overlay-form class="dte-overlay-form dte-overlay-inline">
         <label>Application overlay<select data-dte-overlay><option value="">Choose an overlay</option></select></label>
-        <button type="submit" data-dte-select-overlay>Open overlay draft</button>
       </form>
       <p class="dte-muted" role="status" data-dte-overlay-feedback hidden></p>
-      <button type="button" data-dte-overlay-next hidden>Go to overlay draft</button>
       <p class="dte-muted" data-dte-overlay-status></p>
       <details class="dte-context-details"><summary>Context and overlay evidence</summary>
       <dl class="dte-facts" data-dte-facts></dl>
@@ -55,22 +52,30 @@
         <div data-dte-evidence></div>
         <details class="dte-technical"><summary>Environment and root details</summary><div data-dte-environment></div></details>
       </details>
-    </section>
+    </details>
     <section class="dte-card dte-draft" data-dte-draft-panel aria-labelledby="dte-draft-heading">
-      <div class="dte-section-heading"><h2 id="dte-draft-heading">Overlay draft</h2><span class="dte-badge" data-dte-dirty>Unchanged</span></div>
+      <div class="dte-section-heading"><h2 id="dte-draft-heading">Pin workspace</h2><span class="dte-badge" data-dte-dirty>Unchanged</span></div>
       <div class="dte-draft-toolbar">
         <button type="button" data-dte-undo disabled>Undo</button><button type="button" data-dte-redo disabled>Redo</button>
-        <button type="button" data-dte-sync disabled>Sync draft</button><button type="button" data-dte-reconcile hidden>Reconcile draft</button>
+        <button type="button" data-dte-reconcile hidden>Reconcile draft</button>
         <button type="button" class="dte-primary" data-dte-save disabled>Review and Save</button>
+        <details class="dte-draft-options"><summary>Draft options</summary><div class="dte-node-actions">
         <button type="button" data-dte-compare disabled>Compare with disk</button>
         <button type="button" data-dte-reload disabled>Reload / discard draft</button>
         <button type="button" data-dte-export disabled>Export draft</button>
+        </div></details>
       </div>
       <p class="dte-muted" role="status" data-dte-draft-status>Choose an available overlay to begin.</p>
-      <p class="dte-muted" data-dte-recovery-status></p>
+      <p class="dte-path" data-dte-new-overlay-path hidden></p>
       <p class="dte-status" role="status" data-dte-save-status hidden></p>
+      <div data-dte-registration-retry-panel hidden>
+        <p class="dte-notice" data-dte-registration-retry-status></p>
+        <button type="button" data-dte-registration-retry>Retry configuration inclusion</button>
+      </div>
       <p class="dte-error" role="alert" data-dte-draft-error hidden></p>
-      <section class="dte-board" data-dte-board aria-label="Board hardware and connections"></section>
+      <section class="dte-chip" data-dte-chip aria-label="Chip and pin workspace"></section>
+      <details class="dte-source-drawer"><summary>Overlay source and changes</summary>
+        <p class="dte-muted" data-dte-recovery-status></p>
         <section class="dte-source-panel dte-primary-source" aria-labelledby="dte-source-heading" data-dte-source-panel>
         <div class="dte-section-heading"><h3 id="dte-source-heading">Overlay source</h3><span class="dte-muted">Ctrl/Cmd+Z to undo</span></div>
         <p class="dte-path" data-dte-source-path></p>
@@ -80,9 +85,11 @@
         <div data-dte-syntax-diagnostics></div>
         </section>
       <details class="dte-diff-panel"><summary>Changes from the file on disk</summary><p class="dte-muted" data-dte-diff-status></p><pre class="dte-source dte-diff" data-dte-diff></pre></details>
+      </details>
+      <details class="dte-validation-drawer"><summary>Configure saved source</summary>
       <section class="dte-validation" aria-labelledby="dte-validation-heading" data-dte-validation-panel>
         <div class="dte-section-heading"><h3 id="dte-validation-heading">Configuration validation</h3><button type="button" data-dte-validate disabled>Review Configure</button></div>
-        <p class="dte-muted" role="status" data-dte-validation-status>Save the overlay before reviewing configuration. Opening and saving never run project tools.</p>
+        <p class="dte-muted" role="status" data-dte-validation-status>Save the overlay before reviewing configuration. Configure stays explicit; automatic discovery does not configure or build firmware.</p>
         <p class="dte-error" role="alert" data-dte-validation-error hidden></p>
         <div class="dte-node-actions" data-dte-validation-actions hidden>
           <button type="button" data-dte-validation-refresh>Refresh status</button>
@@ -92,38 +99,9 @@
         <div data-dte-validation-diagnostics></div>
         <details data-dte-validation-evidence hidden><summary>Configuration evidence and log</summary><dl class="dte-facts" data-dte-validation-facts></dl><pre class="dte-source dte-validation-log" data-dte-validation-log></pre></details>
       </section>
-      <div class="dte-conflict" data-dte-conflict hidden><p>Your retained text is shown below. Review the server draft before choosing the text to continue with.</p><details><summary>Inspect competing server draft</summary><pre class="dte-source" data-dte-server-source></pre></details><button type="button" data-dte-use-local>Continue with my text</button><button type="button" data-dte-use-server>Use server draft</button></div>
-      <details class="dte-advanced-tools"><summary>Advanced overlay tools</summary>
-      <section class="dte-modules" data-dte-modules aria-label="Modules and connections"></section>
-      <section class="dte-resources" data-dte-resources aria-label="Resource diagnostics and removal"></section>
-      <div class="dte-advanced-source">
-        <section class="dte-visual" aria-labelledby="dte-visual-heading">
-          <h3 id="dte-visual-heading">Source declarations</h3>
-          <p class="dte-muted">These are declarations in this overlay. The pin panel uses separately verified target evidence; other inherited hardware remains unknown.</p>
-          <p class="dte-notice" data-dte-visual-notice></p>
-          <div data-dte-visual-controls hidden>
-            <label>Node occurrence<select size="5" data-dte-node></select></label>
-            <p class="dte-muted" data-dte-node-status></p>
-            <div class="dte-node-actions"><button type="button" data-dte-enable>Enable</button><button type="button" data-dte-disable>Disable</button><button type="button" data-dte-show-source>Show source</button></div>
-            <label class="dte-property-picker">Property occurrence<select data-dte-property><option value="">New property</option></select></label>
-            <form data-dte-property-form class="dte-property-form">
-              <label>Property name<input data-dte-property-name type="text" spellcheck="false" autocomplete="off"></label>
-              <label>Value type<select data-dte-property-kind><option value="string">String</option><option value="cells">Unsigned cells</option><option value="boolean">Boolean presence</option></select></label>
-              <label data-dte-value-label>Property value<textarea rows="2" data-dte-property-value spellcheck="false"></textarea></label>
-              <p class="dte-muted" data-dte-property-help></p>
-              <div class="dte-node-actions"><button type="submit" class="dte-primary" data-dte-apply-property>Apply property</button><button type="button" data-dte-remove-property disabled>Remove local property</button></div>
-            </form>
-          </div>
-          <section class="dte-peripherals" data-dte-peripherals aria-label="Peripherals and bus devices"></section>
-          <section class="dte-pwm" data-dte-pwm aria-label="PWM consumers and LEDs"></section>
-          <section class="dte-adc" data-dte-adc aria-label="ADC consumers and channels"></section>
-          <section class="dte-interrupt-gpio" data-dte-interrupt-gpio aria-label="Interrupt GPIO consumers"></section>
-          <section class="dte-can" data-dte-can aria-label="CAN controllers and transceivers"></section>
-          <section class="dte-pins" data-dte-pins aria-label="Pins and signals"></section>
-          <section class="dte-bindings" data-dte-bindings aria-label="Binding properties and references"></section>
-        </section>
-      </div>
       </details>
+      <div class="dte-conflict" data-dte-conflict hidden><p>Your retained text is shown below. Review the server draft before choosing the text to continue with.</p><details><summary>Inspect competing server draft</summary><pre class="dte-source" data-dte-server-source></pre></details><button type="button" data-dte-use-local>Continue with my text</button><button type="button" data-dte-use-server>Use server draft</button></div>
+
     </section>
   </section>
   <details class="dte-card dte-retained" data-dte-retained-panel hidden><summary data-dte-retained-summary>Retained drafts</summary>

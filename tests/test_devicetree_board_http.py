@@ -1,4 +1,4 @@
-"""Board observation and inherited commands share authenticated canonical draft HTTP."""
+"""Hardware inspection and retired creation paths share guarded HTTP transport."""
 
 from copy import deepcopy
 import json
@@ -9,15 +9,16 @@ from urllib.error import HTTPError
 
 from zephyr_utilities.app import create_server
 from zephyr_utilities.features.devicetree.board_sources import BoardSources
-import test_devicetree_board_connections as connection_fixture
 import test_devicetree_board_topology as topology_fixture
 import test_projects_api as http_fixture
 
 
-PREFIX = '/api/devicetree/editor/drafts/'
+PREFIX = '/api/devicetree/editor/'
+RETIRED_COMMANDS = ('board_module_add', 'module_add', 'module_update', 'module_remove',
+                    'peripheral_add', 'gpio_group_add', 'gpio_add', 'pwm_group_add', 'pwm_led_add')
 
 
-class BoardConnectionHttpTests(unittest.TestCase):
+class BoardObservationHttpTests(unittest.TestCase):
     requires_loopback = True
     binding = topology_fixture.BoardTopologyTests.binding
     guard = topology_fixture.BoardTopologyTests.guard
@@ -25,12 +26,8 @@ class BoardConnectionHttpTests(unittest.TestCase):
     request = http_fixture.ProjectsHttpTests.request
 
     def setUp(self):
-        # The fixture supplies board/environment evidence; all operations below use
-        # the composition root's real service instances and shared HTTP transport.
         with patch.object(topology_fixture, 'Application', side_effect=self.make_server):
             topology_fixture.BoardTopologyTests.setUp(self)
-        for name, source in connection_fixture.RECIPES.items():
-            (self.bindings / name).write_text(source)
         self.board = self.app.context.services['devicetree_board']
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -50,123 +47,70 @@ class BoardConnectionHttpTests(unittest.TestCase):
         with self.request(PREFIX + operation, method='POST', body=body) as response:
             return json.load(response)
 
-    def command(self, observation):
-        return {'kind': 'board_module_add', 'observation_id': observation['observation_id'],
-                'connection': {'kind': 'i2c', 'controller_id': 'hardware:/i2c', 'compatible': 'bosch,bme280',
-                               'address': 0x76, 'enable': False, 'name': 'bme280', 'label': 'environment'}}
-
-    def test_board_route_enforces_shared_authentication_origin_and_body_guards(self):
+    def test_board_and_chip_routes_enforce_authentication_origin_and_fields(self):
         with patch.object(BoardSources, 'run', side_effect=AssertionError('Rejected requests must not inspect hardware')):
-            for extra, expected in (({'authorized': False}, 403), ({'origin': 'https://outside.invalid'}, 403), ({}, 400)):
-                with self.subTest(extra=extra), self.assertRaises(HTTPError) as error:
-                    self.request(PREFIX + 'board', method='POST', body={}, **extra)
-                self.assertEqual(error.exception.code, expected)
-                error.exception.close()
+            for route in ('drafts/board', 'chip/start', 'chip/result', 'chip/cancel'):
+                for extra, expected in (({'authorized': False}, 403), ({'origin': 'https://outside.invalid'}, 403), ({}, 400)):
+                    with self.subTest(route=route, extra=extra), self.assertRaises(HTTPError) as error:
+                        self.request(PREFIX + route, method='POST', body={}, **extra)
+                    self.assertEqual(error.exception.code, expected)
+                    error.exception.close()
         self.assertEqual(self.board.observations, {})
-        self.assertEqual(self.drafts.drafts[self.draft['id']].revision, 0)
-
-    def test_read_only_inspection_connection_and_single_undo_use_shared_http(self):
-        original = deepcopy(self.draft)
-        board_bytes, overlay_bytes = self.board_file.read_bytes(), self.overlay.read_bytes()
-        with patch.object(BoardSources, 'run', return_value=self.worker()) as worker, \
-                patch.object(self.app.context.jobs, 'submit', side_effect=AssertionError('No Configure or build jobs')):
-            observed = self.post('board', self.guard())
-            self.assertTrue(observed['supported'], observed['reason'])
-            self.assertEqual(observed['controllers'][0]['id'], 'hardware:/i2c')
-            self.assertTrue(observed['connection_options']['hardware:/i2c'][0]['addable'])
-            self.assertEqual(self.post('get', {**self.binding(), 'draft_id': self.draft['id']})['text'], original['text'])
-            self.assertEqual(self.drafts.drafts[self.draft['id']].revision, 0)
-            self.assertEqual(self.board_file.read_bytes(), board_bytes)
-            self.assertEqual(self.overlay.read_bytes(), overlay_bytes)
-
-            self.draft = self.post('command', self.guard(command=self.command(observed)))
-            self.assertEqual(self.draft['revision'], original['revision'] + 1)
-            self.assertIn('&i2c0 {', self.draft['text'])
-            self.assertIn('environment: bme280@76', self.draft['text'])
-            self.assertNotIn('test,i2c', self.draft['text'])
-            self.assertTrue(self.draft['can_undo'])
-            with self.assertRaises(HTTPError) as error:
-                self.post('command', self.guard(command=self.command(observed)))
-            self.assertEqual(error.exception.code, 400)
-            error.exception.close()
-            self.draft = self.post('undo', self.guard())
-            self.assertEqual(self.draft['text'], original['text'])
-            self.assertFalse(self.draft['can_undo'])
-            self.assertTrue(self.draft['can_redo'])
-            worker.assert_called_once()
-        self.assertEqual(self.board_file.read_bytes(), board_bytes)
-        self.assertEqual(self.overlay.read_bytes(), overlay_bytes)
         self.assertEqual(self.app.context.jobs.list(), [])
 
-    def test_unavailable_board_is_a_read_only_response_with_a_reason(self):
-        captured = self.editor.contexts[self.context['id']].payload
-        captured['board'] = None
-        captured['environment'] = None
-        original = self.post('get', {**self.binding(), 'draft_id': self.draft['id']})
+    def test_hardware_observation_preserves_sources_and_has_no_recipe_catalogue(self):
+        before = deepcopy(self.draft)
         board_bytes, overlay_bytes = self.board_file.read_bytes(), self.overlay.read_bytes()
-        with patch.object(BoardSources, 'run', side_effect=AssertionError('No environment means no worker')):
-            observed = self.post('board', self.guard())
-        self.assertFalse(observed['supported'])
-        self.assertTrue(observed['board']['name'])
-        self.assertTrue(observed['reason'])
-        self.assertEqual(observed['controllers'], [])
-        self.assertEqual(observed['connection_options'], {})
-        with self.assertRaises(HTTPError) as error:
-            self.post('command', self.guard(command=self.command(observed)))
-        self.assertEqual(error.exception.code, 400)
-        error.exception.close()
-        self.assertEqual(self.post('get', {**self.binding(), 'draft_id': self.draft['id']}), original)
+        with patch.object(BoardSources, 'run', return_value=self.worker()):
+            observed = self.post('drafts/board', self.guard())
+        self.assertTrue(observed['supported'], observed['reason'])
+        self.assertEqual(observed['controllers'][0]['id'], 'hardware:/i2c')
+        self.assertNotIn('connection_options', observed)
+        self.assertEqual(self.post('drafts/get', {**self.binding(), 'draft_id': before['id']}), before)
         self.assertEqual(self.board_file.read_bytes(), board_bytes)
         self.assertEqual(self.overlay.read_bytes(), overlay_bytes)
-        self.assertEqual(self.app.context.jobs.list(), [])
 
-    def test_unmodeled_pin_routing_blocks_gpio_commands_without_blocking_i2c(self):
-        tree = topology_fixture.TREE.replace('status = "disabled"', 'status = "okay"')
-        tree = tree.replace('compatible = "test,board";',
-                            'compatible = "test,board"; pinctrl-0 = <&routing>; routing: pin-state { pinmux = <1>; };')
-        original = self.post('get', {**self.binding(), 'draft_id': self.draft['id']})
-        board_bytes, overlay_bytes = self.board_file.read_bytes(), self.overlay.read_bytes()
-        with patch.object(BoardSources, 'run', return_value=self.worker(tree)), \
-                patch.object(self.app.context.jobs, 'submit', side_effect=AssertionError('No Configure or build jobs')):
-            observed = self.post('board', self.guard())
-            self.assertTrue(observed['supported'], observed['reason'])
-            self.assertFalse(observed['pin_routing_complete'])
-            gpio_option = next(option for option in observed['connection_options']['hardware:/gpio']
-                               if option['kind'] == 'gpio-led')
-            self.assertFalse(gpio_option['addable'])
-            self.assertIn('pin routing', gpio_option['reason'])
-            self.assertTrue(observed['connection_options']['hardware:/i2c'][0]['addable'])
-
-            command = {'kind': 'board_module_add', 'observation_id': observed['observation_id'],
-                       'connection': {'kind': 'gpio-led', 'controller_id': 'hardware:/gpio',
-                                      'pin': 3, 'flags': 0, 'name': 'led', 'label': 'indicator'}}
-            with self.assertRaises(HTTPError) as error:
-                self.post('command', self.guard(command=command))
-            self.assertEqual(error.exception.code, 400)
-            self.assertIn('pin routing', json.load(error.exception)['error'])
+    def test_retired_routes_services_and_creation_commands_cannot_mutate_history(self):
+        for name in ('devicetree_modules', 'devicetree_layout', 'devicetree_board_connections'):
+            self.assertNotIn(name, self.app.context.services)
+        for route in ('drafts/modules', 'drafts/module-layout', 'drafts/module-layout/save'):
+            with self.subTest(route=route), self.assertRaises(HTTPError) as error:
+                self.post(route, self.guard())
+            self.assertEqual(error.exception.code, 404)
             error.exception.close()
-            self.assertEqual(self.post('get', {**self.binding(), 'draft_id': self.draft['id']}), original)
-
-            self.draft = self.post('command', self.guard(command=self.command(observed)))
-            self.assertEqual(self.draft['revision'], original['revision'] + 1)
-            self.assertIn('environment: bme280@76', self.draft['text'])
-            connected = self.draft['text']
-            self.draft = self.post('undo', self.guard())
-            self.assertEqual(self.draft['text'], original['text'])
-            self.assertFalse(self.draft['can_undo'])
-            self.assertTrue(self.draft['can_redo'])
-
-            # A rejected placement must retain an existing redo branch as well.
-            observed = self.post('board', self.guard())
-            command['observation_id'] = observed['observation_id']
-            undone = self.post('get', {**self.binding(), 'draft_id': self.draft['id']})
-            with self.assertRaises(HTTPError) as error:
-                self.post('command', self.guard(command=command))
+        self.draft = self.post('drafts/source', self.guard(text=self.draft['text'] + '\n/* retained edit */\n'))
+        self.draft = self.post('drafts/undo', self.guard())
+        before = self.post('drafts/get', {**self.binding(), 'draft_id': self.draft['id']})
+        self.assertTrue(before['can_redo'])
+        for kind in RETIRED_COMMANDS:
+            with self.subTest(kind=kind), self.assertRaises(HTTPError) as error:
+                self.post('drafts/command', self.guard(command={'kind': kind, 'schema_id': 'old-schema'}))
             self.assertEqual(error.exception.code, 400)
             error.exception.close()
-            self.assertEqual(self.post('get', {**self.binding(), 'draft_id': self.draft['id']}), undone)
-            self.draft = self.post('redo', self.guard())
-            self.assertEqual(self.draft['text'], connected)
-        self.assertEqual(self.board_file.read_bytes(), board_bytes)
-        self.assertEqual(self.overlay.read_bytes(), overlay_bytes)
-        self.assertEqual(self.app.context.jobs.list(), [])
+            self.assertEqual(self.post('drafts/get', {**self.binding(), 'draft_id': self.draft['id']}), before)
+        self.draft = self.post('drafts/redo', self.guard())
+        self.assertIn('retained edit', self.draft['text'])
+        self.assertNotIn('retained edit', self.overlay.read_text())
+
+    def test_existing_sensor_source_still_supports_undo_save_and_reopen(self):
+        application = self.workspace / 'legacy'
+        application.mkdir()
+        (application / 'CMakeLists.txt').write_text('message(FATAL_ERROR "Never configure fixture")\n')
+        overlay = application / 'app.overlay'
+        original = '/* Existing user device */\n&i2c0 { existing: sensor@76 { compatible = "bosch,bme280"; reg = <0x76>; }; };\n'
+        overlay.write_text(original)
+        self.context = self.editor.open({'workspace': str(self.workspace), 'application_path': str(application)})
+        self.draft = self.drafts.open({**self.binding(), 'document_id': self.context['documents'][0]['id']})
+        text = original + '\n/* Preserved user note */\n'
+        self.draft = self.post('drafts/source', self.guard(text=text))
+        self.draft = self.post('drafts/undo', self.guard())
+        self.assertEqual(self.draft['text'], original)
+        self.draft = self.post('drafts/redo', self.guard())
+        review = self.post('drafts/review', self.guard())
+        saved = self.post('drafts/save', self.guard(plan_id=review['plan']['id']))
+        self.assertEqual(saved['status'], 'saved', saved)
+        self.assertEqual(overlay.read_text(), text)
+        self.context = saved['context']
+        self.draft = self.post('drafts/open', {**self.binding(), 'document_id': saved['draft']['document_id']})
+        self.assertEqual(self.draft['text'], text)
+        self.assertIn('existing: sensor@76', overlay.read_text())

@@ -1,6 +1,7 @@
 """Durable D4 recovery reconciles source without automatic publication."""
 
 from copy import deepcopy
+import hashlib
 import json
 import os
 import unittest
@@ -8,6 +9,7 @@ from unittest.mock import patch
 
 from zephyr_utilities.features.devicetree.drafts import DraftService
 from zephyr_utilities.features.devicetree.publication import OverlayPublisher
+from zephyr_utilities.features.devicetree.recovery import validate_record
 from zephyr_utilities.features.devicetree.saving import SavingService
 from zephyr_utilities.features.devicetree.service import EditorService
 
@@ -155,7 +157,7 @@ class DevicetreeRecoveryTests(unittest.TestCase):
         recovery_id = self.draft["id"]
         path = self.record_path(recovery_id)
         original = json.loads(path.read_text())
-        variants = [dict(original, schema_version=2), dict(original, observation=None),
+        variants = [dict(original, schema_version=3), dict(original, observation=None),
                     dict(original, observation=[]), dict(original, context={}),
                     dict(original, document_id=[]), dict(original, undo=None),
                     {key: value for key, value in original.items() if key != "updated_at"},
@@ -177,6 +179,69 @@ class DevicetreeRecoveryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.edit(self.draft["text"] + "\n")
         self.assertEqual(path.read_bytes(), before)
+
+    def test_version_one_read_preserves_bytes_and_next_edit_records_version_two(self):
+        self.edit()
+        path = self.record_path(self.draft["id"])
+        value = json.loads(path.read_text())
+        self.assertEqual(value["schema_version"], 2)
+        value["schema_version"] = 1
+        value.pop("baseline_exists")
+        raw = json.dumps(value, indent=2).encode()
+        path.write_bytes(raw)
+        self.assertEqual(self.drafts.store.read(self.draft["id"]), value)
+        self.assertEqual(path.read_bytes(), raw)
+        first = self.draft["text"]
+        self.edit(first + "\n")
+        upgraded = json.loads(path.read_text())
+        self.assertEqual(upgraded["schema_version"], 2)
+        self.assertIs(upgraded["baseline_exists"], True)
+        self.draft = self.drafts.undo(self.request())
+        self.assertEqual(self.draft["text"], first)
+        self.draft = self.drafts.undo(self.request())
+        self.assertEqual(self.draft["text"], fixtures.SOURCE)
+        self.assertEqual(self.overlay.read_text(), fixtures.SOURCE.replace("\r\n", "\n"))
+
+    def test_version_one_recovery_restores_existing_baseline_and_history(self):
+        self.edit()
+        identifier = self.draft["id"]
+        path = self.record_path(identifier)
+        value = json.loads(path.read_text())
+        value["schema_version"] = 1
+        value.pop("baseline_exists")
+        path.write_text(json.dumps(value))
+        self.restart()
+        self.adopt(self.restore(self.recovery(identifier)))
+        self.assertIs(self.draft["baseline_exists"], True)
+        self.assertFalse(self.draft["needs_creation"])
+        self.draft = self.drafts.undo(self.request())
+        self.assertEqual(self.draft["text"], fixtures.SOURCE)
+        self.assertFalse(self.draft["dirty"])
+
+    def test_version_two_absent_baseline_requires_consistent_create_identity(self):
+        self.edit()
+        record = self.drafts.store.read(self.draft["id"])
+        empty_hash = hashlib.sha256(b"").hexdigest()
+        record.update(baseline_exists=False, base_text="", base_sha256=empty_hash, undo=[""])
+        record["observation"].update(exists=False, identity=None, attributes={}, text="", sha256=empty_hash)
+        selected = next(item for item in record["context"]["documents"] if item["id"] == record["document_id"])
+        selected.update(availability="absent", can_create=True, sha256=empty_hash)
+        self.assertEqual(validate_record(record, str(self.workspace)), (b"", record["text"].encode()))
+        variants = []
+        for update in ({"baseline_exists": 0}, {"schema_version": 1}, {"baseline_exists": True},
+                       {"base_text": fixtures.SOURCE, "base_sha256": hashlib.sha256(fixtures.SOURCE.encode()).hexdigest()}):
+            variants.append({**deepcopy(record), **update})
+        for field, update in (("observation", {"exists": True}), ("observation", {"identity": {"inode": 1}}),
+                              ("observation", {"ancestors": []}), ("observation", {"ancestors": record["observation"]["ancestors"][:-1]})):
+            invalid = deepcopy(record)
+            invalid[field].update(update)
+            variants.append(invalid)
+        invalid = deepcopy(record)
+        invalid["context"]["documents"][0]["can_create"] = False
+        variants.append(invalid)
+        for invalid in variants:
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                validate_record(invalid, str(self.workspace))
 
     def test_recovery_failure_does_not_acknowledge_or_replace_canonical_text(self):
         self.edit()

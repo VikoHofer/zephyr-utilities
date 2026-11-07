@@ -243,34 +243,12 @@ class PWMTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.assign()
 
-    def test_group_and_led_creation_use_binding_and_no_provider_changes(self):
-        self.load()
-        self.command("pwm_group_add", name="pwm_leds")
-        self.load()
-        group = next(item for item in self.schema["groups"] if item["path"] == "/pwm_leds")
-        before = self.draft["text"]
-        self.command("pwm_led_add", parent_id=group["node_id"], name="activity", label="activity_led",
-                     entry={"reference": "&pwm0", "cells": [2, 10000000, 1]})
-        self.assertIn('activity_led: activity {\n', self.draft["text"])
-        self.assertIn('pwms = <&pwm0 2 10000000 1>;', self.draft["text"])
-        self.assertIn('channels = <4>; status = "disabled";', self.draft["text"])
-        self.assertNotIn('pinctrl', self.draft["text"])
-        self.draft = self.drafts.undo(self.guard())
-        self.assertEqual(self.draft["text"], before)
-        self.assertEqual(self.overlay.read_text(), SOURCE)
 
-    def test_existing_led_updates_and_duplicate_creation_are_guarded(self):
+    def test_existing_led_updates_preserve_its_label(self):
         self.load()
         self.assign("&pwm1", [3, 1000], path="/leds/led")
         self.load()
         self.assertIn('label = "Existing";', self.draft["text"])
-        group = self.schema["groups"][0]
-        with self.assertRaises(ValueError):
-            self.command("pwm_led_add", parent_id=group["node_id"], name="led", label="",
-                         entry={"reference": "&pwm1", "cells": [3, 1000]})
-        for name in ('bad/name', 'led@1', '', True):
-            with self.subTest(name=name), self.assertRaises(ValueError):
-                self.command("pwm_group_add", name=name)
 
     def test_additional_required_child_properties_block_creation(self):
         path = self.bindings_dir / "pwm-leds.yaml"
@@ -278,19 +256,7 @@ class PWMTests(unittest.TestCase):
         self.load()
         self.assertFalse(self.schema["group_option"]["available"])
         self.assertFalse(self.schema["groups"][0]["addable"])
-        with self.assertRaisesRegex(ValueError, "additional"):
-            self.command("pwm_led_add", parent_id=self.schema["groups"][0]["node_id"], name="new", label="",
-                         entry={"reference": "&pwm1", "cells": [3, 1000]})
 
-    def test_group_creation_respects_required_properties_and_compatible_constraints(self):
-        path = self.bindings_dir / "pwm-leds.yaml"
-        for text in (BINDINGS["pwm-leds.yaml"] + 'properties:\n  supply: {type: phandle, required: true}\n',
-                     BINDINGS["pwm-leds.yaml"] + 'properties:\n  compatible: {const: [other,group]}\n'):
-            path.write_text(text)
-            self.load()
-            self.assertFalse(self.schema["group_option"]["available"])
-            with self.assertRaises(ValueError):
-                self.command("pwm_group_add", name="new")
 
     def test_unsupported_or_custom_child_pwm_fields_do_not_create_incomplete_leds(self):
         path = self.bindings_dir / "pwm-leds.yaml"

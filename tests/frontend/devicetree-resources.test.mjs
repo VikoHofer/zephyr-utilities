@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {createRemovalSession, createResourceSession} from "../../src/zephyr_utilities/features/devicetree/web/resources.js";
 import {mountResourcePanel} from "../../src/zephyr_utilities/features/devicetree/web/resource-view.js";
-import {mountModulePanel} from "../../src/zephyr_utilities/features/devicetree/web/module-view.js";
 
 const source = '/ { gpio0: gpio { gpio-controller; }; aliases { led = &gpio0; }; };\n';
 const location = {node_id: "gpio", property_id: null, path: "/gpio", name: "gpio", start: 4, end: 37};
@@ -264,20 +263,6 @@ test("external removal entry loads diagnostics explicitly and late navigation ca
   app.panel.navigate(); wait.resolve(); assert.equal(await pending, false);
   assert.equal(app.root.querySelectorAll("dialog")[0].open, false); assert.equal(app.state.draftView.entry.externalOperation, undefined);
   assert.equal(app.reveals.length, 0); app.dispose();
-});
-
-test("module removal entry delegates review even when direct leaf removal was blocked", async () => {
-  const app = harness(); const root = new Element("section"); const reviews = [];
-  const parent = {node_id: "bus", key: "node:/i2c", path: "/i2c", name: "i2c", kind: "i2c", role: "controller", children: []};
-  const child = {node_id: "leaf", key: "node:/i2c/leaf@76", parent_id: "bus", parent_key: parent.key, path: "/i2c/leaf@76", name: "leaf@76",
-    kind: "i2c", role: "module", fields: [], address: 118, editable: true, removable: false, remove_reason: "Alias depends on this node", recipe_matches: []};
-  const model = {schema_id: "schema0", draft_id: "draft", revision: 0, sha256: "hash0", recipes: [], parents: [parent], instances: [child], targets: [], gpio_providers: [], diagnostics: [], graph: {nodes: [parent, child], edges: []}};
-  const panel = mountModulePanel(root, {...app.options, onChange() {}, onRemove: (...args) => reviews.push(args),
-    api: async (url) => url.endsWith("module-layout") ? {schema_version: 1, layout_id: "layout", revision: 0, positions: {}} : structuredClone(model)});
-  await click(root, "Load modules"); await click(root, "leaf@76"); const trigger = await click(root, "Review module removal");
-  assert.equal(reviews.length, 1); assert.equal(reviews[0][0], "leaf"); assert.equal(reviews[0][1], trigger);
-  assert.doesNotMatch(root.textContent, /Preparing removal review/);
-  assert.equal(app.commands.length, 0); panel.dispose(); app.dispose();
 });
 
 test("removal preparation errors notify beside the viewport without moving focus to Resources", async () => {

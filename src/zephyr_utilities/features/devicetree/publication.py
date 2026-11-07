@@ -1,4 +1,4 @@
-"""Guarded Linux publication of one existing overlay, with durable recovery evidence.
+"""Guarded Linux overlay publication, with durable recovery evidence.
 
 Directory locks coordinate participating writers. Atomic exchange and verification do
 not isolate writes through external descriptors; an uncertain exchange is never replayed
@@ -86,6 +86,43 @@ def _identity(info):
             "nlink": info.st_nlink}
 
 
+def _existing_parent(path):
+    """Observe the existing directory prefix without creating missing parents."""
+    path = _path(path)
+    descriptor = os.open(path.anchor, _DIRECTORY_FLAGS)
+    current = Path(path.anchor)
+    ancestors = []
+    missing = []
+    try:
+        for part in (None, *path.parts[1:]):
+            if part is not None:
+                current /= part
+                if missing:
+                    missing.append(str(current))
+                    continue
+                try:
+                    child = os.open(part, _DIRECTORY_FLAGS, dir_fd=descriptor)
+                except FileNotFoundError:
+                    # NOFOLLOW rejects dangling links instead of treating them as
+                    # an absent directory that may be replaced.
+                    try:
+                        os.stat(part, dir_fd=descriptor, follow_symlinks=False)
+                    except FileNotFoundError:
+                        missing.append(str(current))
+                        continue
+                    raise ValueError("A missing overlay parent changed during observation.")
+                os.close(descriptor)
+                descriptor = child
+            info = os.fstat(descriptor)
+            if not stat.S_ISDIR(info.st_mode):
+                raise ValueError("Overlay ancestors must be real directories.")
+            ancestors.append({"path": str(current), "device": info.st_dev, "inode": info.st_ino})
+        return descriptor, ancestors, missing
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
 def _attributes(fd):
     if not hasattr(os, "listxattr"):
         return {}
@@ -127,6 +164,16 @@ def _chain(path, expected):
         raise ValueError("The overlay directory or one of its ancestors changed. Open the application again.")
 
 
+def _directory_entries(directory):
+    # A descriptor opened before children were created can retain a stale initial
+    # directory view on some filesystems. Reopen the held inode, not its pathname.
+    current = os.open(".", _DIRECTORY_FLAGS, dir_fd=directory)
+    try:
+        return os.listdir(current)
+    finally:
+        os.close(current)
+
+
 @contextmanager
 def _destination_lock(parent, name):
     info = os.fstat(parent)
@@ -160,8 +207,20 @@ def _exchange(parent, left, right):
         raise OSError(error, "The filesystem could not atomically exchange the reviewed overlay: " + os.strerror(error))
 
 
+def _noreplace(parent, left, right):
+    library = ctypes.CDLL(None, use_errno=True)
+    rename = getattr(library, "renameat2", None)
+    if not sys.platform.startswith("linux") or rename is None:
+        raise ValueError("Guarded overlay creation currently requires Linux atomic no-replacement rename.")
+    rename.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+    rename.restype = ctypes.c_int
+    if rename(parent, os.fsencode(left), parent, os.fsencode(right), 1):
+        error = ctypes.get_errno()
+        raise OSError(error, "The filesystem could not create the reviewed overlay without replacement: " + os.strerror(error))
+
+
 class OverlayPublisher:
-    """Existing-file writes only; no create, automatic recovery or external tooling."""
+    """Reviewed replace/create writes; no automatic recovery or external tooling."""
 
     def __init__(self, data_dir):
         self.directory = _path(data_dir) / "publications"
@@ -169,13 +228,43 @@ class OverlayPublisher:
         self.completed = {}
 
     @staticmethod
-    def observe(workspace, path):
+    def observe(workspace, path, *, allow_absent=False):
         workspace, path = _path(workspace), _path(path)
         if not path.is_relative_to(workspace) or path == workspace or path.suffix != ".overlay":
-            raise ValueError("Save only supports an existing overlay inside the selected workspace.")
-        parent, ancestors = _open_directory(path.parent)
+            raise ValueError("Save only supports an overlay inside the selected workspace.")
+        if allow_absent:
+            workspace_fd, _ = _open_directory(workspace)
+            os.close(workspace_fd)
+            parent, ancestors, missing = _existing_parent(path.parent)
+        else:
+            parent, ancestors = _open_directory(path.parent)
+            missing = []
         try:
-            source, identity, attributes = _read(parent, path.name, attributes=True)
+            try:
+                if missing:
+                    raise FileNotFoundError("The overlay parent has not been created.")
+                source, identity, attributes = _read(parent, path.name, attributes=True)
+            except FileNotFoundError:
+                if not allow_absent:
+                    raise
+                if not missing:
+                    try:
+                        os.stat(path.name, dir_fd=parent, follow_symlinks=False)
+                    except FileNotFoundError:
+                        pass
+                    else:
+                        raise ValueError("The overlay destination appeared during observation.")
+                info = os.fstat(parent)
+                writable = bool(info.st_mode & 0o222) and os.access(".", os.W_OK | os.X_OK, dir_fd=parent, effective_ids=True)
+                _chain(ancestors[-1]["path"], ancestors)
+                check, check_ancestors, check_missing = _existing_parent(path.parent)
+                os.close(check)
+                if (check_ancestors, check_missing) != (ancestors, missing):
+                    raise ValueError("The overlay parent changed during observation.")
+                return {"schema_version": 1, "workspace": str(workspace), "path": str(path), "exists": False,
+                        "ancestors": ancestors, "missing_directories": missing, "identity": None, "attributes": {},
+                        "sha256": _sha(b""), "text": "", "writable": writable,
+                        "write_reason": "" if writable else "The overlay parent directory is read only or unavailable for creation."}
             text = source.decode("utf-8", errors="strict")
             if "\x00" in text:
                 raise ValueError("The overlay contains binary data.")
@@ -214,7 +303,7 @@ class OverlayPublisher:
                 return None
             record = json.loads(raw)
             if (not isinstance(record, dict) or type(record.get("schema_version")) is not int
-                    or record["schema_version"] != 1):
+                    or record["schema_version"] not in {1, 2}):
                 raise ValueError("This publication record has an unsupported version and was left untouched.")
             if record.get("id") != operation_id:
                 raise ValueError("The publication recovery identity is invalid and was left untouched.")
@@ -227,6 +316,8 @@ class OverlayPublisher:
                     or any(not re.fullmatch(r"[a-f0-9]{64}", record[key]) for key in ("sha256", "original_sha256"))
                     or any(not isinstance(record["recovery"].get(key), str) for key in ("journal", "staged_path"))):
                 raise ValueError("The publication recovery record is malformed and was left untouched.")
+            if record["schema_version"] == 2 and (record.get("operation") != "create" or record["original"].get("exists") is not False):
+                raise ValueError("The publication creation record is malformed and was left untouched.")
             _path(record["workspace"])
             _path(record["path"])
             return record
@@ -265,7 +356,7 @@ class OverlayPublisher:
     @staticmethod
     def _result(record):
         return {key: record[key] for key in ("schema_version", "id", "status", "path", "sha256",
-                "original_sha256", "message", "recovery", "observation") if key in record}
+                "original_sha256", "operation", "message", "recovery", "observation") if key in record}
 
     def _receipt(self, record):
         completed = self.completed.get(record["id"])
@@ -308,6 +399,96 @@ class OverlayPublisher:
                         result.append({"id": name[:-5], "status": "unavailable", "message": str(exc)})
             return result
 
+    def _publish_create(self, workspace, path, expected, candidate, operation_id, revalidate_callback):
+        parent, ancestors, missing = _existing_parent(path.parent)
+        opened = []
+        try:
+            with _destination_lock(parent, Path(missing[0]).name if missing else path.name):
+                if ancestors != expected.get("ancestors") or missing != expected.get("missing_directories", []):
+                    raise ValueError("The reviewed overlay parent changed.")
+                if self.observe(workspace, path, allow_absent=True) != expected:
+                    raise ValueError("The overlay destination changed since review. No file was replaced.")
+                self.check_writable(expected)
+                revalidate_callback()
+                temporary = f".zephyr-dte-{operation_id}.new"
+                anchor = Path(ancestors[-1]["path"])
+                record = {"schema_version": 2, "operation": "create", "id": operation_id, "status": "prepared",
+                          "workspace": workspace, "path": str(path), "sha256": _sha(candidate),
+                          "original_sha256": expected["sha256"], "original": deepcopy(expected),
+                          "candidate_text": candidate.decode("utf-8"), "created_at": datetime.now(timezone.utc).isoformat(),
+                          "recovery": {"journal": str(self.directory / (operation_id + ".json")),
+                                       "staged_path": str(anchor / temporary)}}
+                self._store(record, create=True)
+                published = False
+                try:
+                    stage_parent = parent
+                    created = []
+                    for index, directory in enumerate(missing):
+                        name = temporary if index == 0 else Path(directory).name
+                        os.mkdir(name, mode=0o700, dir_fd=stage_parent)
+                        child = os.open(name, _DIRECTORY_FLAGS, dir_fd=stage_parent)
+                        opened.append(child)
+                        info = os.fstat(child)
+                        created.append((stage_parent, name, child, {"path": directory, "device": info.st_dev, "inode": info.st_ino}))
+                        stage_parent = child
+                    staged_name = path.name if missing else temporary
+                    fd = os.open(staged_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=stage_parent)
+                    with os.fdopen(fd, "wb") as stream:
+                        stream.write(candidate)
+                        stream.flush()
+                        os.fsync(stream.fileno())
+                        staged_identity = _identity(os.fstat(stream.fileno()))
+                    for directory in reversed(opened):
+                        os.fsync(directory)
+                    os.fsync(parent)
+                    revalidate_callback()
+                    if self.observe(workspace, path, allow_absent=True) != expected:
+                        raise ValueError("The destination appeared or changed while Save was prepared. No file was replaced.")
+                    staged, identity, _ = _read(stage_parent, staged_name)
+                    if staged != candidate or identity != staged_identity:
+                        raise ValueError("The staged overlay changed before creation.")
+                    for index, (owner, name, child, identity) in enumerate(created):
+                        named, held = os.stat(name, dir_fd=owner, follow_symlinks=False), os.fstat(child)
+                        if (not stat.S_ISDIR(named.st_mode) or (named.st_dev, named.st_ino) != (held.st_dev, held.st_ino)
+                                or (held.st_dev, held.st_ino) != (identity["device"], identity["inode"])
+                                or stat.S_IMODE(held.st_mode) != 0o700 or held.st_uid != os.geteuid()
+                                or _directory_entries(child) != [Path(missing[index + 1]).name if index + 1 < len(missing) else path.name]):
+                            raise ValueError("A staged overlay directory changed before creation.")
+                    _chain(anchor, ancestors)
+                    _noreplace(parent, temporary, Path(missing[0]).name if missing else path.name)
+                    published = True
+                    os.fsync(parent)
+                    observation = self.observe(workspace, path)
+                    unchanged_keys = ("device", "inode", "size", "mtime_ns", "mode", "uid", "gid", "nlink")
+                    if (observation["sha256"] != record["sha256"]
+                            or observation["ancestors"] != ancestors + [item[3] for item in created]
+                            or any(observation["identity"][key] != staged_identity[key] for key in unchanged_keys)):
+                        raise ValueError("The destination changed during overlay creation.")
+                    if any(_directory_entries(item[2]) != [Path(missing[index + 1]).name if index + 1 < len(missing) else path.name]
+                           for index, item in enumerate(created)):
+                        raise ValueError("A created overlay directory acquired unexpected contents during publication.")
+                    self.check_writable(observation)
+                    record.update(status="saved", observation=observation,
+                                  message="Created the reviewed overlay without replacing any existing file.")
+                    self._store(record)
+                    self._remember(record)
+                    return self._result(record)
+                except (OSError, ValueError) as exc:
+                    record.pop("observation", None)
+                    record.update(status="uncertain" if published else "conflict",
+                                  message=("Overlay creation may already be visible. Compare the destination and retained recovery evidence. "
+                                           "No automatic rollback or retry was performed. " if published else
+                                           "No existing file was replaced. The draft and creation evidence were retained. ") + str(exc))
+                    try:
+                        self._store(record)
+                    except (OSError, ValueError):
+                        pass
+                    return self._result(record)
+        finally:
+            for descriptor in reversed(opened):
+                os.close(descriptor)
+            os.close(parent)
+
     def publish(self, workspace, path, expected, candidate, operation_id, revalidate_callback):
         workspace, path = str(_path(workspace)), _path(path)
         if not isinstance(operation_id, str) or not re.fullmatch(r"[a-f0-9]{32}", operation_id):
@@ -319,19 +500,24 @@ class OverlayPublisher:
                 or expected.get("workspace") != workspace or expected.get("path") != str(path)):
             raise ValueError("The reviewed destination changed.")
         digest = _sha(candidate)
+        operation = "create" if expected.get("exists") is False else "replace"
         with self.lock:
             completed = self.completed.get(operation_id)
             if completed is not None:
                 if (completed["path"] != str(path) or completed["sha256"] != digest
-                        or completed["original_sha256"] != expected.get("sha256")):
+                        or completed["original_sha256"] != expected.get("sha256")
+                        or completed.get("operation", "replace") != operation):
                     raise ValueError("This publication identity was already used for a different change.")
                 return deepcopy(completed)
             previous = self._load(operation_id)
             if previous is not None:
                 if (previous.get("workspace") != workspace or previous.get("path") != str(path)
-                        or previous.get("sha256") != digest or previous.get("original_sha256") != expected.get("sha256")):
+                        or previous.get("sha256") != digest or previous.get("original_sha256") != expected.get("sha256")
+                        or previous.get("operation", "replace") != operation):
                     raise ValueError("This publication identity was already used for a different change.")
                 return self._receipt(previous)
+            if operation == "create":
+                return self._publish_create(workspace, path, expected, candidate, operation_id, revalidate_callback)
             parent, ancestors = _open_directory(path.parent)
             try:
                 with _destination_lock(parent, path.name):

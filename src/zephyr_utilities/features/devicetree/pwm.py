@@ -1,16 +1,13 @@
 """Binding-driven local PWM consumers; no inferred target or timer capabilities."""
 
 from copy import deepcopy
-import re
 import time
 
 from .binding_service import BindingService, _literal, _properties
-from .source import PropertyValue
 
 
-COMMANDS = frozenset({"pwm_set", "pwm_group_add", "pwm_led_add"})
+COMMANDS = frozenset({"pwm_set"})
 LAYOUTS = (("channel", "period"), ("channel", "period", "flags"))
-NODE_NAME = re.compile(r"[A-Za-z][A-Za-z0-9,._+\-]{0,62}")
 SCOPE = ("PWM forms cover single literal specifiers and unique providers declared in this overlay. "
          "Channel numbering, available channels, shared timer periods, pin routing and electrical suitability "
          "remain unknown without target evidence. Save and Configure remain separate actions.")
@@ -30,11 +27,6 @@ def _status(document, node):
             unknown = True
         node = document.node(node.parent_id) if node.parent_id else None
     return "unknown" if unknown else "enabled"
-
-
-def _name(value):
-    if not isinstance(value, str) or not NODE_NAME.fullmatch(value):
-        raise ValueError("Enter a node name starting with a letter, without a unit-address or path.")
 
 
 def _pwm_field(settings, providers):
@@ -208,8 +200,7 @@ class PWMService(BindingService):
     def plan(self, body, context, draft):
         command = body["command"]
         kind = command["kind"]
-        fields = {"pwm_set": {"node_id", "entry"}, "pwm_group_add": {"name"},
-                  "pwm_led_add": {"parent_id", "name", "label", "entry"}}[kind] | {"kind", "schema_id"}
+        fields = {"pwm_set": {"node_id", "entry"}}[kind] | {"kind", "schema_id"}
         if set(command) != fields or not isinstance(command["schema_id"], str):
             raise ValueError("Choose the exact supported PWM command fields.")
         observed = self.observations.get(command["schema_id"])
@@ -224,24 +215,5 @@ class PWMService(BindingService):
                 raise ValueError(consumer["reason"] if consumer else "Choose a supported local PWM consumer.")
             value = self._entry(command["entry"], consumer["field"], payload)
             change = document.plan_update_node(consumer["node_id"], properties=[("pwms", value)])
-        elif kind == "pwm_group_add":
-            if not payload["group_option"]["available"]:
-                raise ValueError(payload["group_option"]["reason"])
-            _name(command["name"])
-            compatible = payload["compatible_field"]
-            if compatible:
-                self._typed_value(compatible, ["pwm-leds"] if compatible["type"] == "string-array" else "pwm-leds", payload)
-            root = next(node for node in document.syntax.nodes if node.name == "/" and node.parent_id is None)
-            change = document.plan_add_node(root.id, command["name"], properties=[("compatible", PropertyValue.string("pwm-leds"))])
-        else:
-            group = next((item for item in payload["groups"] if item["node_id"] == command["parent_id"]), None)
-            if not group or not group["addable"]:
-                raise ValueError(group["reason"] if group else "Choose a supported local PWM LED group.")
-            _name(command["name"])
-            if not isinstance(command["label"], str):
-                raise ValueError("Enter a literal node label or leave it empty.")
-            value = self._entry(command["entry"], payload["led_field"], payload)
-            change = document.plan_add_node(group["node_id"], command["name"], label=command["label"] or None,
-                                            properties=[("pwms", value)])
         observed["catalog"].revalidate()
         return change

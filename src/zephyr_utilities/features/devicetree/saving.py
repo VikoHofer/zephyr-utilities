@@ -1,4 +1,4 @@
-"""Reviewed existing-overlay publication, explicit reconciliation and draft recovery."""
+"""Reviewed overlay publication, explicit reconciliation and draft recovery."""
 
 from copy import deepcopy
 from dataclasses import replace
@@ -80,11 +80,11 @@ class SavingService:
         while len(mapping) >= MAX_REVIEWS:
             del mapping[next(iter(mapping))]
 
-    def _compare(self, *, workspace, path, base, source, captured, document_id, owner, revision):
+    def _compare(self, *, workspace, path, base, source, captured, document_id, owner, revision, baseline_exists=True):
         observation, context = None, None
         reason = ""
         try:
-            observation = self.publisher.observe(workspace, path)
+            observation = self.publisher.observe(workspace, path, allow_absent=not baseline_exists)
             context, _ = self._fresh(captured, document_id)
             selected = self.drafts._document(context, document_id)
             if selected["sha256"] != observation["sha256"] or selected["path"] != path:
@@ -93,7 +93,8 @@ class SavingService:
             reason = str(exc)
         current = observation["text"] if observation is not None else None
         available = observation is not None and context is not None and not reason
-        status = "unavailable" if not available else "current" if observation["sha256"] == _sha(base) else "conflict"
+        matches = available and observation["sha256"] == _sha(base) and observation.get("exists", True) == baseline_exists
+        status = "unavailable" if not available else "current" if matches else "conflict"
         self._trim(self.comparisons)
         comparison_id = uuid.uuid4().hex
         self.comparisons[comparison_id] = {"deadline": time.monotonic() + REVIEW_TTL,
@@ -102,8 +103,10 @@ class SavingService:
         return {"status": status, "comparison_id": comparison_id, "path": path,
                 "base_text": base.decode("utf-8"), "text": source.decode("utf-8"), "current_text": current,
                 "current_sha256": observation["sha256"] if observation is not None else None,
+                "baseline_exists": baseline_exists, "current_exists": observation.get("exists", True) if observation is not None else None,
                 "diff": _diff(observation["text"].encode("utf-8") if observation is not None else base, source),
                 "can_reload": available, "message": reason or (
+                    "The destination is still absent. Restoring this draft will not create a file." if matches and not baseline_exists else
                     "The file still matches the draft baseline." if status == "current" else
                     "The file differs from the draft baseline. Compare both versions before discarding or rebasing the draft.")}
 
@@ -116,7 +119,7 @@ class SavingService:
     def _compare_draft(self, draft):
         return self._compare(workspace=draft.workspace, path=draft.path, base=draft.base,
                              source=draft.source, captured=draft.context, document_id=draft.document_id,
-                             owner=("draft", draft.id), revision=draft.revision)
+                             owner=("draft", draft.id), revision=draft.revision, baseline_exists=draft.baseline_exists)
 
     def _comparison(self, comparison_id, *, owner, revision, workspace):
         selected = self.comparisons.get(identifier(comparison_id))
@@ -124,7 +127,7 @@ class SavingService:
                 or selected["revision"] != revision or selected["workspace"] != workspace or not selected["available"]):
             raise ValueError("The comparison expired or changed. Compare the current file again.")
         expected = selected["observation"]
-        if self.publisher.observe(workspace, expected["path"]) != expected:
+        if self.publisher.observe(workspace, expected["path"], allow_absent=not expected.get("exists", True)) != expected:
             raise ValueError("The file changed after comparison. Compare again before continuing.")
         return selected
 
@@ -135,7 +138,7 @@ class SavingService:
             try:
                 context = self.drafts._context(binding)
                 self.drafts._scope(body, context)
-                observation = self.publisher.observe(draft.workspace, draft.path)
+                observation = self.publisher.observe(draft.workspace, draft.path, allow_absent=not draft.baseline_exists)
                 if observation != draft.observation:
                     raise ValueError("The overlay identity or contents changed since this draft was opened.")
                 self.publisher.check_writable(observation)
@@ -146,6 +149,10 @@ class SavingService:
             self._trim(self.plans)
             plan_id = uuid.uuid4().hex
             selected = self.drafts._document(context, draft.document_id)
+            try:
+                registration = self.editor.review_creation(context, selected) if hasattr(self.editor, "review_creation") else None
+            except (OSError, ValueError) as exc:
+                return {"status": "blocked", "message": f"The overlay configuration inclusion could not be reviewed: {exc}. The draft is unchanged."}
             overlays = (context.get("fragments") or {}).get("overlays", {})
             usage = selected.get("usage", "unknown")
             usage_message = "Overlay use is observed or predicted separately. Saving does not activate this overlay or change the configuration recipe."
@@ -156,13 +163,20 @@ class SavingService:
                 usage_message = "Use was captured in a historical configuration attempt; current use is not established by this Save."
             elif usage == "predicted":
                 usage_message = "Use is predicted from the selected configuration and current filenames, not confirmed by this Save."
+            if registration:
+                usage = "planned" if registration.get("required") else usage
+                usage_message = registration.get("message", usage_message)
             plan = {"id": plan_id, "expires_at": time.time() + REVIEW_TTL, "path": draft.path,
-                    "operation": "replace", "candidate_text": draft.source.decode("utf-8"),
+                    "operation": "replace" if draft.baseline_exists else "create", "candidate_text": draft.source.decode("utf-8"),
                     "candidate_sha256": _sha(draft.source), "base_sha256": _sha(draft.base),
-                    "diff": _diff(draft.base, draft.source), "no_changes": draft.source == draft.base,
+                    "diff": _diff(draft.base, draft.source), "no_changes": draft.baseline_exists and draft.source == draft.base,
                     "validation": {"state": "unvalidated", "message": "Source structure is retained; Zephyr semantic validation has not run. Saving does not configure or build the application."},
                     "usage": {"state": usage, "message": usage_message},
                     "effects": {"state": "unknown", "message": "Other configurations may share this overlay. Saving does not change their recipe."}}
+            if registration:
+                plan["registration"] = deepcopy(registration)
+                if registration.get("required"):
+                    plan["effects"] = {"state": "planned", "message": "Save creates the overlay and includes it in the selected configuration. Other configurations are unchanged."}
             self.plans[plan_id] = {"deadline": time.monotonic() + REVIEW_TTL, "body": deepcopy(body),
                                    "plan": plan, "observation": deepcopy(observation)}
             return {"status": "ready", "plan": deepcopy(plan)}
@@ -185,10 +199,76 @@ class SavingService:
         candidate = replace(draft, key=self.drafts._key(context, selected), context_fingerprint=context["fingerprint"],
                             base=_text_bytes(observation["text"]), source=source, revision=revision,
                             context=captured, observation=deepcopy(observation), document=document, parse_error=error,
+                            baseline_exists=observation.get("exists", True),
                             undo=draft.undo if keep_history else (), redo=draft.redo if keep_history else (),
                             history_truncated=draft.history_truncated if keep_history else False)
         self.drafts._within_budget(candidate, replacing=draft.id)
         return candidate
+
+    def _finish_saved(self, draft, receipt, registration, *, increment):
+        context, registration_result = None, None
+        message = None
+        if registration:
+            try:
+                included = self.editor.register_creation(registration, draft.workspace, draft.path, _sha(draft.source))
+                context = included.get("context")
+                registration_result = {"id": registration.get("id"), **{key: deepcopy(value) for key, value in included.items() if key != "context"}}
+            except (OSError, ValueError) as exc:
+                registration_result = {"state": "failed", "id": registration.get("id"), "message": str(exc)}
+                message = f"The overlay file was saved, but inclusion in the selected configuration failed: {exc}. Retry configuration inclusion or review Save again."
+        if context is None:
+            context, captured = self._fresh(draft.context, draft.document_id)
+        else:
+            # Only the reviewed overlay registration may change configuration
+            # revisions; it must not move the source into a different selection.
+            for key in ("workspace", "workspace_identity", "application", "target", "environment", "roots"):
+                if context.get(key) != draft.context.get(key):
+                    raise ValueError("The configuration inclusion result belongs to another or changed editor selection.")
+            for key in ("project", "configuration"):
+                if (context.get(key) or {}).get("id") != (draft.context.get(key) or {}).get("id"):
+                    raise ValueError("The configuration inclusion result belongs to another project or configuration.")
+            context = self.editor.current(self._binding(context))
+            captured = self.drafts._capture(context)
+        selected = self.drafts._document(context, draft.document_id)
+        if selected["path"] != draft.path:
+            raise ValueError("The saved overlay destination changed while adopting its result.")
+        observation = self.publisher.observe(draft.workspace, draft.path)
+        if observation["sha256"] != _sha(draft.source):
+            raise ValueError("The file changed after publication. Compare it before continuing.")
+        candidate = self._rebind(draft, context, captured, observation, source=draft.source, increment=increment)
+        recovery_error = None
+        try:
+            self.drafts._persist(candidate)
+        except (OSError, ValueError) as exc:
+            recovery_error = f"The overlay was saved, but recovery metadata needs verification: {exc}. Keep or export the current source."
+            message = " ".join(filter(None, (message, recovery_error)))
+        self.editor.current(self._binding(context))
+        if self.publisher.observe(draft.workspace, draft.path) != observation:
+            raise ValueError("The file changed while recovery metadata was being recorded. Compare it before continuing.")
+        self.drafts.drafts[draft.id] = candidate
+        result = self._envelope(context, candidate, status=receipt["status"], receipt=receipt, message=message)
+        if recovery_error:
+            result["draft"]["recovery"] = {"state": "failed", "message": recovery_error}
+        if registration_result:
+            result["registration"] = registration_result
+        return result
+
+    def _retry_registration(self, completed):
+        original, previous = completed["body"], completed["result"]
+        draft = self.drafts.drafts.get(original["draft_id"])
+        expected = previous.get("draft") or {"revision": original["expected_draft_revision"]}
+        if (draft is None or draft.revision != expected["revision"]
+                or _sha(draft.source) != previous["receipt"]["sha256"]):
+            raise ValueError("The draft changed after file creation. Review the current Save to retry configuration inclusion.")
+        try:
+            result = self._finish_saved(draft, previous["receipt"], completed["registration"], increment=not draft.baseline_exists)
+        except (OSError, ValueError) as exc:
+            result = {"status": "conflict", "receipt": previous["receipt"],
+                      "registration": {"state": "failed", "id": completed["registration"].get("id"), "message": str(exc)},
+                      "message": f"The overlay file was already saved; configuration inclusion still needs reconciliation: {exc}",
+                      "comparison": self._compare_draft(draft)}
+        completed["result"] = deepcopy(result)
+        return result
 
     def save(self, body):
         binding = self.drafts._body(body, _GUARD_FIELDS | {"plan_id"})
@@ -200,6 +280,8 @@ class SavingService:
             if completed is not None:
                 if original != completed["body"] or body["workspace"] != self.editor.context.workspace.get()["path"]:
                     raise ValueError("This Save receipt belongs to another reviewed request or workspace.")
+                if completed.get("registration") and completed["result"].get("registration", {}).get("state") == "failed":
+                    return self._retry_registration(completed)
                 return deepcopy(completed["result"])
             plan = self.plans.get(plan_id)
             if plan is None or plan["deadline"] <= time.monotonic() or original != plan["body"]:
@@ -222,29 +304,15 @@ class SavingService:
                           "comparison": self._compare_draft(draft)}
             else:
                 try:
-                    context, captured = self._fresh(draft.context, draft.document_id)
-                    observation = self.publisher.observe(draft.workspace, draft.path)
-                    if observation["sha256"] != _sha(draft.source):
-                        raise ValueError("The file changed after publication. Compare it before continuing.")
-                    candidate = self._rebind(draft, context, captured, observation, source=draft.source,
-                                             increment=receipt["status"] == "saved")
-                    message = None
-                    try:
-                        self.drafts._persist(candidate)
-                    except (OSError, ValueError) as exc:
-                        message = f"The overlay was saved, but recovery metadata needs verification: {exc}. Keep or export the current source."
-                    self.editor.current(self._binding(context))
-                    if self.publisher.observe(draft.workspace, draft.path) != observation:
-                        raise ValueError("The file changed while recovery metadata was being recorded. Compare it before continuing.")
-                    self.drafts.drafts[draft.id] = candidate
-                    result = self._envelope(context, candidate, status=receipt["status"], receipt=receipt, message=message)
-                    if message:
-                        result["draft"]["recovery"] = {"state": "failed", "message": message}
+                    result = self._finish_saved(draft, receipt, plan["plan"].get("registration"), increment=receipt["status"] == "saved")
                 except (OSError, ValueError) as exc:
                     result = {"status": "conflict", "receipt": receipt,
                               "message": f"Publication completed, but the current context needs reconciliation: {exc}",
                               "comparison": self._compare_draft(draft)}
-            self.completed[plan_id] = {"body": deepcopy(original), "result": deepcopy(result)}
+                    if plan["plan"].get("registration"):
+                        result["registration"] = {"state": "failed", "id": plan["plan"]["registration"].get("id"), "message": str(exc)}
+            self.completed[plan_id] = {"body": deepcopy(original), "result": deepcopy(result),
+                                       "registration": deepcopy(plan["plan"].get("registration"))}
             while len(self.completed) > 64:
                 del self.completed[next(iter(self.completed))]
             self.plans.pop(plan_id, None)
@@ -259,7 +327,7 @@ class SavingService:
             comparison = self._comparison(body["comparison_id"], owner=("draft", draft.id),
                                           revision=draft.revision, workspace=draft.workspace)
             context, captured = self._fresh(draft.context, draft.document_id)
-            observation = self.publisher.observe(draft.workspace, draft.path)
+            observation = self.publisher.observe(draft.workspace, draft.path, allow_absent=not comparison["observation"].get("exists", True))
             if observation != comparison["observation"]:
                 raise ValueError("The file changed after comparison. Compare it again.")
             source = draft.source if body["mode"] == "keep" else _text_bytes(observation["text"])
@@ -267,7 +335,7 @@ class SavingService:
                                      keep_history=body["mode"] == "keep")
             self.drafts._persist(candidate)
             self.editor.current(self._binding(context))
-            if self.publisher.observe(draft.workspace, draft.path) != observation:
+            if self.publisher.observe(draft.workspace, draft.path, allow_absent=not observation.get("exists", True)) != observation:
                 raise ValueError("The file changed while recording the reload. Compare it again.")
             self.drafts.drafts[draft.id] = candidate
             self.comparisons.pop(body["comparison_id"], None)
@@ -290,7 +358,10 @@ class SavingService:
             try:
                 base, source = self._record(value, workspace)
                 summaries.append({"id": value["id"], "path": value["path"], "revision": value["revision"],
-                                  "updated_at": value.get("updated_at"), "status": "available", "dirty": base != source})
+                                  "updated_at": value.get("updated_at"), "status": "available",
+                                  "baseline_exists": value.get("baseline_exists", True),
+                                  "needs_creation": not value.get("baseline_exists", True),
+                                  "dirty": not value.get("baseline_exists", True) or base != source})
             except (ValueError, TypeError, KeyError) as exc:
                 diagnostics.append(f"{value.get('id', 'record')}: {exc}")
         try:
@@ -307,8 +378,9 @@ class SavingService:
             base, source = self._record(value, workspace)
             comparison = self._compare(workspace=workspace, path=value["path"], base=base, source=source,
                 captured=value["context"], document_id=value["document_id"], owner=("recovery", value["id"]),
-                revision=value["revision"])
-            return {"record": {key: deepcopy(value[key]) for key in ("id", "path", "revision", "text", "base_text", "updated_at", "context")},
+                revision=value["revision"], baseline_exists=value.get("baseline_exists", True))
+            return {"record": {**{key: deepcopy(value[key]) for key in ("id", "path", "revision", "text", "base_text", "updated_at", "context")},
+                               "baseline_exists": value.get("baseline_exists", True), "needs_creation": not value.get("baseline_exists", True)},
                     "comparison": comparison}
 
     def recovery_restore(self, body):
@@ -331,7 +403,7 @@ class SavingService:
             if selected["path"] != value["path"] or selected["id"] != value["document_id"]:
                 raise ValueError("Choose the recovery record's original overlay destination.")
             context, captured = self._fresh(value["context"], selected["id"])
-            observation = self.publisher.observe(workspace, selected["path"])
+            observation = self.publisher.observe(workspace, selected["path"], allow_absent=not comparison["observation"].get("exists", True))
             if observation != comparison["observation"]:
                 raise ValueError("The file changed after comparison. Review recovery again.")
             key = self.drafts._key(context, selected)
@@ -345,7 +417,8 @@ class SavingService:
             base = _text_bytes(observation["text"])
             source = source if body["mode"] == "keep" else base
             document, error = _parse(source, draft_id, revision)
-            history_matches = body["mode"] == "keep" and observation["sha256"] == value["base_sha256"]
+            history_matches = (body["mode"] == "keep" and observation["sha256"] == value["base_sha256"]
+                               and observation.get("exists", True) == value.get("baseline_exists", True))
             undo = tuple(_text_bytes(text) for text in value["undo"]) if history_matches else ()
             redo = tuple(_text_bytes(text) for text in value["redo"]) if history_matches else ()
             if len(undo) + len(redo) > self.drafts.history_limit:
@@ -353,11 +426,11 @@ class SavingService:
             draft = Draft(draft_id, key, context["fingerprint"], workspace, tuple(context["workspace_identity"]),
                           selected["id"], selected["path"], base, source, revision, document, error,
                           undo=undo, redo=redo, history_truncated=value["history_truncated"] if history_matches else False,
-                          context=captured, observation=observation)
+                          context=captured, observation=observation, baseline_exists=observation.get("exists", True))
             self.drafts._within_budget(draft, replacing=existing.id if existing is not None else None)
             self.drafts._persist(draft)
             self.editor.current(self._binding(context))
-            if self.publisher.observe(workspace, selected["path"]) != observation:
+            if self.publisher.observe(workspace, selected["path"], allow_absent=not observation.get("exists", True)) != observation:
                 raise ValueError("The file changed while recording recovery. Review it again.")
             self.drafts.drafts[draft.id] = draft
             self.comparisons.pop(body["comparison_id"], None)

@@ -110,6 +110,7 @@ class Draft:
     history_truncated: bool = False
     context: dict | None = None
     observation: dict | None = None
+    baseline_exists: bool = True
 
     @property
     def retained_bytes(self):
@@ -135,13 +136,12 @@ class DraftService:
         self.bindings = None
         self.peripherals = None
         self.pins = None
-        self.modules = None
         self.removal = None
         self.pwm = None
         self.adc = None
         self.interrupt_gpio = None
         self.can = None
-        self.board_connections = None
+        self.chip_activation = None
 
     def _capture(self, context):
         captured = deepcopy(context)
@@ -149,9 +149,10 @@ class DraftService:
         return captured
 
     def _record(self, draft):
-        return {"schema_version": 1, "id": draft.id, "workspace": draft.workspace,
+        return {"schema_version": 2, "id": draft.id, "workspace": draft.workspace,
                 "context": deepcopy(draft.context), "observation": deepcopy(draft.observation),
                 "path": draft.path, "document_id": draft.document_id,
+                "baseline_exists": draft.baseline_exists,
                 "base_text": draft.base.decode("utf-8"), "text": draft.source.decode("utf-8"),
                 "base_sha256": _sha(draft.base), "sha256": _sha(draft.source),
                 "revision": draft.revision, "undo": [source.decode("utf-8") for source in draft.undo],
@@ -168,6 +169,26 @@ class DraftService:
                 raise
             self.recovery_failures.pop(draft.id, None)
 
+    def _persist_creation(self, draft):
+        """Reuse only untouched empty recovery when the same absent input reopens."""
+        if self.store is None:
+            return draft
+        with self.store.lock:
+            records, _ = self.store.records(draft.workspace)
+            previous = next((record for record in records
+                if record["id"] not in self.drafts and record["schema_version"] == 2
+                and record.get("baseline_exists") is False and record["revision"] == 0
+                and record["base_text"] == record["text"] == "" and record["undo"] == record["redo"] == []
+                and record["history_truncated"] is False and record["document_id"] == draft.document_id
+                and record["path"] == draft.path and record["observation"] == draft.observation
+                and all(record["context"].get(key) == draft.context.get(key)
+                        for key in ("fingerprint", "source_guard", "workspace_identity"))), None)
+            if previous is not None:
+                document, error = _parse(draft.source, previous["id"], 0)
+                draft = replace(draft, id=previous["id"], document=document, parse_error=error)
+            self._persist(draft)
+            return draft
+
     @staticmethod
     def _body(body, extra):
         if not isinstance(body, dict) or set(body) != _BINDING_FIELDS | set(extra):
@@ -182,14 +203,15 @@ class DraftService:
         if not isinstance(document_id, str):
             raise ValueError("Choose an available document from this editor context.")
         selected = next((entry for entry in context["documents"] if entry["id"] == document_id), None)
-        if selected is None or selected["availability"] != "available":
+        if selected is None or (selected["availability"] != "available"
+                and not (selected["availability"] == "absent" and selected.get("can_create") is True)):
             raise ValueError("Choose an available document from this editor context.")
         return selected
 
     @staticmethod
     def _key(context, selected):
         return (context["workspace"], tuple(context["workspace_identity"]), context["fingerprint"],
-                selected["id"], selected["path"], selected["sha256"])
+                selected["id"], selected["path"], selected["sha256"], selected["availability"] != "absent")
 
     def _scope(self, body, context):
         draft_id = body["draft_id"]
@@ -265,7 +287,8 @@ class DraftService:
         return {"schema_version": 1, "id": draft.id, "context_fingerprint": draft.context_fingerprint,
                 "document_id": draft.document_id, "path": draft.path, "revision": draft.revision,
                 "sha256": _sha(draft.source), "base_sha256": _sha(draft.base),
-                "text": draft.source.decode("utf-8"), "dirty": draft.source != draft.base,
+                "baseline_exists": draft.baseline_exists, "needs_creation": not draft.baseline_exists,
+                "text": draft.source.decode("utf-8"), "dirty": not draft.baseline_exists or draft.source != draft.base,
                 "can_undo": bool(draft.undo), "can_redo": bool(draft.redo),
                 "history_limit": self.history_limit, "history_truncated": draft.history_truncated,
                 "syntax": syntax, "nodes": nodes, "diff": _diff(draft.base, draft.source),
@@ -286,30 +309,39 @@ class DraftService:
                 return payload
             observed = self.editor.document({**binding, "document_id": selected["id"]})["document"]
             source = _text_bytes(observed["text"])
-            observation = self.publisher.observe(context["workspace"], selected["path"]) if self.publisher is not None else None
-            if observation is not None and (observation["sha256"] != observed["sha256"] or observation["text"] != observed["text"]):
+            baseline_exists = selected["availability"] != "absent"
+            if not baseline_exists and (source or observed["sha256"] != _sha(b"")):
+                raise ValueError("A new overlay draft must start from an absent, empty baseline.")
+            observation = (self.publisher.observe(context["workspace"], selected["path"], allow_absent=True)
+                           if not baseline_exists else self.publisher.observe(context["workspace"], selected["path"])) if self.publisher is not None else None
+            if observation is not None and (observation.get("exists", True) != baseline_exists
+                    or observation["sha256"] != observed["sha256"] or observation["text"] != observed["text"]):
                 raise ValueError("The overlay changed while opening its draft. Open it again.")
             draft_id = uuid.uuid4().hex
             document, error = _parse(source, draft_id, 0)
             draft = Draft(draft_id, key, context["fingerprint"], context["workspace"], tuple(context["workspace_identity"]),
                           selected["id"], selected["path"], source, source, 0, document, error,
-                          context=self._capture(context), observation=observation)
+                          context=self._capture(context), observation=observation, baseline_exists=baseline_exists)
             removing = []
             if len(self.drafts) >= self.max_drafts:
                 clean = next((item.id for item in self.drafts.values()
-                              if item.source == item.base and not item.undo and not item.redo), None)
+                              if item.baseline_exists and item.source == item.base and not item.undo and not item.redo), None)
                 if clean is None:
                     raise ValueError("The session draft count limit was reached. Existing edited drafts were retained.")
                 removing.append(clean)
             self._within_budget(draft, removing=removing)
-            payload = self._payload(draft)
             verified = self._context(binding)
             if self._key(verified, self._document(verified, selected["id"])) != key:
                 raise ValueError("The editor context changed while opening the draft.")
+            if not baseline_exists:
+                draft = self._persist_creation(draft)
+                verified = self._context(binding)
+                if self._key(verified, self._document(verified, selected["id"])) != key:
+                    raise ValueError("The editor context changed while recording the new draft. Recover its retained text before continuing.")
             for draft_id in removing:
                 del self.drafts[draft_id]
             self.drafts[draft.id] = draft
-            return payload
+            return self._payload(draft)
 
     def get(self, body):
         binding = self._body(body, {"draft_id"})
@@ -379,6 +411,8 @@ class DraftService:
         kind = command.get("kind")
         if not isinstance(kind, str):
             raise ValueError("Choose a supported visual draft command kind.")
+        if self.chip_activation is not None and kind in self.chip_activation.commands:
+            return self.chip_activation.command(body)
         fields = {"set_status": {"kind", "node_id", "status"},
                   "set_property": {"kind", "node_id", "name", "value"},
                   "remove_property": {"kind", "property_id"}}.get(kind)
@@ -386,14 +420,12 @@ class DraftService:
         binding_command = self.bindings is not None and kind in self.bindings.commands
         peripheral_command = self.peripherals is not None and kind in self.peripherals.commands
         pin_command = self.pins is not None and kind in self.pins.commands
-        module_command = self.modules is not None and kind in self.modules.commands
         removal_command = self.removal is not None and kind in self.removal.commands
         pwm_command = self.pwm is not None and kind in self.pwm.commands
         adc_command = self.adc is not None and kind in self.adc.commands
         interrupt_gpio_command = self.interrupt_gpio is not None and kind in self.interrupt_gpio.commands
         can_command = self.can is not None and kind in self.can.commands
-        board_command = self.board_connections is not None and kind in self.board_connections.commands
-        if not any((binding_command, peripheral_command, pin_command, module_command, removal_command, pwm_command, adc_command, interrupt_gpio_command, can_command, board_command)) and (fields is None or not fields <= set(command) or set(command) - fields - optional):
+        if not any((binding_command, peripheral_command, pin_command, removal_command, pwm_command, adc_command, interrupt_gpio_command, can_command)) and (fields is None or not fields <= set(command) or set(command) - fields - optional):
             raise ValueError("Choose the exact supported visual command fields.")
         with self.editor.lock, self.lock:
             context = self._context(binding)
@@ -404,8 +436,6 @@ class DraftService:
                 raise ValueError("This draft has incomplete or unsupported structure. Repair the source before using visual controls.")
             if removal_command:
                 change = self.removal.plan(body, context, draft)
-            elif board_command:
-                change = self.board_connections.plan(body, context, draft)
             elif pwm_command:
                 change = self.pwm.plan(body, context, draft)
             elif adc_command:
@@ -414,8 +444,6 @@ class DraftService:
                 change = self.interrupt_gpio.plan(body, context, draft)
             elif can_command:
                 change = self.can.plan(body, context, draft)
-            elif module_command:
-                change = self.modules.plan(body, context, draft)
             elif pin_command:
                 change = self.pins.plan(body, context, draft)
             elif peripheral_command:

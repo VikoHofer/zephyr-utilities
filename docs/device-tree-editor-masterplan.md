@@ -1,5 +1,10 @@
 # Device Tree Editor master plan
 
+**Superseded on 2026-11-07 by the [chip and pin redesign](device-tree-editor-pin-workspace-plan.md).**
+The D-stage roadmap, module workflow and implementation prompts below are historical;
+they do not define current scope or authorize future work. Existing code and verification
+records remain useful implementation evidence.
+
 **MVP scope revision, 2026-11-06:** prioritize ST/STM32, Nordic, Espressif, NXP and
 Raspberry Pi, using the shared discovery path and observed capabilities. Unsupported
 controllers/configurations and connections get an under-construction blocker with a

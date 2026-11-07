@@ -1,5 +1,6 @@
 """Bounded board source closure and explicit preprocessing without project configuration."""
 
+from concurrent.futures import CancelledError
 import hashlib
 import json
 import os
@@ -9,6 +10,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 
 from ...core.source_files import WorkspaceSourceReader
 from .board_selection import resolve_board_selection
@@ -53,8 +55,10 @@ def _signature(path):
 class BoardSources:
     """Fingerprint both present inputs and absent higher-priority include candidates."""
 
-    def __init__(self, context, draft):
+    def __init__(self, context, draft=None, *, cancel=None):
         self.context = context
+        self.cancel = cancel
+        self.composition_reason = ""
         self.reader = WorkspaceSourceReader(context["workspace"])
         self.files, self.absent, self.tools, self.staged = {}, set(), {}, {}
         self.total = 0
@@ -72,17 +76,30 @@ class BoardSources:
         self.selection = resolve_board_selection(self, context, self.board, self.directory)
         self.board_file = Path(self.selection["board_source"])
         application = self.reader.path(context["application"]["path"])
-        if any(context.get(key) for key in ("shields", "snippets")):
+        if draft is not None and any(context.get(key) for key in ("shields", "snippets")):
             raise ValueError("Shield and snippet composition is outside this board observation.")
         predicted = (context.get("input_evidence") or {}).get("predicted", [])
+        if draft is not None and not draft.baseline_exists:
+            creation = context.get("overlay_creation") or {}
+            proposed = next((item for item in context.get("documents", []) if item["id"] == draft.document_id), {})
+            if (proposed.get("availability") != "absent" or proposed.get("can_create") is not True
+                    or proposed.get("path") != draft.path or creation.get("path") != proposed.get("relative_path")
+                    or not creation.get("supported")):
+                raise ValueError(creation.get("reason") or "This unsaved overlay has no verified single-overlay input plan.")
+            predicted = [creation["input_evidence"]]
+            self.absent.add(draft.path)
+            self.composition_reason = "Assignments include the unsaved overlay draft. Save creates its file and applies the reviewed configuration inclusion."
         selected = []
         for report in predicted:
-            if report.get("status") in {"unknown", "unavailable", "ambiguous"}:
-                raise ValueError("Overlay composition is unresolved. Select this single overlay explicitly in Projects.")
+            if draft is not None and report.get("status") in {"unknown", "unavailable", "ambiguous"}:
+                raise ValueError("Application overlay composition is unresolved; only board defaults can be shown.")
             selected.extend(self.reader.path(item["path"], base=application) for item in report.get("files", [])
                             if item.get("state") in {"active", "expected", "selected"})
-        if selected != [Path(draft.path)]:
+        if draft is not None and selected != [Path(draft.path)]:
             raise ValueError("Board hardware discovery currently requires this draft to be the only selected application overlay.")
+        if draft is None:
+            self.composition_reason = ("Showing board defaults only. Application overlays, shields and snippets are not applied. "
+                                       "Open a supported application overlay to observe its assignments.")
         roots = [self.reader.path(item["path"]) for item in context.get("roots", []) if item.get("kind") == "dts"]
         roots += [application, self.directory, self.zephyr]
         self.roots = list(dict.fromkeys(roots))
@@ -121,6 +138,8 @@ class BoardSources:
             return False
 
     def read(self, path):
+        if self.cancel is not None and self.cancel.is_set():
+            raise CancelledError()
         path = self.reader.path(path)
         if str(path) in self.files:
             return self.files[str(path)]["text"]
@@ -134,20 +153,22 @@ class BoardSources:
     def revalidate(self):
         if self.reader.list_files(self.directory, {".yaml"}, max_files=1000, max_dirs=1,
                                   exclude_prefixes=("",)) != self.platform_files:
-            raise ValueError("The board platform metadata catalogue changed. Load board hardware again.")
+            raise ValueError("The board platform metadata catalogue changed. Retry chip discovery.")
         if self.reader.list_files(self.library / "devicetree", {".py"}, max_files=32, max_dirs=16,
                                   exclude_dirs={"__pycache__"}) != self.parser_files:
-            raise ValueError("The selected parser source catalogue changed. Load board hardware again.")
+            raise ValueError("The selected parser source catalogue changed. Retry chip discovery.")
         for path, value in self.files.items():
             if self.reader.read_text(path)["sha256"] != value["sha256"]:
-                raise ValueError("A board discovery input changed. Load board hardware again.")
+                raise ValueError("A board discovery input changed. Retry chip discovery.")
         for path in self.absent:
             if Path(path).exists() or Path(path).is_symlink():
-                raise ValueError("A previously absent board/include candidate appeared. Load board hardware again.")
+                raise ValueError("A previously absent board/include candidate appeared. Retry chip discovery.")
         if any(_signature(path) != signature for path, signature in self.tools.items()):
-            raise ValueError("A selected board discovery tool changed. Load board hardware again.")
+            raise ValueError("A selected board discovery tool changed. Retry chip discovery.")
 
     def _stage(self, path, destination, *, text=None):
+        if self.cancel is not None and self.cancel.is_set():
+            raise CancelledError()
         path = self.reader.path(path)
         if str(path) in self.staged:
             return self.staged[str(path)]
@@ -184,17 +205,18 @@ class BoardSources:
         output.write_text(INCLUDE.sub(replace, value))
         return output
 
-    def run(self, draft):
+    def run(self, draft=None):
         with tempfile.TemporaryDirectory(prefix="zephyr-board-") as temporary:
             stage = Path(temporary)
-            overlay = self._stage(Path(draft.path), stage, text=draft.source.decode())
+            overlay = self._stage(Path(draft.path), stage, text=draft.source.decode()) if draft is not None else None
             board = self._stage(self.board_file, stage)
             preprocessed, result_path = stage / "board.pre", stage / "result.json"
             empty = stage / "empty.c"
             empty.write_text("")
             command = [self.compiler, "-x", "assembler-with-cpp", "-nostdinc", "-undef", "-D__DTS__",
-                       "-include", str(board), "-include", str(overlay), "-E", "-o", str(preprocessed), str(empty)]
-            self._run(command, stage)
+                       "-include", str(board), *(["-include", str(overlay)] if overlay else []),
+                       "-E", "-o", str(preprocessed), str(empty)]
+            self._execute(command, stage)
             if preprocessed.stat().st_size > 2 * 1024 * 1024:
                 raise ValueError("Preprocessed board source exceeds 2 MiB.")
             if re.search(r"/(?:include|incbin)/", preprocessed.read_text()):
@@ -206,7 +228,7 @@ class BoardSources:
                 copied.parent.mkdir(parents=True, exist_ok=True)
                 copied.write_text(self.files[str(original)]["text"])
             request.write_text(json.dumps({"library": str(library), "source": str(preprocessed), "output": str(result_path)}))
-            self._run([self.python, "-I", "-B", str(Path(__file__).with_name("board_worker.py")), str(request)], stage)
+            self._execute([self.python, "-I", "-B", str(Path(__file__).with_name("board_worker.py")), str(request)], stage)
             if result_path.stat().st_size > 4 * 1024 * 1024:
                 raise ValueError("Board topology output exceeds 4 MiB.")
             result = json.loads(result_path.read_text())
@@ -221,8 +243,16 @@ class BoardSources:
             self.revalidate()
             return result
 
+    def _execute(self, command, directory):
+        if self.cancel is None:
+            self._run(command, directory)
+        else:
+            self._run(command, directory, cancel=self.cancel)
+
     @staticmethod
-    def _run(command, directory):
+    def _run(command, directory, *, cancel=None):
+        if cancel is not None and cancel.is_set():
+            raise CancelledError()
         environment = {key: value for key, value in os.environ.items() if key in {"PATH", "LANG", "LC_ALL", "LC_CTYPE", "SYSTEMROOT"}}
         environment["PYTHONDONTWRITEBYTECODE"] = "1"
         environment["TMPDIR"] = str(directory)
@@ -232,12 +262,26 @@ class BoardSources:
         with tempfile.TemporaryFile() as log:
             process = subprocess.Popen(wrapper, cwd=directory, env=environment, stdin=subprocess.DEVNULL,
                                        stdout=log, stderr=log, start_new_session=True)
+            deadline = time.monotonic() + 15
             try:
-                result = process.wait(timeout=15)
-            except subprocess.TimeoutExpired as exc:
-                os.killpg(process.pid, signal.SIGKILL)
-                process.wait()
-                raise ValueError("Board discovery exceeded its 15-second tool limit.") from exc
+                while True:
+                    if cancel is not None and cancel.is_set():
+                        raise CancelledError()
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise ValueError("Board discovery exceeded its 15-second tool limit.")
+                    try:
+                        result = process.wait(timeout=min(remaining, 0.1))
+                        break
+                    except subprocess.TimeoutExpired:
+                        continue
+            finally:
+                if process.poll() is None:
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    process.wait()
             log.seek(0)
             message = log.read(16384).decode("utf-8", errors="replace")
             if result:

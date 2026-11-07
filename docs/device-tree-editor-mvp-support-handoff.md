@@ -1,5 +1,10 @@
 # Device Tree Editor MVP support handoff
 
+**Historical handoff:** the next-step direction below was replaced on 2026-11-07 by
+the [chip and pin redesign](device-tree-editor-pin-workspace-plan.md). Its recorded
+implementation/check results remain historical evidence; module integration is no
+longer the next feature.
+
 Date: 2026-11-06. The qualified-target continuation is committed as `cc32fb1`.
 This slice implements the user's smaller MVP scope and visible support blockers.
 

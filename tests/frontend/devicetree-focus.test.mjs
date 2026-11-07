@@ -106,3 +106,24 @@ test("review navigation, disposal and hidden or disabled triggers suppress resto
     assert.equal(app.document.activeElement, app.document.body, state); assert.equal(app.callbacks.size, 0, state);
   }
 });
+
+test("a completed action that hides its retry control returns to the named primary action", async () => {
+  const app = fixture(); const save = {parentNode: app.root,
+    focus(options) { app.document.activeElement = this; this.options = options; }};
+  await retainActionFocus(app.root, () => {
+    app.original.closest = (selector) => selector === "[hidden]" ? {} : null;
+    app.document.activeElement = app.document.body;
+  }, () => true, undefined, {fallbackTo: save});
+  assert.equal(app.document.activeElement, save); assert.deepEqual(save.options, {preventScroll: true});
+});
+
+test("fallback focus leaves a surviving retry control or a later user action alone", async () => {
+  for (const moved of [false, true]) {
+    const app = fixture(); const save = {parentNode: app.root,
+      focus() { app.document.activeElement = this; }};
+    await retainActionFocus(app.root, () => {
+      if (moved) { app.callbacks.get("pointerdown")({target: {}}); app.document.activeElement = app.document.body; }
+    }, () => true, undefined, {fallbackTo: save});
+    assert.equal(app.document.activeElement, moved ? app.document.body : app.original);
+  }
+});

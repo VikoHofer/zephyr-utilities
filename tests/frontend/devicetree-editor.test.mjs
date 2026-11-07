@@ -94,6 +94,43 @@ test("a selected default overlay is read against the returned context revision a
   app.session.dispose();
 });
 
+test("a safe absent overlay is read automatically as an empty draft without a creation request", async () => {
+  const selected = context({editing_document: {...overlay(), availability: "absent", can_create: true, baseline_exists: false}});
+  const calls = [];
+  const app = harness(async (path, options) => {
+    calls.push([path, options.body]);
+    return path.endsWith("/catalog") ? catalog() : path.endsWith("/document")
+      ? {context_id: selected.id, revision: selected.revision, document: {...selected.editing_document, text: ""}} : selected;
+  });
+  await app.session.navigate(); await app.session.openProject(projectId);
+  assert.equal(app.state.document.text, ""); assert.equal(app.state.document.baseline_exists, false);
+  assert.deepEqual(calls.map(([path]) => path.split("/").at(-1)), ["catalog", "open", "document"]);
+  app.session.dispose();
+});
+
+test("ordinary missing and unapproved absent documents do not become writable drafts", async () => {
+  for (const selected of [{availability: "missing"}, {availability: "absent", baseline_exists: false},
+    {availability: "absent", baseline_exists: true, can_create: true}]) {
+    const calls = [];
+    const app = harness(async (path) => {
+      calls.push(path);
+      return path.endsWith("/catalog") ? catalog() : context({editing_document: {...overlay(), ...selected}});
+    });
+    await app.session.navigate(); await app.session.openProject(projectId);
+    assert.equal(app.state.document, null); assert.equal(calls.some((path) => path.endsWith("/document")), false);
+    app.session.dispose();
+  }
+});
+
+test("an empty existing file cannot silently replace an absent document observation", async () => {
+  const selected = context({editing_document: {...overlay(), availability: "absent", can_create: true, baseline_exists: false}});
+  const app = harness(async (path) => path.endsWith("/catalog") ? catalog() : path.endsWith("/document")
+    ? {context_id: selected.id, revision: selected.revision, document: {...overlay(), text: "", baseline_exists: true}} : selected);
+  await app.session.navigate(); await app.session.openProject(projectId);
+  assert.equal(app.state.document, null); assert.match(app.state.documentError, /overlay changed/);
+  app.session.dispose();
+});
+
 test("context loading stays active through every publication until the selected document is ready", async () => {
   const selected = context({editing_document: overlay()});
   const pending = deferred(); const started = deferred();

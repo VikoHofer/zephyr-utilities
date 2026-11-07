@@ -3,6 +3,11 @@
 Status: accepted; the first bounded slice is implemented and verified as recorded in
 the [handoff](../device-tree-editor-controller-first-handoff.md).
 
+The [2026-11-07 redesign](../device-tree-editor-pin-workspace-plan.md) replaces the
+connection product direction. [ADR 0024](0024-chip-pin-workspace.md) records automatic
+discovery on project selection in place of this ADR's manual Load action. The bounded
+source/tooling safeguards remain; the former connection commands are retired.
+
 ## Context
 
 The source-preserving editor operates on an application overlay. Its existing binding

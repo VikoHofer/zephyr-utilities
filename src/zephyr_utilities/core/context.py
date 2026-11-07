@@ -9,6 +9,7 @@ from .builds import BuildInspectionService
 from .jobs import JobManager
 from .project_context import ProjectContextProvider
 from .project_validation import ProjectValidationProvider
+from .project_overlays import ProjectOverlayProvider
 from .workspace import WorkspaceService
 
 
@@ -21,6 +22,7 @@ class ApplicationContext:
     builds: BuildInspectionService = field(default_factory=BuildInspectionService)
     project_context: ProjectContextProvider | None = None
     project_validation: ProjectValidationProvider | None = None
+    project_overlays: ProjectOverlayProvider | None = None
 
     def feature_data(self, feature_id):
         if not re.fullmatch(r"[a-z][a-z0-9_-]*", feature_id):

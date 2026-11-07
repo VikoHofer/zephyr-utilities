@@ -10,6 +10,7 @@ from .creation import path_identity
 from .default_overlay import default_overlay, project_default_overlay
 from .fragments import BUILD_MARKERS, EXCLUDED_DIRS, EXCLUDED_PREFIXES, fragment_path, profile_fragments
 from .overlay_usage import overlay_usage
+from .overlay_creation import draft_destination
 from .records import identifier
 
 
@@ -255,6 +256,7 @@ class ProjectsEditorContextProvider:
                                  "revision": board_revision or None, "qualifiers": qualifiers},
                       "environment": self._environment(workspace, profile, diagnostics), "fragments": fragments,
                       "default_overlay": default, "roots": self._roots(profile, diagnostics),
+                      "overlay_creation": draft_destination(profile, application["path"], files, default),
                       "input_evidence": {"predicted": [predicted], "captured": captured, "coverage": "partial",
                                          "source_fingerprints": fingerprints}, "diagnostics": diagnostics}
             result["board"] = deepcopy(result["environment"].get("board"))
