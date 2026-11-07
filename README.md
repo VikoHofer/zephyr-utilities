@@ -21,6 +21,9 @@ Standard board revisions are selected automatically from Zephyr metadata, includ
 their board overlays and revision-specific application-overlay selection. The editor
 shows the resolved revision; default and declared older revisions need no extra setup.
 See the [board revision handoff](docs/device-tree-editor-board-revisions-handoff.md).
+The nRF54L15 DK CPUAPP target supports native-domain GPIO/UART/I2C/SPI activation,
+including clock-pin and dedicated-route constraints; see the
+[nRF54L handoff](docs/device-tree-editor-nrf54l-handoff.md) for verified scope and limits.
 TinyML model/experiment analysis also remains planned.
 
 ## Start

@@ -11,6 +11,7 @@ import re
 from .binding_service import _literal
 from .chip_catalog import _cells, _encoding, _file, _nordic, _nordic_ports, _NRF_ENCODING
 from .chip_gpio import resolve_gpio
+from . import chip_nrf54l
 
 
 _KINDS = {
@@ -70,8 +71,8 @@ def _ownership(sources, topology, document, metadata):
     if any("nordic,nrf-uicr-v2" in row.get("compatible", []) for row in topology.get("nodes", [])):
         raise ValueError("This Nordic source uses UICR domain ownership. Its GPIO ownership and dedicated peripheral routes are not yet decoded; pin activation is unavailable.")
     if any(name.startswith("nrf54") for name in names):
-        raise ValueError("This Nordic source requires dedicated and cross-domain pin routing. Its DTS GPIO slots do not provide the complete routing matrix; pin activation is unavailable.")
-    if not re.fullmatch(r"nrf(?:51\d+|52\d+|53\d+|91\d+)", metadata.get("soc", "")):
+        chip_nrf54l.validate(sources, topology, document, metadata)
+    elif not re.fullmatch(r"nrf(?:51\d+|52\d+|53\d+|91\d+)", metadata.get("soc", "")):
         raise ValueError("The Nordic GPIO/pinctrl encoding is understood, but this source's hardware routing and ownership model is not yet established.")
     for row in topology.get("nodes", []):
         node = document.find_node(row["path"])
@@ -129,13 +130,19 @@ def pin_restrictions(observed, chip):
     uicr = next(iter(uicrs), None)
     node = document.find_node(uicr["path"]) if uicr else None
     soc = chip["chip"]["soc"]
+    nrf54l = chip_nrf54l.selected(observed["sources"], chip["chip"])
     nfc = [row for row in topology.get("nodes", []) if "nordic,nrf-nfct" in row.get("compatible", [])]
     nfc_gpio = _boolean(document, node, "nfct-pins-as-gpios") if node else False
-    if nfc and (not nfc_gpio or any(row.get("status") != "disabled" for row in nfc)):
+    if nrf54l and (node is None or "uicr" not in node.labels):
+        # Zephyr's nrfx configuration reads DT_NODELABEL(uicr), not any
+        # node that merely shares the compatible or GPIO-release property.
+        nfc_gpio = False
+    if (nfc or nrf54l) and (not nfc_gpio or any(row.get("status") != "disabled" for row in nfc)):
         # Hardware-resource mappings from Zephyr's nordic,nrf-uicr binding;
         # these do not define the GPIO inventory or peripheral alternatives.
         # https://docs.zephyrproject.org/latest/build/dts/api/bindings/arm/nordic%2Cnrf-uicr.html
-        pair = ("P0.09", "P0.10") if soc.startswith("nrf52") else ("P0.02", "P0.03") if soc == "nrf5340" else None
+        pair = (("P1.02", "P1.03") if nrf54l else
+                ("P0.09", "P0.10") if soc.startswith("nrf52") else ("P0.02", "P0.03") if soc == "nrf5340" else None)
         if pair is None:
             raise ValueError("This source contains NFC hardware whose dedicated GPIO pins are not identified by the understood UICR schema.")
         for name in pair:
@@ -158,6 +165,11 @@ def pin_notes(observed, chip):
     if chip["chip"]["soc"].startswith(("nrf52", "nrf53")):
         notes.update({pin["id"]: ["Shared low-frequency crystal pin; verify the board clock configuration in Kconfig before use."]
                       for pin in chip["pins"] if pin["id"] in {"P0.00", "P0.01"}})
+    if chip_nrf54l.selected(observed["sources"], chip["chip"]):
+        notes.update({pin["id"]: ["Shared low-frequency crystal pin; verify the board clock configuration in Kconfig before use."]
+                      for pin in chip["pins"] if pin["id"] in {"P1.00", "P1.01"}})
+        notes.update({pin["id"]: ["nRF54L port P2 supports GPIO input/output but has no GPIO interrupt or wakeup sensing."]
+                      for pin in chip["pins"] if pin["port"] == 2})
     if chip["chip"]["soc"] == "nrf52840" and chip["chip"].get("package") == "QIAA":
         notes.update({pin["id"]: ["Nordic recommends standard drive and signals up to 10 kHz on this package pin."]
                       for pin in chip["pins"] if pin["id"] in _LOW_FREQUENCY})
@@ -282,7 +294,7 @@ def _controller_ports(document, node, chip):
     return {number[0]}
 
 
-def _controller(topology, document, row, kind, numbers, chip, restrictions):
+def _controller(topology, document, row, kind, numbers, chip, restrictions, *, nrf54l=False):
     reference = _identity(row, kind)
     result = {"id": reference, "label": f"{reference[1:].upper()} ({kind.upper()})", "kind": kind,
               "owner_id": row["id"], "path": row["path"], "status": row.get("status", "unknown"),
@@ -306,12 +318,20 @@ def _controller(topology, document, row, kind, numbers, chip, restrictions):
             if _boolean(document, node, "hw-flow-control") or any(signal in values for values in states.values() for signal in ("rts", "cts")):
                 required.extend(("rts", "cts"))
         ports = _controller_ports(document, node, chip)
+        legal = None
+        if nrf54l:
+            legal, notes = chip_nrf54l.controller_candidates(topology, document, row, kind, chip)
+            result["notes"].extend(notes)
+            if any(settings["pin"] is not None and settings["pin"] not in legal.get(signal, set())
+                   for state in states.values() for signal, settings in state.items()):
+                raise ValueError("The existing nRF54L pin state uses an unverified cross-domain, dedicated or clock-pin route. Resolve that source assignment before rerouting.")
         if ports is not None:
             result["notes"].append("Alternatives stay on the declared default GPIO port; cross-domain alternatives need additional routing evidence.")
         for signal in required:
             candidates = [pin["id"] for pin in chip["pins"]
-                          if ((ports is None or pin["port"] in ports) and not restrictions.get(pin["id"]))
-                          or row.get("status") in {"okay", "ok"} and pin["id"] == current.get(signal)]
+                          if (legal is None or pin["id"] in legal.get(signal, set()))
+                          and (((ports is None or pin["port"] in ports) and not restrictions.get(pin["id"]))
+                               or row.get("status") in {"okay", "ok"} and pin["id"] == current.get(signal))]
             result["signals"].append({"id": signal, "label": signal.upper(), "required": True, "candidates": candidates})
         for state in states.values():
             if any(signal not in required for signal in state):
@@ -337,7 +357,8 @@ def profile(observed, chip):
         if len(kinds) != 1:
             continue
         try:
-            result.append(_controller(topology, document, row, kinds.pop(), numbers, chip, restrictions))
+            result.append(_controller(topology, document, row, kinds.pop(), numbers, chip, restrictions,
+                                      nrf54l=chip_nrf54l.selected(observed["sources"], chip["chip"])))
         except ValueError:
             continue
     instances = []

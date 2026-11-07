@@ -26,6 +26,9 @@ boundaries are recorded in [ADR 0025](decisions/0025-new-overlay-save-and-projec
 Projects and Device Tree Editor. Requested targets remain unchanged; effective revision
 evidence drives automatic overlay selection and guarded board/revision/application
 composition. See [ADR 0026](decisions/0026-automatic-board-revisions.md).
+The Nordic route adapter delegates the verified nRF54L native-domain rules to
+`chip_nrf54l.py`; canonical overlay commands, history and publication remain shared.
+See the [nRF54L handoff](device-tree-editor-nrf54l-handoff.md).
 Source/package evidence determines support; unavailable actions explain their reason.
 Broader peripherals, composition and TinyML experiments remain planned.
 

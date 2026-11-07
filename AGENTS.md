@@ -40,6 +40,11 @@ requested target. Default and declared older nRF9160 DK/nRF9161 DK revisions are
 targets. Custom revision scripts and board extensions remain unavailable. See the
 [board revision handoff](docs/device-tree-editor-board-revisions-handoff.md) and
 [ADR 0026](docs/decisions/0026-automatic-board-revisions.md).
+The nRF54L continuation adds native-domain GPIO/UART/I2C/SPI activation, with
+`nrf54l15dk/nrf54l15/cpuapp` as the acceptance target. The selected shared architecture,
+secure register layout, clock-pin restrictions and dedicated serial-00 routes determine
+support. Cross-domain routing, non-secure/secondary-core ownership and other nRF54
+architectures remain guarded. See the [nRF54L handoff](docs/device-tree-editor-nrf54l-handoff.md).
 Project selection opens one predicted overlay or automatically stages a validated absent destination, then runs
 bounded discovery. Opening persists a recoverable draft without creating application
 files or directories. Complete pin proposals generate one canonical overlay change, sharing source

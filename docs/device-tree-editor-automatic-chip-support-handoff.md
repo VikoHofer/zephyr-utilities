@@ -9,6 +9,9 @@ retain their original exact-profile scope and verification.
 The subsequent [board revision slice](device-tree-editor-board-revisions-handoff.md)
 adds standard default/declared revision support. Revision limitations and matrix results
 below describe this earlier slice before that implementation.
+The later [nRF54L activation slice](device-tree-editor-nrf54l-handoff.md) also supersedes
+the nRF54L15 activation blocker below for verified secure CPUAPP native-domain routes.
+The nRF54H and non-secure/secondary-core restrictions remain separate.
 
 ## Delivered behavior
 
