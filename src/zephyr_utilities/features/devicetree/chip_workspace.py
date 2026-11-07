@@ -189,6 +189,7 @@ class ChipWorkspaceService:
             assignment_reason = " ".join(filter(None, (assignment_reason, reason)))
         payload.update(context_id=context["id"], expected_revision=context["revision"],
                        target=deepcopy(context.get("target")), board=topology["board"],
+                       selection=deepcopy(topology.get("selection")),
                        draft_id=draft.id if draft else None, draft_revision=draft.revision if draft else None,
                        draft_sha256=hashlib.sha256(draft.source).hexdigest() if draft else None,
                        coverage=coverage, assignment_reason=assignment_reason)

@@ -1,5 +1,6 @@
 """Explain captured or expected overlay selection without reading application files."""
 
+from copy import deepcopy
 import hashlib
 from pathlib import PurePosixPath
 import re
@@ -136,7 +137,7 @@ def _captured(context, source, target):
     return result, dependencies, complete
 
 
-def overlay_usage(profile, source_dir, *, files=None, context=None, default_overlay=None):
+def overlay_usage(profile, source_dir, *, files=None, context=None, default_overlay=None, revision_resolution=None):
     """Return a pure report from an application catalogue and optional captured inputs."""
     target = profile.get("target") if isinstance(profile, dict) else None
     source = PurePosixPath(str(source_dir))
@@ -147,6 +148,18 @@ def overlay_usage(profile, source_dir, *, files=None, context=None, default_over
     report = {"schema_version": 1, "target": target, "status": "unknown",
               "message": "Overlay use is unknown until configuration records its Device Tree inputs.",
               "files": [], "board_files": []}
+    revision_target, revision_known = target, True
+    if revision_resolution is not None:
+        report["revision_resolution"] = deepcopy(revision_resolution)
+        head, *qualifiers = target.split("/") if isinstance(target, str) else [""]
+        board, _, requested = head.partition("@")
+        effective = revision_resolution.get("effective") if isinstance(revision_resolution, dict) else None
+        revision_known = (isinstance(revision_resolution, dict) and revision_resolution.get("supported") is True
+                          and revision_resolution.get("requested") == (requested or None)
+                          and (effective is None or isinstance(effective, str)
+                               and re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.+-]{0,159}", effective) is not None))
+        if revision_known and effective:
+            revision_target = "/".join([board + "@" + effective, *qualifiers])
     if default:
         report["default_overlay"] = default
 
@@ -201,7 +214,7 @@ def overlay_usage(profile, source_dir, *, files=None, context=None, default_over
     except (ValueError, TypeError, AttributeError):
         choice = {"mode": "unknown", "files": []}
     simple = catalogue_valid and _simple_cmake(cmake)
-    expected, ambiguous = _automatic(target, paths) if simple else (set(), set())
+    expected, ambiguous = _automatic(revision_target, paths) if simple and revision_known else (set(), set())
     if choice["mode"] == "replace":
         expected, ambiguous = set(choice["files"]), set()
     elif choice["mode"] == "append":
@@ -209,7 +222,8 @@ def overlay_usage(profile, source_dir, *, files=None, context=None, default_over
     overlay_paths.update(choice["files"])
     if default_path in overlay_paths and default_valid and default["target"] == target and choice["mode"] in {"auto", "append"}:
         expected.add(default_path)
-    known = catalogue_valid and simple and not ambiguous and choice["mode"] != "unknown"
+    known = (catalogue_valid and simple and not ambiguous and choice["mode"] != "unknown"
+             and (revision_known or choice["mode"] == "replace"))
     for path in sorted(overlay_paths):
         if path in expected:
             state, reason = "expected", "Selected for the next configuration; actual use is not confirmed yet."
@@ -228,4 +242,6 @@ def overlay_usage(profile, source_dir, *, files=None, context=None, default_over
     if known:
         report.update(status="expected", scope="direct_inputs",
                       message="Expected direct overlay selection; configure to confirm all actual inputs.")
+    elif not revision_known:
+        report["message"] = "Automatic application overlay selection needs a supported board revision resolution."
     return report

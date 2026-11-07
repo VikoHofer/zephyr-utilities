@@ -65,16 +65,14 @@ class BoardSources:
         self.board = context.get("board") or (context.get("environment") or {}).get("board")
         if not isinstance(self.board, dict) or self.board.get("status") != "discovered":
             raise ValueError("This selection has no discovered board metadata. Analyze its environment and select an exact board configuration.")
-        target = context.get("target") or {}
-        if target.get("requested") not in self.board.get("targets", []):
-            raise ValueError("The exact target does not match the captured board metadata.")
-        if len(self.board.get("directories", [])) != 1 or target.get("revision") or self.board.get("default_revision") is not None:
-            raise ValueError("Board extensions and revision selection require a separate discovery adapter; this board remains visible without inferred topology.")
+        if len(self.board.get("directories", [])) != 1:
+            raise ValueError("Board extensions require a separate discovery adapter; this board remains visible without inferred topology.")
         environment = context.get("environment") or {}
         self.zephyr = self.reader.path((environment.get("zephyr") or {}).get("path"))
         self.directory = self.reader.path(self.board["directories"][0])
         self.selection = resolve_board_selection(self, context, self.board, self.directory)
         self.board_file = Path(self.selection["board_source"])
+        self.board_overlays = [Path(path) for path in self.selection["board_overlays"]]
         application = self.reader.path(context["application"]["path"])
         if draft is not None and any(context.get(key) for key in ("shields", "snippets")):
             raise ValueError("Shield and snippet composition is outside this board observation.")
@@ -210,11 +208,13 @@ class BoardSources:
             stage = Path(temporary)
             overlay = self._stage(Path(draft.path), stage, text=draft.source.decode()) if draft is not None else None
             board = self._stage(self.board_file, stage)
+            revision_overlays = [self._stage(path, stage) for path in self.board_overlays]
             preprocessed, result_path = stage / "board.pre", stage / "result.json"
             empty = stage / "empty.c"
             empty.write_text("")
             command = [self.compiler, "-x", "assembler-with-cpp", "-nostdinc", "-undef", "-D__DTS__",
-                       "-include", str(board), *(["-include", str(overlay)] if overlay else []),
+                       "-include", str(board), *[argument for path in revision_overlays for argument in ("-include", str(path))],
+                       *(["-include", str(overlay)] if overlay else []),
                        "-E", "-o", str(preprocessed), str(empty)]
             self._execute(command, stage)
             if preprocessed.stat().st_size > 2 * 1024 * 1024:

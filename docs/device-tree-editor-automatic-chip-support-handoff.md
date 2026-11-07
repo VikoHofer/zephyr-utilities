@@ -6,6 +6,10 @@ extends the [new-overlay workflow](device-tree-editor-new-overlay-handoff.md) un
 [chip and pin redesign](device-tree-editor-pin-workspace-plan.md). Earlier handoffs
 retain their original exact-profile scope and verification.
 
+The subsequent [board revision slice](device-tree-editor-board-revisions-handoff.md)
+adds standard default/declared revision support. Revision limitations and matrix results
+below describe this earlier slice before that implementation.
+
 ## Delivered behavior
 
 Opening a project continues to load its chip, current assignments and existing or

@@ -33,6 +33,13 @@ Family adapters offer GPIO/UART/I2C/SPI only when routing and ownership are unde
 Unknown formats and cross-domain/core ownership remain visibly unavailable; a recognized
 brand or matching macro alone is not a guarantee. See the
 [automatic chip support handoff](docs/device-tree-editor-automatic-chip-support-handoff.md).
+Standard declarative board revisions now resolve automatically. Discovery applies the
+selected revision overlay before the application draft and reports the effective revision;
+Projects uses the same resolver for application-overlay selection without rewriting the
+requested target. Default and declared older nRF9160 DK/nRF9161 DK revisions are acceptance
+targets. Custom revision scripts and board extensions remain unavailable. See the
+[board revision handoff](docs/device-tree-editor-board-revisions-handoff.md) and
+[ADR 0026](docs/decisions/0026-automatic-board-revisions.md).
 Project selection opens one predicted overlay or automatically stages a validated absent destination, then runs
 bounded discovery. Opening persists a recoverable draft without creating application
 files or directories. Complete pin proposals generate one canonical overlay change, sharing source

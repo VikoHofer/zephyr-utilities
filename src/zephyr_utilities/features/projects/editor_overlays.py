@@ -104,7 +104,8 @@ class ProjectsOverlayProvider:
                     or record["configuration_id"] is not None and before["project_id"] != project["id"]):
                 raise ValueError("The overlay registration's saved record identity is invalid.")
             profile, _, required = inclusion(before["profile"], application, record["source_files"],
-                                             selection.get("default_overlay"), relative)
+                                             selection.get("default_overlay"), relative,
+                                             revision_resolution=selection.get("target", {}).get("revision_resolution"))
             after = _updated(before, profile, record["configuration_id"])
             expected_project = after if record["configuration_id"] is None else project
             if (required != record["required"] or after != record["after_selected"]
@@ -195,7 +196,8 @@ class ProjectsOverlayProvider:
             if files is None:
                 raise ValueError("The application's source selection is incomplete; overlay inclusion cannot be reviewed.")
             profile, _, required = inclusion(selected["profile"], current["application"]["path"], files,
-                                             current.get("default_overlay"), relative)
+                                             current.get("default_overlay"), relative,
+                                             revision_resolution=current.get("target", {}).get("revision_resolution"))
             after = _updated(selected, profile, configuration_id)
             record = {"schema_version": 1, "id": uuid.uuid4().hex, "state": "planned", "workspace": workspace,
                       "project_id": project_id, "configuration_id": configuration_id, "relative_path": relative,

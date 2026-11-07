@@ -3,6 +3,7 @@
 import re
 
 from ...core.hardware_metadata import board_qualifiers, parse_hardware_metadata, soc_entries
+from ...core.board_revisions import parse_board_revisions, resolve_board_revision
 
 
 IDENTIFIER = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.+-]{0,159}\Z")
@@ -32,7 +33,7 @@ def _systems(sources, files, wanted):
     return systems
 
 
-def _architecture(sources, board, target, directory):
+def _architecture(sources, board, targets, directory):
     # Platform files are top-level only; an empty prefix excludes all child directories.
     files = sources.reader.list_files(directory, {".yaml"}, max_files=1000, max_dirs=1, exclude_prefixes=("",))
     sources.platform_files = files
@@ -53,7 +54,8 @@ def _architecture(sources, board, target, directory):
     captured = [{key: item.get(key) for key in ("target", "architecture", "source_file")} for item in captured]
     if current != sorted(captured, key=lambda item: item["source_file"]):
         raise ValueError("The board platform metadata changed. Analyze the environment again.")
-    exact = [item for item in current if item["target"] == target]
+    exact = next((matches for target in targets
+                  if (matches := [item for item in current if item["target"] == target])), [])
     architectures = {item["architecture"] for item in exact}
     origin = "target-platform"
     if not exact:
@@ -69,6 +71,32 @@ def _architecture(sources, board, target, directory):
     return architecture, origin
 
 
+def _revision(definition, board, requested):
+    raw = definition.get("revision")
+    current = parse_board_revisions(raw)
+    captured = (board.get("revisions", []), board.get("default_revision"),
+                board.get("revision_format"), board.get("revision_exact", False))
+    if current != captured:
+        raise ValueError("The board revision metadata changed. Analyze the environment again.")
+    return resolve_board_revision(raw, requested)
+
+
+def _revision_overlays(sources, directory, full, short, multiple_socs, revision):
+    if revision["effective"] is None:
+        return []
+    suffix = revision["effective"].replace(".", "_")
+    candidates = list(dict.fromkeys(directory / (name + "_" + suffix + ".overlay") for name in (full, short)))
+    found = [path for path in candidates if sources.exists(path)]
+    shortened = directory / (short + "_" + suffix + ".overlay")
+    if multiple_socs and full != short and shortened in found:
+        raise ValueError("A shortened revision overlay filename is not allowed for a board with multiple SoCs.")
+    if len(found) > 1:
+        raise ValueError("The full and shortened board revision overlay filenames conflict; choose one naming style.")
+    for path in found:
+        sources.read(path)
+    return [str(path) for path in found]
+
+
 def resolve_board_selection(sources, context, board, directory):
     target = context.get("target") or {}
     qualifiers = target.get("qualifiers")
@@ -76,9 +104,15 @@ def resolve_board_selection(sources, context, board, directory):
             or any(not isinstance(part, str) or not IDENTIFIER.fullmatch(part) for part in qualifiers)
             or not isinstance(board.get("name"), str) or not IDENTIFIER.fullmatch(board["name"])):
         raise ValueError("Choose an exact board target with supported SoC/core/variant qualifiers.")
-    requested = board["name"] + "/" + "/".join(qualifiers)
+    revision = target.get("revision")
+    if revision is not None and (not isinstance(revision, str) or not IDENTIFIER.fullmatch(revision)):
+        raise ValueError("The requested board revision is invalid.")
+    unrevisioned = board["name"] + "/" + "/".join(qualifiers)
+    requested = board["name"] + ("@" + revision if revision is not None else "") + "/" + "/".join(qualifiers)
     if target.get("requested") != requested or target.get("board") != board["name"]:
         raise ValueError("The exact target and its board/qualifier metadata do not agree.")
+    if requested not in board.get("targets", []):
+        raise ValueError("The exact target does not match the captured board metadata.")
     current = parse_hardware_metadata(sources.read(directory / "board.yml"))
     if not isinstance(current, dict) or ("board" in current) == ("boards" in current):
         raise ValueError("Current board metadata needs one board or boards declaration.")
@@ -95,8 +129,7 @@ def resolve_board_selection(sources, context, board, directory):
     definition = selected[0]
     if set(definition) - {"name", "full_name", "vendor", "revision", "socs"}:
         raise ValueError("Current selected board metadata has unsupported fields.")
-    if definition.get("revision") is not None:
-        raise ValueError("Board revision composition requires a separate discovery adapter.")
+    revision = _revision(definition, board, revision)
     declared = definition.get("socs")
     if not isinstance(declared, list) or any(not isinstance(soc, dict) for soc in declared):
         raise ValueError("Current board SoC metadata is invalid.")
@@ -124,8 +157,11 @@ def resolve_board_selection(sources, context, board, directory):
     for name in {full, short}:
         if sources.exists(directory / (name + ".overlay")):
             raise ValueError("An additional board overlay needs explicit composition support before hardware discovery.")
-    architecture, origin = _architecture(sources, board, requested, directory)
+    overlays = _revision_overlays(sources, directory, full, short, len(names) != 1, revision)
+    effective = board["name"] + ("@" + revision["effective"] if revision["effective"] is not None else "") + "/" + "/".join(qualifiers)
+    architecture, origin = _architecture(sources, board, list(dict.fromkeys([effective, unrevisioned])), directory)
     return {"target": requested, "qualifier": "/".join(qualifiers), "board_source": str(found[0]),
+            "revision": revision, "board_overlays": overlays,
             "architecture": architecture, "architecture_origin": origin,
             "metadata_files": sorted({str(directory / "board.yml"), *(str(path) for path in files),
                                       *(str(path) for path in sources.platform_files)})}

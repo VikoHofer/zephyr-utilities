@@ -155,6 +155,10 @@ class BoardTopologyService:
             projection, topology = _projection(document, catalog, worker, draft.path if draft else None)
             payload.update(topology, supported=True, selection=deepcopy(sources.selection))
             payload["diagnostics"].append(f"Board source: {sources.selection['board_source']}; target architecture: {sources.selection['architecture']}.")
+            revision = sources.selection["revision"]
+            if revision["effective"] is not None:
+                payload["diagnostics"].append(f"Board revision: {revision['effective']} ({revision['match']}); "
+                                              f"revision overlays: {', '.join(sources.selection['board_overlays']) or 'none required'}.")
             payload["diagnostics"].extend(catalog.diagnostics)
             if sources.composition_reason:
                 payload["diagnostics"].append(sources.composition_reason)

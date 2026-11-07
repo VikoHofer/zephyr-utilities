@@ -61,6 +61,7 @@ export function mountChipPanel(root, options) {
   const inventoryBadge = node("span", "dte-badge", "Logical pin view");
   heading.append(node("h2", "", "Chip and pins"), inventoryBadge);
   const status = node("p", "dte-muted"); status.setAttribute("role", "status");
+  const revision = node("p", "dte-muted dte-chip-revision"); revision.hidden = true;
   const error = node("p", "dte-error"); error.setAttribute("role", "alert");
   const actions = node("div", "dte-node-actions");
   const retry = button("Retry discovery", () => { void session.retry(); });
@@ -88,7 +89,7 @@ export function mountChipPanel(root, options) {
   columns.append(canvasColumn, inspector);
   const diagnostics = node("details", "dte-chip-evidence"); diagnostics.append(node("summary", "", "Discovery coverage and evidence"));
   const evidence = node("div"); diagnostics.append(evidence);
-  root.append(heading, status, error, actions, tools, columns, diagnostics);
+  root.append(heading, status, revision, error, actions, tools, columns, diagnostics);
   const session = createChipSession({...options, onChange});
 
   // Larger logical inventories retain the same maximum label size as the original diagram.
@@ -258,6 +259,11 @@ export function mountChipPanel(root, options) {
     if (renderedData !== data) {
       renderedData = data; renderPins(data); evidence.replaceChildren();
       const slots = data?.chip?.inventory === "gpio-slots";
+      const boardRevision = data?.selection?.revision;
+      revision.hidden = !boardRevision?.effective;
+      revision.textContent = boardRevision?.effective ? `Board revision ${boardRevision.effective}`
+        + (boardRevision.match === "default" ? " selected automatically."
+          : boardRevision.match === "compatible" ? ` selected for requested revision ${boardRevision.requested}.` : ".") : "";
       inventoryBadge.textContent = inventoryLabel(data);
       viewport.setAttribute("aria-label", slots ? "Logical GPIO slot diagram" : "Logical chip pin diagram");
       svg.setAttribute("aria-label", slots ? "Chip GPIO slots" : "Chip pins");
@@ -265,6 +271,9 @@ export function mountChipPanel(root, options) {
         + (slots ? "Slots are logical GPIO indices from DTS, not confirmed package pads or board connections."
           : "Positions are logical, not package pad locations.");
       addText(evidence, "Coverage", data?.coverage); addText(evidence, "Assignments", data?.assignment_reason);
+      addText(evidence, "Requested board revision", boardRevision?.requested);
+      addText(evidence, "Resolved board revision", boardRevision?.effective);
+      addText(evidence, "Board revision overlays", array(data?.selection?.board_overlays).join("\n"));
       addText(evidence, "Inventory", slots ? "GPIO controller slots from the selected DTS. Package bonding and board wiring are not established."
         : data?.chip?.inventory === "pin-table" ? "Pins and alternatives from the selected Zephyr package pin table." : null);
       if (data?.reason) evidence.append(node("p", "dte-notice", data.reason));

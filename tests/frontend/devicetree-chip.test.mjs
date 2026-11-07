@@ -203,6 +203,27 @@ test("DTS GPIO slots are distinguished from package pin evidence without extra d
   app.dispose();
 });
 
+test("automatic revision evidence distinguishes defaults from compatible requests and clears on target changes", async () => {
+  let revision = {requested: null, effective: "0.14.0", match: "default"};
+  const app = harness({panel: true, api: async (_url, _options, response) => {
+    const value = response(); value.result.selection = {revision, board_overlays: revision ? ["/board/revision.overlay"] : []}; return value;
+  }});
+  app.render(); await settle();
+  const notice = descendants(app.root).find((item) => item.className?.includes("dte-chip-revision"));
+  assert.equal(notice.hidden, false); assert.equal(notice.textContent, "Board revision 0.14.0 selected automatically.");
+  assert.equal(app.calls.length, 1);
+  assert.match(app.root.textContent, /Board revision overlays: \/board\/revision.overlay/);
+  revision = {requested: "0.8.0", effective: "0.7.0", match: "compatible"};
+  app.state.data.id = "compatible-context"; app.render(); await settle();
+  assert.equal(notice.textContent, "Board revision 0.7.0 selected for requested revision 0.8.0.");
+  revision = {requested: "0.7.0", effective: "0.7.0", match: "exact"};
+  app.state.data.id = "exact-context"; app.render(); await settle();
+  assert.equal(notice.textContent, "Board revision 0.7.0.");
+  revision = null; app.state.data.id = "unrevisioned-context"; app.render(); await settle();
+  assert.equal(notice.hidden, true); assert.equal(notice.textContent, "");
+  assert.doesNotMatch(app.root.textContent, /revision.overlay/); app.dispose();
+});
+
 test("changing from GPIO slots to a package table refreshes the inventory labels and preserves pin focus", async () => {
   let inventory = "gpio-slots";
   const app = harness({panel: true, api: async (_url, _options, response) => {

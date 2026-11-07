@@ -25,6 +25,7 @@ from .configurations import ConfigurationWorkflow
 from .default_overlay import project_default_overlay
 from .project_lifecycle import ProjectLifecycle
 from .templates import template_catalog
+from .revision_evidence import snapshot_revision
 
 
 def _locked(method):
@@ -242,7 +243,8 @@ class CreatorService(ConfigurationWorkflow, ProjectLifecycle, BuildWorkflow):
                 "note": "Confirmed by configuring an identical temporary sample copy with this target."}
         else:
             plan["overlay_usage"] = overlay_usage(plan["profile"], plan["destination"], files=plan["files"],
-                                                   default_overlay=plan.get("default_overlay"))
+                                                   default_overlay=plan.get("default_overlay"),
+                                                   revision_resolution=snapshot_revision(plan["profile"], snapshot))
             plan["overlay_usage"]["evidence"] = {"kind": "creation", "note": "Expected selection; Configure confirms the actual inputs."}
         return self._remember("create", plan, environment)
 

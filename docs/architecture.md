@@ -22,6 +22,10 @@ Exact CPU/core and nested-variant resolution shares pure metadata helpers in
 filesystem guards and tooling ownership. Automatic discovery is recorded in
 [ADR 0024](decisions/0024-chip-pin-workspace.md); new-overlay publication and inclusion
 boundaries are recorded in [ADR 0025](decisions/0025-new-overlay-save-and-project-inclusion.md).
+`core/board_revisions.py` shares pure revision metadata/selection semantics between
+Projects and Device Tree Editor. Requested targets remain unchanged; effective revision
+evidence drives automatic overlay selection and guarded board/revision/application
+composition. See [ADR 0026](decisions/0026-automatic-board-revisions.md).
 Source/package evidence determines support; unavailable actions explain their reason.
 Broader peripherals, composition and TinyML experiments remain planned.
 

@@ -17,6 +17,10 @@ recovery. First Save safely creates a missing overlay and includes it in the sel
 configuration when needed. Sensor/module placement and
 creation workflows have been removed; existing saved declarations remain intact. See the
 [automatic chip support handoff](docs/device-tree-editor-automatic-chip-support-handoff.md).
+Standard board revisions are selected automatically from Zephyr metadata, including
+their board overlays and revision-specific application-overlay selection. The editor
+shows the resolved revision; default and declared older revisions need no extra setup.
+See the [board revision handoff](docs/device-tree-editor-board-revisions-handoff.md).
 TinyML model/experiment analysis also remains planned.
 
 ## Start

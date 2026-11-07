@@ -37,6 +37,9 @@ Automatic chip loading, old-workflow removal and GPIO/UART/I2C/SPI activation in
 missing-overlay drafts and first Save. The subsequent request expands STM32/Nordic
 from selected Zephyr DTS, bindings and pin tables rather than manual chip entries; see
 the [automatic chip support handoff](device-tree-editor-automatic-chip-support-handoff.md).
+Automatic standard board revision selection and revision-overlay composition are added
+in the [board revision handoff](device-tree-editor-board-revisions-handoff.md), including
+the nRF9160 DK/nRF9161 DK default and declared older targets.
 Additional source formats, routing/ownership models and the other three vendor adapters
 remain bounded by observed evidence. The five-vendor matrix remains open. Historical stage checks remain below.
 

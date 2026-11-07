@@ -15,6 +15,7 @@ import yaml
 from ...core.hardware_metadata import (MetadataError, UniqueHardwareLoader,
                                       board_qualifiers, parse_hardware_metadata,
                                       soc_entries as _soc_entries)
+from ...core.board_revisions import parse_board_revisions as _revisions
 from .metadata import read_regular
 
 
@@ -180,34 +181,6 @@ def _read_socs(roots, result, cancel):
             _diagnostic(result, "duplicate-cpucluster", f"SoC {target['name']} repeats CPU clusters in an extension.", extension["source_files"][0])
         target["cpuclusters"] = list(dict.fromkeys(target["cpuclusters"] + extension["cpuclusters"]))
     return records
-
-
-def _revisions(value):
-    if value is None:
-        return [], None, None, False
-    _mapping(value, {"format", "default", "exact", "revisions"}, "Revision")
-    fmt = value.get("format")
-    if fmt not in {"major.minor.patch", "letter", "number", "custom"}:
-        raise MetadataError("Unsupported revision format.")
-    exact = value.get("exact", False)
-    if not isinstance(exact, bool):
-        raise MetadataError("Revision exact must be a boolean.")
-    revisions = []
-    for revision in _sequence(value.get("revisions", []), "Revisions"):
-        _mapping(revision, {"name"}, "Revision name")
-        name = revision.get("name")
-        revisions.append("" if name == "" and fmt == "custom" else _name(name, "Revision"))
-    default = value.get("default")
-    if default is not None and not (fmt == "custom" and default == ""):
-        _name(default, "Default revision")
-    if fmt != "custom" and (not revisions or default not in revisions):
-        raise MetadataError("Revision metadata needs a declared default and revision list.")
-    patterns = {"major.minor.patch": r"\d+\.\d+\.\d+", "letter": r"[A-Z]", "number": r"\d+"}
-    if fmt in patterns and any(not re.fullmatch(patterns[fmt], name) for name in revisions):
-        raise MetadataError("Revision names do not match the declared format.")
-    if len(set(revisions)) != len(revisions):
-        raise MetadataError("Revision names are duplicated.")
-    return revisions, default, fmt, exact
 
 
 def _board_record(data, path, origin, systems):

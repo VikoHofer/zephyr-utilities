@@ -64,8 +64,26 @@ class ChipWorkspaceTests(unittest.TestCase):
         self.assertEqual(result['result']['coverage'], 'board+selected-overlay')
         self.assertEqual(result['result']['draft_id'], self.draft['id'])
         self.assertEqual(result['result']['draft_revision'], 0)
+        self.assertEqual(result['result']['selection']['board_source'], str(self.board_file))
         self.assertEqual(self.app.context.jobs.get(started['job_id'])['metadata']['kind'], 'chip-discovery')
         self.assertEqual((self.overlay.read_bytes(), self.board_file.read_bytes()), before)
+
+    def test_resolved_revision_evidence_reaches_the_automatic_chip_result(self):
+        original = self.run.side_effect
+        revision = {'requested': None, 'effective': '0.14.0', 'default': '0.14.0',
+                    'format': 'major.minor.patch', 'match': 'default', 'exact': False}
+
+        def selected(sources, draft=None):
+            sources.selection.update(revision=revision, board_overlays=['/fixture/revision.overlay'])
+            return original(sources, draft)
+
+        self.run.side_effect = selected
+        started = self.chip.start(self.guard())
+        self.assertEqual(self.wait(started)['status'], 'completed')
+        result = self.result(started)['result']
+        self.assertEqual(result['selection']['revision'], revision)
+        self.assertEqual(result['selection']['board_overlays'], ['/fixture/revision.overlay'])
+        self.assertEqual(result['target'], self.context['target'])
 
     def test_identical_observation_is_reused_but_changed_source_is_not_cached(self):
         first = self.chip.start(self.guard())

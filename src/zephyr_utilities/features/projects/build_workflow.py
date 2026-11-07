@@ -19,6 +19,7 @@ from .overlay_usage import overlay_usage
 from .probing import check_cancel
 from .records import identifier, now
 from .sample_compatibility import inspect_sample_requirements
+from .revision_evidence import saved_revision
 
 
 def _workflow_locked(method):
@@ -237,7 +238,8 @@ class BuildWorkflow:
             except (OSError, ValueError):
                 pass
         plan["overlay_usage"] = overlay_usage(profile, source, files=overlay_files,
-                                               default_overlay=selected_overlay)
+                                               default_overlay=selected_overlay,
+                                               revision_resolution=saved_revision(self.environments, profile))
         plan["overlay_usage"]["evidence"] = {"kind": "build-preview", "configuration_name": configuration["name"],
             "note": "Expected from the current application files and selection. This Configure/Build will confirm the actual inputs."}
         if project.get("sample"):

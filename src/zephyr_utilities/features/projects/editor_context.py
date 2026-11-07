@@ -12,6 +12,7 @@ from .fragments import BUILD_MARKERS, EXCLUDED_DIRS, EXCLUDED_PREFIXES, fragment
 from .overlay_usage import overlay_usage
 from .overlay_creation import draft_destination
 from .records import identifier
+from .revision_evidence import captured_revision
 
 
 def _fingerprint(value):
@@ -220,9 +221,18 @@ class ProjectsEditorContextProvider:
             diagnostics = []
             if application["availability"]["state"] != "available":
                 diagnostics.append(_diagnostic("application-unavailable", application["availability"]["reason"]))
+            environment = self._environment(workspace, profile, diagnostics)
+            revision_resolution = captured_revision(environment.get("board"), board_revision or None)
+            if revision_resolution is not None and not revision_resolution["supported"]:
+                diagnostics.append(_diagnostic("board-revision-unavailable", revision_resolution["reason"]))
+            target_evidence = {"requested": target, "board_id": profile.get("board_id"), "board": board,
+                               "revision": board_revision or None, "qualifiers": qualifiers}
+            if revision_resolution is not None:
+                target_evidence["revision_resolution"] = revision_resolution
             default = deepcopy(project_default_overlay(project, profile))
             files, fingerprints = self._current_sources(reader, application, diagnostics)
-            predicted = overlay_usage(profile, application["path"], files=files, default_overlay=default)
+            predicted = overlay_usage(profile, application["path"], files=files, default_overlay=default,
+                                      revision_resolution=revision_resolution)
             provenance = {"configuration_id": configuration_id, "configuration_revision": revision}
             predicted["provenance"] = {**provenance, "kind": "current-source-prediction"}
             attempts, errors = self.creator.store._items("attempts", 2000)
@@ -252,11 +262,11 @@ class ProjectsEditorContextProvider:
                       "configuration": {"id": configuration_id, "name": "Original" if configuration_id is None else selected["name"],
                                         "revision": revision, "profile_version": profile.get("schema_version", 1),
                                         "profile_fingerprint": _fingerprint(profile)},
-                      "target": {"requested": target, "board_id": profile.get("board_id"), "board": board,
-                                 "revision": board_revision or None, "qualifiers": qualifiers},
-                      "environment": self._environment(workspace, profile, diagnostics), "fragments": fragments,
+                      "target": target_evidence,
+                      "environment": environment, "fragments": fragments,
                       "default_overlay": default, "roots": self._roots(profile, diagnostics),
-                      "overlay_creation": draft_destination(profile, application["path"], files, default),
+                      "overlay_creation": draft_destination(profile, application["path"], files, default,
+                                                              revision_resolution=revision_resolution),
                       "input_evidence": {"predicted": [predicted], "captured": captured, "coverage": "partial",
                                          "source_fingerprints": fingerprints}, "diagnostics": diagnostics}
             result["board"] = deepcopy(result["environment"].get("board"))
