@@ -1,0 +1,55 @@
+<section class="tinyml-root" data-tinyml-root>
+  <div data-tinyml-chooser>
+  <header class="tinyml-heading">
+    <p class="tinyml-caption">TINYML</p>
+    <h1 tabindex="-1" data-tinyml-heading>Create an inference demo</h1>
+    <p>Choose a local demo, board target and SDK. Continue to Projects to review the files, create an application and build it.</p>
+    <p><a href="#/tinyml/draw">Open the digit drawing and UART viewer</a></p>
+  </header>
+  <section class="tinyml-panel" aria-labelledby="tinyml-catalogue-title">
+    <div class="tinyml-panel-heading">
+      <h2 id="tinyml-catalogue-title">Local demo</h2>
+      <button type="button" data-tinyml-refresh>Refresh demos</button>
+    </div>
+    <p class="tinyml-muted" role="status" aria-live="polite" data-tinyml-load-status></p>
+    <p class="tinyml-error" role="alert" data-tinyml-load-error hidden></p>
+    <div class="tinyml-diagnostics" data-tinyml-catalogue-diagnostics></div>
+    <p><a href="#/projects/environment" data-tinyml-environment>Analyze workspace in Projects</a></p>
+    <label class="tinyml-field">Demo
+      <select data-tinyml-demo aria-describedby="tinyml-demo-description"></select>
+    </label>
+    <h3 data-tinyml-demo-title></h3>
+    <p class="tinyml-muted" data-tinyml-framework></p>
+    <p id="tinyml-demo-description" data-tinyml-description></p>
+    <p class="tinyml-availability" data-tinyml-availability></p>
+    <ul class="tinyml-requirements" data-tinyml-requirements></ul>
+    <div class="tinyml-diagnostics" data-tinyml-demo-diagnostics></div>
+  </section>
+  <section class="tinyml-panel" aria-labelledby="tinyml-target-title">
+    <h2 id="tinyml-target-title">Choose a build target</h2>
+    <p class="tinyml-muted">Targets come from the selected workspace. Configure and Build in Projects check this demo with your selection.</p>
+    <div class="tinyml-fields">
+      <label class="tinyml-field tinyml-search">Search boards
+        <input type="search" data-tinyml-search placeholder="Board, chip, vendor or target" autocomplete="off">
+      </label>
+      <label class="tinyml-field">Board
+        <select data-tinyml-board aria-describedby="tinyml-board-count"></select>
+        <span class="tinyml-muted" id="tinyml-board-count" data-tinyml-board-count></span>
+      </label>
+      <label class="tinyml-field">Exact target
+        <select data-tinyml-target></select>
+      </label>
+      <label class="tinyml-field">Zephyr SDK
+        <select data-tinyml-sdk></select>
+      </label>
+    </div>
+    <div class="tinyml-next">
+      <p class="tinyml-muted" data-tinyml-selection-note></p>
+      <button type="button" class="tinyml-primary" data-tinyml-continue>Continue in Project Creator</button>
+      <p role="status" aria-live="polite" data-tinyml-handoff-status></p>
+      <p class="tinyml-error" role="alert" data-tinyml-handoff-error hidden></p>
+    </div>
+  </section>
+  </div>
+  <div data-tinyml-drawing hidden></div>
+</section>

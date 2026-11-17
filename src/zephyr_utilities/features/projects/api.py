@@ -4,6 +4,7 @@ from ...core.http import Response
 from .service import ProjectsService
 from .creator import CreatorService
 from .custom_boards import CustomBoardsService
+from .demo_handoffs import DemoHandoffService
 
 
 def register(router, context):
@@ -13,6 +14,12 @@ def register(router, context):
     router.add("POST", "/api/projects/analyze", lambda request: Response(service.start(request.body), status=202))
     creator = CreatorService(context, service.store)
     context.services["project_creator"] = creator
+    demos = DemoHandoffService(context, creator)
+    context.services["project_demo_handoffs"] = demos
+    router.add("POST", "/api/projects/demo-catalog", lambda request: demos.catalog(request.body))
+    router.add("POST", "/api/projects/creation-handoffs", lambda request: demos.create(request.body))
+    router.add("GET", "/api/projects/creation-handoffs/:id",
+               lambda request: demos.resolve(request.params["id"], request.query_value("workspace")))
     boards = CustomBoardsService(context, service.store, creator)
     context.services["custom_boards"] = boards
     router.add("GET", "/api/projects/custom-boards", lambda request: boards.current())

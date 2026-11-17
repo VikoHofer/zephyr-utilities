@@ -295,6 +295,12 @@ trusted built-in templates and the curated local samples described below are acc
 
 ## Clone a local sample
 
+TinyML can preselect MNIST, an exact board target and an installed SDK, then open
+this existing creation form. An unfinished form offers **Keep current draft** and
+**Use demo selection**; accepting retains the name/destination and invalidates any
+old review or compatibility result. Token expiry, restart or changed evidence retains
+the form and offers a return to TinyML. See the [chooser workflow](tinyml-mnist-demo.md).
+
 Choose **Local Zephyr sample** to inspect the supported samples in the selected
 checkout. **Refresh samples** reads current files without executing CMake, downloading
 anything or starting a build. Opening Applications and polling jobs do not scan samples.
@@ -304,8 +310,19 @@ anything or starting a build. Opening Applications and polling jobs do not scan 
 | Hello World | Console output; no application-specific peripheral alias |
 | Blinky | GPIO LED with a `led0` alias; reviewed GPIO8 RGB adaptation for official ESP32-C3-DevKitC/DevKitM targets |
 | Button | Button/input hardware; the local source determines whether it uses input KEY events or the older `sw0` GPIO interface |
+| MNIST digit recognition | Bundled Utilities template with an independently installed model/image asset pack and TensorFlow Lite Micro framework; serial shell, no sensors |
 
-These are curated source paths, not bundled sample copies. Availability follows the
+The [MNIST adapter](tinyml-mnist-demo.md) is a separate C++/framework path. It combines
+the source template packaged with Utilities and explicitly installed runtime assets,
+converts model/image binaries to exact textual C initializers, preserves their identity
+and attribution, and uses the normal board/SDK selection, target overlay, Preview/Create
+and Configure/Build workflow. Creation and builds never read another application.
+The managed TensorFlow Lite Micro installation remains a fingerprinted framework
+dependency after creation. Trained assets and framework files stay outside Git.
+The following classic C adapter restrictions and complete-tree copy behavior apply
+to Hello World, Blinky and Button.
+
+The three classic samples use curated checkout paths. Their availability follows the
 selected checkout. Missing samples remain visible; unsupported layouts show the reason
 and cannot be previewed. This first adapter accepts only a simple CMake application
 whose source files stay inside the copied tree. It rejects additional build scripts,
@@ -371,7 +388,7 @@ selection for subsequent explicit build choices.
 | --- | --- |
 | Host | Linux, with atomic no-replacement directory publication supported by the filesystem |
 | Workspace | Existing local west workspace with a resolved manifest and a nonempty resolved module list |
-| Template | Minimal C, Minimal C++, or curated local Hello World/Blinky/Button copy; one image |
+| Template | Minimal C, Minimal C++, curated local Hello World/Blinky/Button, or bundled MNIST runtime; one image |
 | Target | Exact discovered hardware-model-v2 board target, including declared revisions and qualifiers |
 | Toolchain | Explicit discovered Zephyr SDK with installed GNU compiler components |
 | Local tools | Selected Python environment, CMake and Ninja; discovered dtc when available |

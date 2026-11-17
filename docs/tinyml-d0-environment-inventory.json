@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "observed_on": "2026-11-10",
+  "purpose": "D0 read-only planning inventory; no selected compiler or demo build evidence",
+  "path_policy": "Host paths and installation IDs omitted; regenerate from the selected Projects environment.",
+  "zephyr": {
+    "version": "4.4.2",
+    "commit": "fbab2f598d545ad043ce50a75fefa4550b053f0b",
+    "dirty": false,
+    "recommended_sdk": "1.0.1"
+  },
+  "environment_status": "complete",
+  "sdk_selection": {
+    "requested_variant": null,
+    "requested_sdk_path": null,
+    "recommended_version": "1.0.1",
+    "effective_compiler": null,
+    "status": "not-configured"
+  },
+  "sdk_candidates": [
+    {
+      "metadata_version": "1.0.1",
+      "status": "discovered",
+      "relevant_gnu_components": [
+        "arm-zephyr-eabi",
+        "x86_64-zephyr-elf"
+      ],
+      "relevant_host_tools": [
+        "qemu-system-arm",
+        "qemu-system-i386",
+        "qemu-system-x86_64"
+      ],
+      "compiler_executed": false
+    }
+  ],
+  "declared_targets": [
+    {
+      "board": "qemu_x86",
+      "targets": [
+        "qemu_x86/atom",
+        "qemu_x86/atom/nokpti",
+        "qemu_x86/atom/nommu",
+        "qemu_x86/atom/nopae",
+        "qemu_x86/atom/virt",
+        "qemu_x86/atom/xip"
+      ]
+    },
+    {
+      "board": "qemu_x86_64",
+      "targets": [
+        "qemu_x86_64/atom",
+        "qemu_x86_64/atom/nokpti"
+      ]
+    },
+    {
+      "board": "qemu_cortex_m3",
+      "targets": [
+        "qemu_cortex_m3/ti_lm3s6965"
+      ]
+    },
+    {
+      "board": "nrf52840dk",
+      "targets": [
+        "nrf52840dk/nrf52840",
+        "nrf52840dk/nrf52811"
+      ]
+    },
+    {
+      "board": "nucleo_f446re",
+      "targets": [
+        "nucleo_f446re/stm32f446xx"
+      ]
+    },
+    {
+      "board": "mps3",
+      "targets": [
+        "mps3/corstone300",
+        "mps3/corstone300/an547",
+        "mps3/corstone300/an547/ns",
+        "mps3/corstone300/an552",
+        "mps3/corstone300/an552/ns",
+        "mps3/corstone300/fvp",
+        "mps3/corstone300/fvp/ns",
+        "mps3/corstone310",
+        "mps3/corstone310/an555",
+        "mps3/corstone310/an555/ns",
+        "mps3/corstone310/fvp",
+        "mps3/corstone310/fvp/ns"
+      ]
+    }
+  ],
+  "module_observations": [
+    {
+      "name": "cmsis",
+      "status": "discovered",
+      "active": true,
+      "revision": null,
+      "is_module": true
+    },
+    {
+      "name": "cmsis-dsp",
+      "status": "discovered",
+      "active": true,
+      "revision": null,
+      "is_module": true
+    },
+    {
+      "name": "cmsis-nn",
+      "status": "discovered",
+      "active": true,
+      "revision": null,
+      "is_module": true
+    },
+    {
+      "name": "cmsis_6",
+      "status": "discovered",
+      "active": true,
+      "revision": null,
+      "is_module": true
+    }
+  ],
+  "demo_checks": {
+    "configure": "not-checked",
+    "build": "not-checked",
+    "hardware": "not-checked"
+  },
+  "diagnostic_counts": {
+    "info": 9,
+    "warning": 0,
+    "error": 0
+  }
+}

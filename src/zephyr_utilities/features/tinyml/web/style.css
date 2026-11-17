@@ -1,0 +1,44 @@
+.tinyml-root {max-width:1080px;color:var(--app-text);padding-bottom:24px}
+.tinyml-root .tinyml-heading {margin-bottom:24px;max-width:800px}
+.tinyml-root .tinyml-caption {color:var(--app-brand);font-size:12px;font-weight:700;letter-spacing:.12em}
+.tinyml-root h1 {font-size:clamp(26px,4vw,36px);line-height:1.15;margin:8px 0 14px}
+.tinyml-root h2 {margin:0;font-size:20px}
+.tinyml-root h3 {margin:20px 0 6px;font-size:19px}
+.tinyml-root p {line-height:1.6;overflow-wrap:anywhere}
+.tinyml-root .tinyml-panel {padding:24px;margin:0 0 20px;background:var(--app-surface);border:1px solid var(--app-border);border-radius:14px}
+.tinyml-root .tinyml-panel-heading {display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.tinyml-root .tinyml-fields {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin-top:24px}
+.tinyml-root .tinyml-field {display:flex;flex-direction:column;gap:8px;min-width:0;font-weight:600}
+.tinyml-root .tinyml-field span {font-weight:400;font-size:12px}
+.tinyml-root .tinyml-search {grid-column:1/-1}
+.tinyml-root input,.tinyml-root select {width:100%;min-height:44px;padding:10px;border:1px solid var(--app-input-border);border-radius:6px;background:var(--app-surface);color:var(--app-text);font:inherit;font-weight:400}
+.tinyml-root button {min-height:42px;padding:10px 16px;border:1px solid var(--app-brand-border);border-radius:7px;background:var(--app-brand-soft);color:var(--app-brand-hover);font:inherit;font-weight:600;cursor:pointer}
+.tinyml-root button:hover {border-color:var(--app-brand)}
+.tinyml-root button[aria-disabled=true] {opacity:.65;cursor:default}
+.tinyml-root .tinyml-primary {background:var(--app-brand);color:var(--app-surface);border-color:var(--app-brand)}
+.tinyml-root .tinyml-primary:hover {background:var(--app-brand-hover)}
+.tinyml-root .tinyml-muted {color:var(--app-muted)}
+.tinyml-root .tinyml-error,.tinyml-root .tinyml-diagnostics p {color:var(--app-danger);background:var(--app-danger-soft);border:1px solid var(--app-danger-border);padding:12px;border-radius:7px}
+.tinyml-root .tinyml-availability {padding:12px;border-left:3px solid var(--app-blue);background:var(--app-blue-soft)}
+.tinyml-root .tinyml-availability[data-status=missing],.tinyml-root .tinyml-availability[data-status=unsupported] {border-color:var(--app-warning);background:var(--app-warning-soft)}
+.tinyml-root .tinyml-requirements {padding-left:22px;line-height:1.65}
+.tinyml-root .tinyml-requirements li+li {margin-top:6px}
+.tinyml-root .tinyml-next {border-top:1px solid var(--app-border-subtle);margin-top:24px;padding-top:12px}
+.tinyml-root a {color:var(--app-blue)}
+.tinyml-root [hidden] {display:none!important}
+.tinyml-root .tinyml-drawing-panel>p {margin:12px 0}
+.tinyml-root .tinyml-drawing-port-row {display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:end;margin:22px 0 12px}
+.tinyml-root .tinyml-drawing-layout {display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,240px);gap:28px;margin:26px 0}
+.tinyml-root .tinyml-drawing-layout h2,.tinyml-root .tinyml-drawing-preview-panel h3 {margin:0 0 16px}
+.tinyml-root .tinyml-drawing-canvas {border:2px solid var(--app-border);border-radius:6px}
+.tinyml-root .tinyml-drawing-canvas:focus-visible {outline:3px solid var(--app-blue);outline-offset:4px}
+.tinyml-root .tinyml-drawing-actions {display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}
+.tinyml-root .tinyml-drawing-result {border-top:1px solid var(--app-border-subtle);margin-top:24px;padding-top:24px}
+.tinyml-root .tinyml-drawing-prediction {font-size:clamp(28px,6vw,56px);font-weight:700;line-height:1.2;color:var(--app-brand);margin:18px 0}
+.tinyml-root .tinyml-drawing-scores {list-style:none;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 24px}
+.tinyml-root .tinyml-drawing-score-row {display:grid;grid-template-columns:16px minmax(0,1fr) 64px;gap:10px;align-items:center}
+.tinyml-root .tinyml-drawing-score-row meter {width:100%;accent-color:var(--app-brand)}
+.tinyml-root .tinyml-drawing-result details {margin-top:16px}
+.tinyml-root .tinyml-drawing-result pre {white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}
+@media(max-width:600px) {.tinyml-root .tinyml-panel {padding:18px}.tinyml-root .tinyml-fields {grid-template-columns:minmax(0,1fr)}.tinyml-root .tinyml-next button {width:100%}}
+@media(max-width:600px) {.tinyml-root .tinyml-drawing-layout,.tinyml-root .tinyml-drawing-port-row {grid-template-columns:minmax(0,1fr)}.tinyml-root .tinyml-drawing-scores {grid-template-columns:minmax(0,1fr)}}

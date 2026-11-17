@@ -1,0 +1,161 @@
+{
+  "descriptor": {
+    "schema_version": 1,
+    "demo_id": "tflm-sine",
+    "variant_id": "reference",
+    "framework_id": "tflm",
+    "title": "Sine Regression",
+    "task": "Fixed-input sine regression; synthetic contract metadata only.",
+    "adapter": {
+      "id": "tflm-sine-v1",
+      "version": 1
+    },
+    "source": {
+      "kind": "zephyr-sample",
+      "locator_id": "zephyr-tflm-hello-world",
+      "revision": "synthetic-checkout-revision",
+      "fingerprint": "2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    "runtime": {
+      "files": [
+        {
+          "path": "CMakeLists.txt",
+          "bytes": 16,
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        {
+          "path": "prj.conf",
+          "bytes": 16,
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        {
+          "path": "src/main.c",
+          "bytes": 16,
+          "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        },
+        {
+          "path": "src/main_functions.cpp",
+          "bytes": 16,
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        {
+          "path": "src/model.cpp",
+          "bytes": 16,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "path": "src/model.hpp",
+          "bytes": 16,
+          "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        },
+        {
+          "path": "LICENSES/Apache-2.0.txt",
+          "bytes": 16,
+          "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+        }
+      ],
+      "omitted": [
+        {
+          "path": "train/train_hello_world_model.ipynb",
+          "reason": "Training is outside the runtime-only copy."
+        },
+        {
+          "path": "images/model_architecture.png",
+          "reason": "Binary documentation asset is outside the textual runtime plan."
+        }
+      ]
+    },
+    "model": {
+      "format": "tflite-c-source",
+      "origin": "Synthetic textual model artifact identity; not actual upstream weights.",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "requirements": {
+      "modules": [
+        "tflite-micro"
+      ],
+      "kconfig": [
+        {
+          "symbol": "CONFIG_CPP",
+          "value": "y"
+        },
+        {
+          "symbol": "CONFIG_TENSORFLOW_LITE_MICRO",
+          "value": "y"
+        }
+      ],
+      "hardware": []
+    },
+    "licenses": [
+      {
+        "spdx": "Apache-2.0",
+        "path": "LICENSES/Apache-2.0.txt",
+        "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+      }
+    ],
+    "expected_output": [
+      "Print fixed input and predicted sine output pairs."
+    ]
+  },
+  "evidence": {
+    "schema_version": 1,
+    "identity": {
+      "schema_version": 1,
+      "workspace": "/synthetic/workspace",
+      "environment_fingerprint": "5555555555555555555555555555555555555555555555555555555555555555",
+      "descriptor_fingerprint": "470dfe9f34acd1fe420ee2d8080413a20b54cc6494ecf33e92826fafb9f6a2b2",
+      "source_fingerprint": "2222222222222222222222222222222222222222222222222222222222222222",
+      "model_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "demo_id": "tflm-sine",
+      "variant_id": "reference",
+      "adapter": {
+        "id": "tflm-sine-v1",
+        "version": 1
+      },
+      "target": {
+        "board_id": "synthetic board catalogue ID",
+        "requested": "qemu_x86",
+        "effective": "qemu_x86",
+        "revision": null
+      },
+      "sdk": {
+        "id": "synthetic SDK catalogue ID",
+        "fingerprint": "6666666666666666666666666666666666666666666666666666666666666666",
+        "toolchain_fingerprint": "7777777777777777777777777777777777777777777777777777777777777777"
+      },
+      "modules": [
+        {
+          "id": "tflite-micro",
+          "path": null,
+          "revision": null,
+          "fingerprint": null,
+          "status": "missing"
+        }
+      ],
+      "roots": [
+        {
+          "kind": "boards",
+          "path": "/synthetic/workspace/custom-boards",
+          "fingerprint": "9999999999999999999999999999999999999999999999999999999999999999"
+        }
+      ],
+      "configuration": {
+        "kconfig_fingerprint": null,
+        "overlays_fingerprint": null
+      }
+    },
+    "key": "d1407fcea19ee335c4729071cb94143501063e69271ac41efa8e7f01d2b136cf",
+    "availability": "missing-module",
+    "configure": {
+      "state": "not-checked",
+      "evidence": null
+    },
+    "build": {
+      "state": "not-checked",
+      "evidence": null
+    },
+    "diagnostics": [
+      "The synthetic framework module is not installed."
+    ]
+  }
+}

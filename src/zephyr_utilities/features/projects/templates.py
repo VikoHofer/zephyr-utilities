@@ -14,7 +14,7 @@ _TEMPLATES = {
     },
     "local-sample": {
         "id": "local-sample", "version": 1, "title": "Local Zephyr sample", "language": "C",
-        "description": "Copy a supported sample from the selected Zephyr checkout.",
+        "description": "Copy a reviewed local Zephyr sample or MNIST demo for your selected target.",
     },
 }
 

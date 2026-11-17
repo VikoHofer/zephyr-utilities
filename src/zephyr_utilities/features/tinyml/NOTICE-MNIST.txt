@@ -1,0 +1,10 @@
+MNIST drawing tools
+
+mnist_protocol.py is adapted from applications/mnist_shell/tools/mnist_uart.py,
+which carries SPDX-License-Identifier: Apache-2.0. The original license is supplied
+in LICENSE-MNIST.txt. The crop, LANCZOS resize, mass-centering and upload wire format
+retain the original behavior. Utilities adds bounded and cancellable transactions,
+strict response parsing, neutral board messages and opened-device identity checks.
+
+The original application, trained model and test images are not bundled here.
+Workspace tools are never dynamically imported or executed by this adapter.

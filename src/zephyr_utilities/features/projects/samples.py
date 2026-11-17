@@ -342,7 +342,7 @@ def _capture(snapshot, sample_id, cancel=None):
     return contents, provenance
 
 
-def sample_catalog(snapshot):
+def sample_catalog(snapshot, *, mnist_assets_root=None):
     """Inspect only the curated local paths; unavailable copies remain explainable."""
     try:
         zephyr = _zephyr(snapshot)
@@ -361,6 +361,19 @@ def sample_catalog(snapshot):
         except (OSError, ValueError) as exc:
             entry.update(status="unsupported", diagnostics=[str(exc)])
         samples.append(entry)
+    from .mnist_sample import DESCRIPTION, SAMPLE_ID, SOURCE_PATH, TITLE
+    entry = {"id": SAMPLE_ID, "title": TITLE, "description": DESCRIPTION, "path": SOURCE_PATH,
+             "status": "available", "requirements": [], "diagnostics": [], "fingerprint": None, "file_count": 0}
+    try:
+        preview = preview_sample(snapshot, SAMPLE_ID, {"cwd": "", "display_configure": "", "display_build": ""},
+                                 mnist_assets_root=mnist_assets_root)
+        provenance = preview["provenance"]
+        entry.update(requirements=provenance["requirements"], fingerprint=provenance["fingerprint"], file_count=len(preview["files"]))
+    except FileNotFoundError as exc:
+        entry.update(status="missing", diagnostics=[f"A required local MNIST runtime or firmware dependency is missing: {exc.filename or exc}"])
+    except (OSError, ValueError, yaml.YAMLError, UnicodeError) as exc:
+        entry.update(status="unsupported", diagnostics=[str(exc)])
+    samples.append(entry)
     return {"zephyr": zephyr, "samples": samples, "diagnostics": []}
 
 
@@ -377,7 +390,8 @@ def _adaptation_input(zephyr, relative):
     return content, {"directory_identity": identity}
 
 
-def preview_sample(snapshot, sample_id, recipe, *, profile=None, cancel=None, provenance_version=None):
+def preview_sample(snapshot, sample_id, recipe, *, profile=None, cancel=None, provenance_version=None,
+                   mnist_assets_root=None, name=None):
     """Return copied bytes and a standalone guide without running local tools."""
     if provenance_version is not None and (type(provenance_version) is not int or provenance_version not in {1, 2, 3}):
         raise ValueError("Unsupported local sample provenance schema. Preview again.")
@@ -385,6 +399,11 @@ def preview_sample(snapshot, sample_id, recipe, *, profile=None, cancel=None, pr
         profile = None
     if provenance_version == 3 and not isinstance(profile, dict):
         raise ValueError("A default sample overlay requires the selected board profile.")
+    if sample_id == "tinyml/mnist-shell":
+        from .mnist_sample import preview_mnist
+        if provenance_version == 2:
+            raise ValueError("Unsupported MNIST provenance schema. Preview again.")
+        return preview_mnist(snapshot, recipe, profile=profile, cancel=cancel, assets_root=mnist_assets_root, name=name)
     contents, provenance = _capture(snapshot, sample_id, cancel)
     contents, provenance = adapt_blinky(contents, provenance, profile,
                                        lambda path: _adaptation_input(provenance["zephyr"], path), cancel=cancel)
@@ -469,9 +488,14 @@ def validate_sample_plan(plan, cancel=None):
         raise ValueError("The local sample provenance is missing. Preview again.")
     if provenance.get("schema_version") not in {1, 2, 3}:
         raise ValueError("Unsupported local sample provenance schema. Preview again.")
+    mnist = provenance.get("id") == "tinyml/mnist-shell"
+    if mnist and provenance.get("adapter_version") != 2:
+        raise ValueError("This MNIST preview predates the independent template. Refresh samples and preview again.")
     actual = preview_sample({"zephyr": plan["profile"]["zephyr"]}, provenance.get("id"), plan["recipe"],
                             profile=plan["profile"] if provenance["schema_version"] in {2, 3} else None,
-                            cancel=cancel, provenance_version=provenance["schema_version"])
+                            cancel=cancel, provenance_version=provenance["schema_version"],
+                            mnist_assets_root=provenance.get("assets_root") if mnist else None,
+                            name=provenance.get("application_name") if mnist else None)
     if actual["provenance"] != provenance or actual["files"] != plan.get("files"):
         raise ValueError("The local sample changed after preview. Refresh the sample list and preview again.")
     return provenance

@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "demo_id": "emlearn-xor",
+  "variant_id": "loadable-trees",
+  "framework_id": "emlearn",
+  "title": "XOR Classifier",
+  "task": "Planned fixed-input hand-constructed XOR tree; seed not admitted.",
+  "adapter": {
+    "id": "emlearn-xor-v1",
+    "version": 1
+  },
+  "source": {
+    "kind": "bundled-seed",
+    "locator_id": "synthetic-emlearn-xor",
+    "revision": null,
+    "fingerprint": null
+  },
+  "runtime": {
+    "files": [
+      {
+        "path": "README.md",
+        "bytes": 16,
+        "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+      },
+      {
+        "path": "LICENSES/MIT.txt",
+        "bytes": 16,
+        "sha256": "4444444444444444444444444444444444444444444444444444444444444444"
+      }
+    ],
+    "omitted": []
+  },
+  "model": {
+    "format": "emlearn-trees-c-source",
+    "origin": "Planned hand-constructed EmlTrees seed. Upstream emlearn 0.23.2 test/test_trees.c at 3a4053a60e53d79d42b9d359eba72cd5c07e4e6b is reference evidence only. Bundled seed bytes are not admitted.",
+    "sha256": null
+  },
+  "requirements": {
+    "modules": [
+      "emlearn"
+    ],
+    "kconfig": [
+      {
+        "symbol": "CONFIG_EMLEARN",
+        "value": "y"
+      }
+    ],
+    "hardware": []
+  },
+  "licenses": [
+    {
+      "spdx": "MIT",
+      "path": "LICENSES/MIT.txt",
+      "sha256": "4444444444444444444444444444444444444444444444444444444444444444"
+    }
+  ],
+  "expected_output": [
+    "Four fixed XOR inputs produce 0, 1, 1, 0 after future seed admission."
+  ]
+}

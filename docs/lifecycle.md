@@ -24,7 +24,7 @@ preferences and transient observations. Planned features do not create user data
 | Workspace selection | One selected path, replaced by the workspace picker | No accumulating workspace registry |
 | Editor peripheral and interrupt GPIO observations | Bounded, expiring observations are invalidated by source/context changes; each accepted edit uses the canonical draft history and reviewed Save | Interrupt GPIO forms create no provider, consumer, separate source model or persistent schema; shared provider removal uses D10 reviews |
 | Editor acknowledged drafts and saved overlay changes | Existing draft recovery and Undo/Redo retain source/history; reviewed Save publishes the selected overlay | Undo after Save is another unsaved draft; interrupt GPIO edits use these existing boundaries |
-| TinyML experiments | Planned; no implemented persistent entities | Lifecycle must accompany future creation features |
+| Retired TinyML experiment data | Existing `.features/tinyml` files remain inert; removal of the old implementation does not delete saved data or imported originals | The demo creator uses Projects records; it does not reinterpret or automatically migrate old datasets, annotations or models |
 
 No automatic scan removes saved evidence or firmware inputs. Metadata removal and disk
 cleanup have different scopes and their controls must describe that distinction.

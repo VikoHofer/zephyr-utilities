@@ -65,8 +65,33 @@ class PlatformTests(unittest.TestCase):
         self.assertEqual(catalog[-1]["frontend"]["module"], "/assets/demo/index.js")
         self.assertEqual(app.asset("/assets/demo/index.js").data, b"export function mount() {}")
         planned = [item for item in catalog if item["status"] == "planned"]
-        self.assertEqual({item["id"] for item in planned}, {"tinyml"})
-        self.assertTrue(all(item["frontend"] is None for item in planned))
+        self.assertEqual(planned, [])
+
+    def test_tinyml_demo_and_uart_views_have_assets_without_training_routes_or_services(self):
+        legacy = self.root / "data/.features/tinyml/datasets/retained.json"
+        legacy.parent.mkdir(parents=True)
+        legacy.write_bytes(b"Retired data must remain untouched, even if unreadable by the old tool.")
+        app = self.application()
+        self.assertEqual(legacy.read_bytes(), b"Retired data must remain untouched, even if unreadable by the old tool.")
+        catalog = app.router.dispatch(Request("GET", "/api/features")).data["features"]
+        tinyml = next(item for item in catalog if item["id"] == "tinyml")
+        self.assertEqual(tinyml["title"], "TinyML Demo Creator")
+        self.assertEqual(tinyml["status"], "available")
+        self.assertEqual(tinyml["entry_path"], "/#/tinyml/overview")
+        self.assertEqual(tinyml["frontend"], {"module": "/assets/tinyml/index.js", "template": "/assets/tinyml/view.html",
+                                              "stylesheet": "/assets/tinyml/style.css"})
+        self.assertEqual({entry["view"] for entry in tinyml["navigation"]}, {"overview", "draw"})
+        self.assertIn("tinyml_uart", app.context.services)
+        self.assertNotIn("tinyml", app.context.services)
+        for path in ("/api/tinyml/catalog", "/api/tinyml/capabilities"):
+            with self.subTest(path=path), self.assertRaises(FileNotFoundError):
+                app.router.dispatch(Request("GET", path))
+        with self.assertRaises(FileNotFoundError):
+            app.router.dispatch(Request("POST", "/api/tinyml/datasets/preview", body={}))
+        for path in ("/assets/tinyml/index.js", "/assets/tinyml/view.html", "/assets/tinyml/style.css"):
+            with self.subTest(path=path):
+                self.assertTrue(app.asset(path).data)
+        self.assertEqual(legacy.read_bytes(), b"Retired data must remain untouched, even if unreadable by the old tool.")
 
     def test_workspace_changes_future_operations_but_keeps_submitted_inputs(self):
         app = self.application(features=())

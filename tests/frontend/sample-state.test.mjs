@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {createCreatorSession, creatorBody, creatorTemplateLabel} from "../../src/zephyr_utilities/features/projects/web/creator-state.js";
-import {validateSampleCatalogue, readySample, selectedSample, sampleSelectionError} from "../../src/zephyr_utilities/features/projects/web/sample-state.js";
+import {validateSampleCatalogue, readySample, selectedSample, sampleSelectionError, sampleCheckSelection, currentSampleCompatibility} from "../../src/zephyr_utilities/features/projects/web/sample-state.js";
 
 const one = "/workspace/one";
 const two = "/workspace/two";
@@ -13,6 +13,8 @@ const templates = [
 ];
 const sample = (changes = {}) => ({id: "basic/blinky", title: "Blinky", description: "Blink an LED.", path: "samples/basic/blinky",
   status: "available", fingerprint: hash, file_count: 6, requirements: ["A GPIO LED with the led0 alias."], diagnostics: [], ...changes});
+const mnist = (changes = {}) => sample({id: "tinyml/mnist-shell", title: "MNIST shell", description: "Sensor-free digit recognition.",
+  path: "bundled:tinyml/mnist", requirements: ["A serial console, C++17 and the managed TFLM module."], ...changes});
 const catalogue = (path = one, entries = [sample()]) => ({workspace: path, zephyr: {path: `${path}/zephyr`, version: "4.4.2", revision: "revision"}, samples: entries, diagnostics: []});
 const snapshot = (path = one, fingerprint = "environment") => ({workspace: {path}, fingerprint, zephyr: {path: `${path}/zephyr`}, status: "complete", boards: [], sdks: []});
 const response = (path = one, fingerprint = "environment") => ({workspace: path, snapshot: snapshot(path, fingerprint), templates, projects: [], jobs: [], diagnostics: []});
@@ -253,4 +255,56 @@ test("sample discovery waits for a usable environment", async () => {
 test("recorded sample identity supplies the preview and application label", () => {
   assert.equal(creatorTemplateLabel({id: "local-sample", version: 1}, templates, sample()), "Blinky · local Zephyr sample");
   assert.equal(creatorTemplateLabel({id: "local-sample", version: 1}, [], {id: "basic/button"}), "basic/button · local Zephyr sample");
+  assert.equal(creatorTemplateLabel({id: "local-sample", version: 1}, templates, mnist()), "MNIST shell · bundled MNIST demo");
+});
+
+test("MNIST uses its bundled template identity alongside the three classic local samples", () => {
+  const entries = [sample({id: "hello_world", path: "samples/hello_world"}), sample(),
+    sample({id: "basic/button", path: "samples/basic/button"}), mnist()];
+  const value = catalogue(one, entries);
+  assert.equal(validateSampleCatalogue(value, one, `${one}/zephyr`), value);
+  for (const entry of [mnist({path: "samples/tinyml/mnist-shell"}), mnist({path: "../applications/mnist_shell"}),
+    mnist({path: "../../applications/mnist_shell"}),
+    mnist({path: "/different/mnist_shell"}), mnist({id: "tinyml/unreviewed"}), sample({path: "../applications/mnist_shell"})]) {
+    assert.throws(() => validateSampleCatalogue(catalogue(one, [entry]), one), /could not be verified/);
+  }
+});
+
+test("MNIST missing installed assets and framework diagnostics remain visible and prevent review", async () => {
+  for (const diagnostic of ["The MNIST runtime assets are not installed.", "The managed TensorFlow Lite Micro module is missing."]) {
+    const calls = [];
+    const app = harness(async (path) => {
+      calls.push(path);
+      return catalogue(one, [mnist({status: "missing", fingerprint: null, file_count: 0, diagnostics: [diagnostic]})]);
+    }, {form: form({sample_id: "tinyml/mnist-shell"})});
+    await app.session.loadSamples();
+    assert.equal(app.state.form.sample_id, "tinyml/mnist-shell");
+    assert.deepEqual(selectedSample(app.state).diagnostics, [diagnostic]);
+    assert.equal(readySample(app.state), null);
+    await app.session.preview();
+    assert.match(app.state.error, /Choose an available local sample/);
+    assert.deepEqual(calls, ["/api/projects/samples"]);
+    app.session.dispose();
+  }
+});
+
+test("MNIST uses the ordinary exact-target review and invalidates earlier compatibility", async () => {
+  const calls = [];
+  const app = harness(async (path, options) => {
+    calls.push([path, options?.body]);
+    return path.endsWith("samples") ? catalogue(one, [mnist()]) : {plan: {id: "review", workspace: one}};
+  }, {form: form({sample_id: "tinyml/mnist-shell", target: "nrf52840dk/nrf52840"})});
+  await app.session.loadSamples();
+  const selection = sampleCheckSelection(app.state);
+  app.state.sampleCheck = {verified: true, stale: false, selection, compatibility: {status: "compatible"}};
+  assert.equal(currentSampleCompatibility(app.state).status, "compatible");
+  app.session.changeField("target", "nucleo_f446re/stm32f446xx");
+  assert.equal(currentSampleCompatibility(app.state), null);
+  assert.equal(app.state.sampleCheck.stale, true);
+  await app.session.preview();
+  assert.equal(calls[1][1].sample_id, "tinyml/mnist-shell");
+  assert.equal(calls[1][1].sample_fingerprint, hash);
+  assert.equal(calls[1][1].target, "nucleo_f446re/stm32f446xx");
+  assert.equal(Object.hasOwn(calls[1][1], "sample_check_id"), false);
+  app.session.dispose();
 });

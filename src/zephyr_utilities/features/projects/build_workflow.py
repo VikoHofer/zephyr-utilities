@@ -30,6 +30,42 @@ def _workflow_locked(method):
     return call
 
 
+def _sample_source_files(project, *, cancel=None):
+    """Apply retained requirements only while their original runtime inputs still match."""
+    source = Path(project["path"])
+    if project["sample"]["id"] != "tinyml/mnist-shell":
+        try:
+            data = read_regular(source / "src/main.c", 1024 * 1024)
+        except (OSError, ValueError):
+            return None
+        expected = next((item["sha256"] for item in project["files"] if item["path"] == "src/main.c"), None)
+        if hashlib.sha256(data).hexdigest() != expected:
+            return None
+        return [{"path": "src/main.c", "content": data.decode("utf-8", errors="replace")}]
+
+    def runtime(path):
+        return (path in {"CMakeLists.txt", "prj.conf"} or path.startswith(("src/", "model/", "data/")) or
+                path.startswith("boards/") and path.endswith(".conf"))
+
+    try:
+        from .mnist_sample import validate_mnist_dependency
+        validate_mnist_dependency(project["sample"], cancel=cancel)
+        expected = {item["path"]: item["sha256"] for item in project["files"] if runtime(item["path"])}
+        actual = {item["path"]: item["sha256"] for item in source_inputs(source, cancel=cancel)["files"] if runtime(item["path"])}
+        if not expected or actual != expected:
+            return None
+        files, total = [], 0
+        for path, fingerprint in sorted(expected.items()):
+            data = read_regular(source / path, 1024 * 1024)
+            total += len(data)
+            if total > 4 * 1024 * 1024 or hashlib.sha256(data).hexdigest() != fingerprint:
+                return None
+            files.append({"path": path, "content": data.decode("utf-8")})
+        return files
+    except (OSError, ValueError, UnicodeError):
+        return None
+
+
 def _owned_path(project, record):
     owner = identifier(record.get("output_owner_id") or record.get("id"))
     value = record.get("path") if "path" in record else record.get("build_dir")
@@ -322,16 +358,10 @@ class BuildWorkflow:
                     options["reuse_identity"] = plan["reuse_guard"]["output_identity"]
                 if project.get("sample"):
                     def inspect_sample(build_dir):
-                        source = Path(project["path"]) / "src/main.c"
-                        try:
-                            data = read_regular(source, 1024 * 1024)
-                        except (OSError, ValueError):
-                            data = None
-                        expected = next((item["sha256"] for item in project["files"] if item["path"] == "src/main.c"), None)
-                        if data is None or hashlib.sha256(data).hexdigest() != expected:
-                            return {"status": "unknown", "message": "The sample source has changed; its original hardware requirements cannot be applied automatically.",
+                        files = _sample_source_files(project, cancel=cancel)
+                        if files is None:
+                            return {"status": "unknown", "message": "The sample runtime inputs have changed; its original hardware requirements cannot be applied automatically.",
                                     "details": ["Review the current application source and configuration before using it on hardware."]}
-                        files = [{"path": "src/main.c", "content": data.decode("utf-8", errors="replace")}]
                         return inspect_sample_requirements(plan["profile"], files, project["sample"]["id"],
                                                            build_dir, source_dir=project["path"], emit=report, cancel=cancel)
                     options["after_configure"] = inspect_sample

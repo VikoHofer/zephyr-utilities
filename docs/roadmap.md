@@ -2,8 +2,8 @@
 
 The application grows through feature modules inside one `zephyr-utils` launch. This
 roadmap describes intended work, not automatic task authorization or completed features.
-The user has identified the AI area as **TinyML model and experiment analysis** from the
-research master plan, not a general coding-assistant integration.
+The TinyML area is an **ML demo project creator using Project Creator**.
+The current direction replaces the former training, annotation and model-export workflow.
 
 ## Current platform
 
@@ -49,9 +49,12 @@ remain bounded by observed evidence. The five-vendor matrix remains open. Histor
 | Device Tree Editor (`devicetree`) | Automatic STM32/Nordic source discovery and capability-gated GPIO/UART/I2C/SPI editing with existing/new-overlay Save and recovery; sensor/module workflow removed | Extend understood routing/ownership formats; ESP32/K64/RP2040 adapters and the five-vendor acceptance matrix remain open |
 | Project Creator (`projects`) | Applications, creation/build and environment discovery available | Maintain the delivered everyday workflow and add focused public editor handoffs |
 | Build Inspector (`inspector`) | Advanced build, resolved-tree, current source and binding navigation available | Preserve available inspection; further depth deferred |
-| TinyML Experiments (`tinyml`) | Planned | Connect model/build/run identities and compare imported experiment measurements |
+| TinyML Demo Creator (`tinyml`) | MNIST chooser and drawing/UART inference available | Reuse Projects creation/build; send checked drawn images to running firmware through bounded UART jobs; additional recipes remain planned |
 
-Planned catalog entries are development boundaries. TinyML does not yet run inference or training.
+Planned entries are development boundaries. The TinyML replacement now has a
+frontend-only chooser and Projects-owned MNIST catalogue/preselection APIs. Its former
+training/data/export implementation and dependencies remain removed. Follow the
+[demo workflow](tinyml-mnist-demo.md) and [remaining plan](tinyml-demo-creator-plan.md).
 
 ## Memory Explorer
 
@@ -224,29 +227,30 @@ visual customization and device validation remain separate. See [custom boards](
 Later stages cover editing, advanced
 composition and environment migration. Build evidence does not establish hardware operation.
 
-## TinyML model and experiment analysis
+## TinyML demo project creator
 
-Start with durable data models and imports before device orchestration. Core identities
-should include experiment, run, model hash, build/ELF identity, framework version, board,
-dataset/sensor-replay identity, workload phase and measurement method.
+The [MNIST runtime integration](tinyml-mnist-demo.md) is delivered first through the
+existing Projects local sample picker. Users select an exact target/SDK, review a
+standalone runtime copy, and use normal compatibility checks and builds. Nucleo F446RE
+and nRF52840 DK have fresh Configure/Compile evidence; hardware execution remains
+unverified. The TinyML chooser and MNIST public handoff are also delivered; further
+recipes remain planned.
 
-Useful comparison groups from the research plan are `Base System`, `Inference`,
-`Retraining`, `Model Switch`, and `Multicore`. Compare like conditions, expose deliberate
-differences and retain repeated runs rather than only a summarized number.
+The current request replaces the training ground with a demo chooser that reuses the
+classic Project Creator. Follow the [implementation plan](tinyml-demo-creator-plan.md).
+The flow is **Target/SDK → Framework/demo → Requirements → Reviewed creation → Configure/Build**.
 
-| Comparison | Measurements to retain |
-| --- | --- |
-| Framework/model inference | F1 score, inference duration, static footprint, observed runtime memory |
-| Local retraining | Quality change, training duration, additional reservations and observed use |
-| Real-time interference | Response-time distribution, period/deadline, misses and measurement method |
-| Model replacement/cloud workflow | Model/update bytes, activation delay, interruption and temporary overlap |
-| Multicore/portability | Core/image mapping, shared memory, speedup, board/configuration differences |
+TinyML adds curated sample/framework choices, local module/source observations and
+specific target requirements. Projects continues to own the creation form, previews,
+file publication, application/configuration records, build jobs and outputs. Start with
+a sensor-free inference demo; add another framework and hardware-dependent examples only
+after their source/module/target acceptance gates pass. A framework is a filter over
+reviewed demo recipes, not an arbitrary replacement for another demo's runtime.
 
-Future framework adapters can expose arena statistics and model/operator information.
-They should not assume all runtimes support on-device training or expose identical
-allocators. Record instrumentation overhead and distinguish observed peaks from proven
-worst-case bounds. Coordinate with Memory Explorer through a public artifact/measurement
-contract rather than importing its private persistence implementation.
+The old dataset/annotation/training/export code, optional ML packages in the project
+manifest, dedicated tests and implementation documents are removed. Existing saved
+TinyML files remain inert. Broader thesis comparisons stay research context and do not
+authorize recreating a trainer, annotation editor, deployment manager or benchmark suite.
 
 ## Cross-feature work when needed
 

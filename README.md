@@ -24,7 +24,18 @@ See the [board revision handoff](docs/device-tree-editor-board-revisions-handoff
 The nRF54L15 DK CPUAPP target supports native-domain GPIO/UART/I2C/SPI activation,
 including clock-pin and dedicated-route constraints; see the
 [nRF54L handoff](docs/device-tree-editor-nrf54l-handoff.md) for verified scope and limits.
-TinyML model/experiment analysis also remains planned.
+The [TinyML Demo Creator](docs/tinyml-mnist-demo.md) lets you select the bundled MNIST
+demo, an exact board target and an installed SDK, then continue in the existing
+Project Creator with those inputs selected. Dirty creation forms offer **Keep current
+draft** / **Use demo selection**. Projects retains file review, creation and explicit
+Configure/Build. MNIST uses a Utilities-owned source template and a separately installed
+local model/framework asset pack; it does not copy or depend on another application.
+The former dataset, annotation, training and model-data export
+implementation has been removed; additional demo/framework recipes remain planned.
+**TinyML → Draw a digit** lets you select and open a UART port, then send a handwritten
+digit and receive the MNIST prediction, class scores and Invoke time. It works
+independently of the demo, board and SDK chooser and checks the returned image CRC. See the
+[drawing workflow](docs/tinyml-mnist-demo.md#draw-and-infer-over-uart).
 
 ## Start
 
@@ -73,6 +84,10 @@ Options:
   `$XDG_DATA_HOME/zephyr-utilities/memory`, or `~/.local/share/zephyr-utilities/memory`.
 - `--port 8765`: local HTTP port; `--port 0` selects an available port.
 - `--no-browser`: print the address without opening a browser.
+- `--install-mnist-assets PACK --tflm-source FRAMEWORK`: explicitly install a local
+  MNIST asset directory and pinned TensorFlow Lite Micro checkout into managed data
+  storage before starting the application. No download runs. See the
+  [asset setup](docs/tinyml-mnist-demo.md#install-the-offline-runtime-assets).
 
 Options work with the bare command or before/after the `memory` subcommand.
 Snapshot storage is independent of the working directory. If you previously used the
@@ -101,7 +116,7 @@ src/zephyr_utilities/
     devicetree/           # Overlay editing, guarded Save and draft recovery
     inspector/            # Advanced build, resolved tree and source inspection
     projects/            # Environment analysis, reviewed creation and explicit builds
-    tinyml/              # Planned model and experiment analysis
+    tinyml/              # MNIST chooser, drawing view and explicit UART inference
   web/                   # Shared browser shell and helpers
   memory/                # Compatibility imports for the original release
 ```
@@ -115,7 +130,9 @@ branches. See [architecture](docs/architecture.md) and [adding a feature](docs/a
 - Analyse the selected local Zephyr environment, browse declared board/chip targets and
   revisions, inspect installed SDKs, and retain environment observations with diagnostics.
 - Create a minimal C or C++ application inside the existing workspace from a reviewed file plan.
-- Clone local Hello World, Blinky or Button samples with supporting files, license evidence and source provenance.
+- Clone local Hello World, Blinky or Button samples, or create an MNIST inference
+  application from the bundled runtime template and installed assets, with supporting
+  files, license evidence and source provenance.
   Select an exact board target and installed GNU SDK, then explicitly configure or build
   in fresh or verified reusable outputs with saved commands, logs and attempt evidence.
 - Import or reconnect workspace applications, review saved configuration edits, and clean
@@ -364,5 +381,6 @@ Existing snapshot layouts, IDs, exports and legacy memory endpoints are preserve
 under `.features/`. No history migration is performed on launch.
 
 Later stages cover region budgets, optimization recommendations, runtime stack/heap/arena
-measurements and TinyML experiment metrics. See the [roadmap](docs/roadmap.md) for scope
-and acceptance criteria; these later capabilities are not included in version 0.2.
+measurements. TinyML currently selects MNIST demo inputs for Project Creator; further
+demo recipes remain planned. See the [roadmap](docs/roadmap.md) for scope and acceptance
+criteria; the later measurement capabilities are not included in version 0.2.

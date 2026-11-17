@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "demo_id": "tflm-sine",
+  "variant_id": "reference",
+  "framework_id": "tflm",
+  "title": "Sine Regression",
+  "task": "Fixed-input CPU inference using the selected Zephyr TFLM sine sample.",
+  "adapter": {
+    "id": "tflm-sine-v1",
+    "version": 1
+  },
+  "source": {
+    "kind": "zephyr-sample",
+    "locator_id": "zephyr-tflm-hello-world",
+    "revision": "fbab2f598d545ad043ce50a75fefa4550b053f0b",
+    "fingerprint": "3416a00623387a02e86177ba670ef4cb5e42b373ed79383256249bc0909b1ecd"
+  },
+  "runtime": {
+    "files": [
+      {
+        "path": "CMakeLists.txt",
+        "bytes": 595,
+        "sha256": "adbd9bcc1b58433c0b260ec12c07cb716d96d1705fbf228a32d7f3e656b00f93"
+      },
+      {
+        "path": "LICENSE",
+        "bytes": 11358,
+        "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08"
+      },
+      {
+        "path": "prj.conf",
+        "bytes": 811,
+        "sha256": "eddd44f67746075c2839e950dea27a575957827d6543c310aaa94f90ddafd3d0"
+      },
+      {
+        "path": "src/assert.cpp",
+        "bytes": 716,
+        "sha256": "e9984602c9c56a36391eb9c4f49f65fbbc81ada3badf04b0e37eb14cb6bb1c55"
+      },
+      {
+        "path": "src/constants.c",
+        "bytes": 753,
+        "sha256": "7e1cad7adf851e76d709d5da483bbe801ce7577b3478e0c63a07c51a310e4f08"
+      },
+      {
+        "path": "src/constants.h",
+        "bytes": 1542,
+        "sha256": "c4f7cee8c58712965397ad8d2db583dcb506c8eaff301d39fd100e3a1dbe56b0"
+      },
+      {
+        "path": "src/main.c",
+        "bytes": 1209,
+        "sha256": "28a2f5dfa538908f7d56691175bf38a6dfacdc66549d0fb26fc910e00b4f56cd"
+      },
+      {
+        "path": "src/main_functions.cpp",
+        "bytes": 4252,
+        "sha256": "23d831be65c2151eb964bfb7397d350215d22aafdc86f7ffa40038b5f457ca70"
+      },
+      {
+        "path": "src/main_functions.h",
+        "bytes": 1313,
+        "sha256": "67646d316f8c94fdf3e532e1a1355397d0cf47e222f82cc1fb36af53442f475d"
+      },
+      {
+        "path": "src/model.cpp",
+        "bytes": 16318,
+        "sha256": "f59fa15965b7e8c70253630983bbd54f6298b686c963f5490ff3cce6addcf924"
+      },
+      {
+        "path": "src/model.hpp",
+        "bytes": 1264,
+        "sha256": "d8425b2cae09f9cacc85929ffede5a345fb58716e279d3bf96ac1e1f05ad3e88"
+      },
+      {
+        "path": "src/output_handler.cpp",
+        "bytes": 876,
+        "sha256": "2b1b0f1afe14f0d40da23bdbb5b7fd7623510658e9e213bc8e7adc5894db8620"
+      },
+      {
+        "path": "src/output_handler.hpp",
+        "bytes": 1058,
+        "sha256": "c40c76d66d79c71ec3f573ba9bc9229892644bf6d0b81256f71464ebf0153639"
+      }
+    ],
+    "omitted": [
+      {
+        "path": "README.rst",
+        "reason": "Replace sample/training instructions with the future generated integration guide."
+      },
+      {
+        "path": "images/model_architecture.png",
+        "reason": "Documentation image is unnecessary for runtime compilation."
+      },
+      {
+        "path": "sample.yaml",
+        "reason": "Upstream sample test metadata is evidence, not standalone application input."
+      },
+      {
+        "path": "train/README.md",
+        "reason": "Training is outside the runtime-only demo."
+      },
+      {
+        "path": "train/train_hello_world_model.ipynb",
+        "reason": "Training notebooks are outside the runtime-only demo."
+      }
+    ]
+  },
+  "model": {
+    "format": "tflite-c-source",
+    "origin": "Selected Zephyr sample src/model.cpp; upstream pretrained sine example; no D0 inference evaluation.",
+    "sha256": "f59fa15965b7e8c70253630983bbd54f6298b686c963f5490ff3cce6addcf924"
+  },
+  "requirements": {
+    "modules": [
+      "tflite-micro"
+    ],
+    "kconfig": [
+      {
+        "symbol": "CONFIG_CPP",
+        "value": "y"
+      },
+      {
+        "symbol": "CONFIG_FULL_LIBC_SUPPORTED",
+        "value": "y"
+      },
+      {
+        "symbol": "CONFIG_REQUIRES_FLOAT_PRINTF",
+        "value": "y"
+      },
+      {
+        "symbol": "CONFIG_STD_CPP17",
+        "value": "y"
+      },
+      {
+        "symbol": "CONFIG_TENSORFLOW_LITE_MICRO",
+        "value": "y"
+      }
+    ],
+    "hardware": []
+  },
+  "licenses": [
+    {
+      "spdx": "Apache-2.0",
+      "path": "LICENSE",
+      "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08"
+    }
+  ],
+  "expected_output": [
+    "Ten generated-x/predicted-y console pairs from the upstream sine demonstration; D0 has not run them."
+  ]
+}

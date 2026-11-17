@@ -9,7 +9,7 @@ export function createProjectsNavigation({environment, creator, customBoards, op
   return {
     navigate(view = "") {
       if (disposed) return;
-      const next = view === "custom-boards" && customBoards ? "custom-boards" : view === "environment" ? "environment" : view === "create" ? "create" : "applications";
+      const next = view === "custom-boards" && customBoards ? "custom-boards" : view === "environment" ? "environment" : view === "create" || view.startsWith("create/") ? "create" : "applications";
       const owner = next === "environment" ? "environment" : next === "custom-boards" ? "custom-boards" : "creator";
       if (owner !== current) {
         instance?.dispose();
@@ -19,7 +19,7 @@ export function createProjectsNavigation({environment, creator, customBoards, op
         if (customBoards) customBoards.hidden = owner !== "custom-boards";
         instance = owner === "environment" ? openEnvironment() : owner === "custom-boards" ? openCustomBoards() : openCreator();
       }
-      instance.navigate(next === "applications" && view.startsWith("applications/") ? view : next);
+      instance.navigate(next === "applications" && view.startsWith("applications/") || next === "create" && view.startsWith("create/") ? view : next);
     },
     dispose() { if (!disposed) { disposed = true; instance?.dispose(); } },
   };

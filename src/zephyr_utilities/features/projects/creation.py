@@ -226,7 +226,7 @@ def select_profile(workspace, body, snapshot):
             "analysis_options": deepcopy(snapshot.get("request", {}))}
 
 
-def preview_project(workspace, body, snapshot, *, recipe_factory=None):
+def preview_project(workspace, body, snapshot, *, recipe_factory=None, mnist_assets_root=None):
     """Prepare all source bytes and identities without writing or configuring anything."""
     if not isinstance(body, dict) or set(body) - {
             "name", "destination", "board_id", "target", "sdk_id", "template_id", "sample_id", "sample_fingerprint"}:
@@ -259,7 +259,9 @@ def preview_project(workspace, body, snapshot, *, recipe_factory=None):
     provenance = None
     if sample:
         from .samples import preview_sample
-        selected_sample = preview_sample(snapshot, body["sample_id"], recipe, profile=profile)
+        mnist_options = {"mnist_assets_root": mnist_assets_root, "name": name} if body["sample_id"] == "tinyml/mnist-shell" else {}
+        selected_sample = preview_sample(snapshot, body["sample_id"], recipe, profile=profile,
+                                        **mnist_options)
         provenance = selected_sample["provenance"]
         if provenance.get("source_fingerprint", provenance["fingerprint"]) != body["sample_fingerprint"]:
             raise ValueError("The local sample changed after selection. Refresh the sample list and select it again.")

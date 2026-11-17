@@ -41,6 +41,8 @@ class CreatorService(ConfigurationWorkflow, ProjectLifecycle, BuildWorkflow):
     def __init__(self, context, environment_store):
         self.context = context
         self.environments = environment_store
+        from .mnist_assets import MNISTAssets
+        self.mnist_assets = MNISTAssets(context.feature_data("projects") / "tinyml-runtime")
         self.store = ProjectStore(context.feature_data("projects") / "creator")
         self.plans = {}
         self.sample_checks = {}
@@ -218,7 +220,7 @@ class CreatorService(ConfigurationWorkflow, ProjectLifecycle, BuildWorkflow):
         zephyr = snapshot.get("zephyr") if isinstance(snapshot, dict) else None
         if not isinstance(zephyr, dict) or not isinstance(zephyr.get("path"), str) or not zephyr["path"]:
             raise ValueError("Analyze this workspace before choosing a local sample.")
-        return {"workspace": workspace, **sample_catalog(snapshot)}
+        return {"workspace": workspace, **sample_catalog(snapshot, mnist_assets_root=self.mnist_assets.path)}
 
     def preview(self, body):
         workspace = self._workspace(body, {"name", "destination", "board_id", "target", "sdk_id", "template_id",
@@ -231,7 +233,8 @@ class CreatorService(ConfigurationWorkflow, ProjectLifecycle, BuildWorkflow):
         environment = dict(os.environ)
         plan = preview_project(workspace, {key: value for key, value in body.items() if key not in {"workspace", "sample_check_id"}}, snapshot,
                                recipe_factory=lambda profile, source, build: command_recipe(profile, source, build,
-                                                                                           environ=environment))
+                                                                                           environ=environment),
+                               mnist_assets_root=self.mnist_assets.path)
         plan["profile"]["execution_fingerprint"] = execution_guard(snapshot, plan["profile"])
         if "sample" in plan:
             plan["sample_compatibility"] = self._sample_result(body, plan, snapshot)
@@ -253,6 +256,13 @@ class CreatorService(ConfigurationWorkflow, ProjectLifecycle, BuildWorkflow):
         return {key: body[key] for key in ("workspace", "sample_id", "sample_fingerprint", "board_id", "target", "sdk_id")} | {
             "environment_fingerprint": snapshot["fingerprint"]}
 
+    @staticmethod
+    def _sample_check_fingerprint(provenance):
+        # The bundled MNIST runtime is unchanged by the requested CMake project name.
+        if provenance.get("adapter") == "mnist-runtime-v2":
+            return provenance.get("source_fingerprint", provenance["fingerprint"])
+        return provenance["fingerprint"]
+
     def _sample_result(self, body, plan, snapshot):
         selection = self._sample_selection(body, snapshot)
         check_id = body.get("sample_check_id")
@@ -261,10 +271,10 @@ class CreatorService(ConfigurationWorkflow, ProjectLifecycle, BuildWorkflow):
         with self.lock:
             self.sample_checks = {key: value for key, value in self.sample_checks.items() if value["expires"] > time.monotonic()}
             saved = self.sample_checks.get(check_id) if check_id else next((value for value in reversed(list(self.sample_checks.values()))
-                if value["selection"] == selection and value["sample_fingerprint"] == plan["sample"]["fingerprint"]
+                if value["selection"] == selection and value["sample_fingerprint"] == self._sample_check_fingerprint(plan["sample"])
                 and value["guard"] == plan["profile"]["execution_fingerprint"]), None)
             if check_id and (not saved or saved["selection"] != selection or
-                             saved["sample_fingerprint"] != plan["sample"]["fingerprint"] or
+                             saved["sample_fingerprint"] != self._sample_check_fingerprint(plan["sample"]) or
                              saved["guard"] != plan["profile"]["execution_fingerprint"]):
                 raise ValueError("This sample compatibility check expired or its inputs changed. Check compatibility again.")
             saved = deepcopy(saved)
@@ -296,7 +306,8 @@ class CreatorService(ConfigurationWorkflow, ProjectLifecycle, BuildWorkflow):
         environment = dict(os.environ)
         profile["execution_fingerprint"] = execution_guard(snapshot, profile)
         recipe = {"cwd": workspace, "display_configure": "", "display_build": ""}
-        sample = preview_sample(snapshot, body.get("sample_id"), recipe, profile=profile)
+        sample = preview_sample(snapshot, body.get("sample_id"), recipe, profile=profile,
+                                mnist_assets_root=self.mnist_assets.path)
         fingerprint = sample["provenance"].get("source_fingerprint", sample["provenance"]["fingerprint"])
         if body.get("sample_fingerprint") != fingerprint:
             raise ValueError("The local sample changed after selection. Refresh samples before checking compatibility.")
@@ -305,7 +316,8 @@ class CreatorService(ConfigurationWorkflow, ProjectLifecycle, BuildWorkflow):
 
         def run(emit, cancel):
             self._recheck(profile, environment, emit, cancel)
-            current = preview_sample(snapshot, body["sample_id"], recipe, profile=profile, cancel=cancel)
+            current = preview_sample(snapshot, body["sample_id"], recipe, profile=profile, cancel=cancel,
+                                     mnist_assets_root=self.mnist_assets.path)
             if current != sample:
                 raise ValueError("The local sample changed before the compatibility check. Refresh samples and check again.")
             input_guard = sample_input_guard(profile, cancel=cancel)
@@ -314,7 +326,8 @@ class CreatorService(ConfigurationWorkflow, ProjectLifecycle, BuildWorkflow):
                                   default_overlay=sample["provenance"].get("default_overlay"),
                                   environ=environment, emit=emit, cancel=cancel)
             self._recheck(profile, environment, emit, cancel)
-            if preview_sample(snapshot, body["sample_id"], recipe, profile=profile, cancel=cancel) != sample:
+            if preview_sample(snapshot, body["sample_id"], recipe, profile=profile, cancel=cancel,
+                              mnist_assets_root=self.mnist_assets.path) != sample:
                 raise ValueError("The local sample changed during the compatibility check. Refresh samples and check again.")
             if sample_input_guard(profile, cancel=cancel) != input_guard:
                 raise ValueError("The board configuration inputs changed during the compatibility check. Check compatibility again.")
@@ -327,7 +340,7 @@ class CreatorService(ConfigurationWorkflow, ProjectLifecycle, BuildWorkflow):
                 if len(self.sample_checks) >= 32:
                     del self.sample_checks[next(iter(self.sample_checks))]
                 self.sample_checks[check_id] = {"selection": selection, "result": deepcopy(result),
-                    "guard": profile["execution_fingerprint"], "sample_fingerprint": sample["provenance"]["fingerprint"],
+                    "guard": profile["execution_fingerprint"], "sample_fingerprint": self._sample_check_fingerprint(sample["provenance"]),
                     "input_guard": input_guard, "expires": time.monotonic() + 1800}
             return {"check_id": check_id, "compatibility": result}
 

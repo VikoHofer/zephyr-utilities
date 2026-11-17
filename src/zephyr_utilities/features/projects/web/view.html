@@ -48,13 +48,23 @@
     <div class="projects-error" role="alert" data-creator-error hidden></div>
     <p class="projects-banner" role="status" aria-live="polite" data-creator-removal-notice hidden></p>
     <div class="projects-banner" data-creator-requirement hidden>Analyze this workspace in Environment before choosing a board and SDK.</div>
+    <section class="projects-panel" data-creation-handoff hidden aria-label="TinyML demo selection">
+      <h2>Continue with your TinyML demo</h2>
+      <p data-creation-handoff-status role="status" aria-live="polite"></p>
+      <p class="projects-muted" data-creation-handoff-details></p>
+      <div class="projects-sample-heading" data-creation-handoff-choices hidden>
+        <button type="button" class="projects-button" data-creation-handoff-keep>Keep current draft</button>
+        <button type="button" class="projects-button primary" data-creation-handoff-use>Use demo selection</button>
+      </div>
+      <a class="projects-button" href="#/tinyml/overview">Return to TinyML</a>
+    </section>
     <form data-creator-form class="projects-panel" aria-label="New application">
       <div class="projects-section-heading"><div><span class="projects-eyebrow">1 · APPLICATION</span><h2>Choose a template, destination and target.</h2></div></div>
       <div class="projects-option-grid">
         <label class="projects-full-width">Application template<select data-create-field="template_id" required><option value="minimal-c">Minimal C</option></select><span class="projects-input-help" data-creator-template-note></span></label>
         <section class="projects-sample-choice projects-full-width" data-creator-samples hidden aria-label="Local sample selection">
           <div class="projects-sample-heading"><h3>Choose a local sample</h3><button type="button" class="projects-button" data-samples-refresh>Refresh samples</button></div>
-          <p class="projects-muted">Copies supported samples from your selected Zephyr checkout, including their supporting files and licenses. Configure and build check compatibility with your target.</p>
+          <p class="projects-muted">Copies reviewed local samples and demos with their runtime files, model metadata and licenses. Configure and build check compatibility with your target.</p>
           <p class="projects-muted" data-samples-status role="status" aria-live="polite"></p>
           <label>Sample<select data-create-field="sample_id"><option value="">Choose a local sample</option></select></label>
           <p class="projects-compatibility-summary" data-sample-compatibility-summary></p>

@@ -1,13 +1,18 @@
-/** Local sample choices are observations of one selected checkout. */
-const sampleIds = new Set(["hello_world", "basic/blinky", "basic/button"]);
+/** Sample choices combine the selected Zephyr checkout and bundled utility templates. */
+const samplePaths = new Map([
+  ["hello_world", "samples/hello_world"],
+  ["basic/blinky", "samples/basic/blinky"],
+  ["basic/button", "samples/basic/button"],
+  ["tinyml/mnist-shell", "bundled:tinyml/mnist"],
+]);
 const strings = (value) => Array.isArray(value) && value.every((item) => typeof item === "string");
 export const isLocalSample = (form) => form?.template_id === "local-sample";
 export function validateSampleCatalogue(data, workspace, zephyrPath) {
-  if (data?.workspace !== workspace || !Array.isArray(data.samples) || data.samples.length > sampleIds.size
+  if (data?.workspace !== workspace || !Array.isArray(data.samples) || data.samples.length > samplePaths.size
     || new Set(data.samples.map((item) => item?.id)).size !== data.samples.length
     || !strings(data.diagnostics) || !data.zephyr || typeof data.zephyr.path !== "string"
     || zephyrPath !== undefined && data.zephyr.path !== zephyrPath
-    || !data.samples.every((item) => item && sampleIds.has(item.id) && item.path === `samples/${item.id}`
+    || !data.samples.every((item) => item && samplePaths.has(item.id) && item.path === samplePaths.get(item.id)
       && typeof item.title === "string" && item.title.trim() && typeof item.description === "string"
       && ["available", "unsupported", "missing"].includes(item.status) && strings(item.requirements) && strings(item.diagnostics)
       && (item.status !== "available" || typeof item.fingerprint === "string" && /^[a-f0-9]{64}$/.test(item.fingerprint))
@@ -29,7 +34,7 @@ export function sampleSelectionError(state) {
   if (currentSampleCompatibility(state)?.status === "incompatible") return "This sample is incompatible with the selected target. Choose another sample or target, then check compatibility again.";
   return "";
 }
-export const sampleLabel = (sample) => `${sample?.title || sample?.id || "Unknown sample"} · local Zephyr sample`;
+export const sampleLabel = (sample) => `${sample?.title || sample?.id || "Unknown sample"} · ${sample?.id === "tinyml/mnist-shell" ? "bundled MNIST demo" : "local Zephyr sample"}`;
 
 const selectionFields = ["workspace", "sample_id", "sample_fingerprint", "board_id", "target", "sdk_id", "environment_fingerprint"];
 export function sampleCheckSelection(state) {

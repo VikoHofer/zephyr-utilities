@@ -1,5 +1,5 @@
 import {activeJob} from "./environment-state.js";
-import {createCreatorSession, creatorBoards, creatorSdks, creatorTemplates, creatorTemplateId, creatorTemplateLabel, selectedCreatorTemplate, currentCreatorJob} from "./creator-state.js";
+import {createCreatorSession, creationHandoff, creatorBoards, creatorSdks, creatorTemplates, creatorTemplateId, creatorTemplateLabel, selectedCreatorTemplate, currentCreatorJob} from "./creator-state.js";
 import {createConfigurationView} from "./configuration-view.js";
 import {appendFragmentFacts} from "./fragment-view.js";
 import {isLocalSample, selectedSample, sampleSelectionError, sampleCheckSelection, sampleCompatibilityNotice, currentSampleCompatibility} from "./sample-state.js";
@@ -202,7 +202,7 @@ export function mountCreator(root, context) {
     const sample = $("preview-sample"); sample.replaceChildren(); sample.hidden = !plan.sample;
     if (plan.sample) {
       sample.append(node("summary", "", "Sample requirements and origin"));
-      sample.append(node("p", "projects-muted", "The original sample files and license notices are retained. Source changes before creation require a new preview."));
+      sample.append(node("p", "projects-muted", "Runtime files, source provenance and license notices are retained. Any adaptations are recorded below. Source changes before creation require a new preview."));
       const requirements = node("ul", "projects-sample-requirements");
       for (const requirement of array(plan.sample.requirements)) requirements.append(node("li", "", requirement));
       if (requirements.childElementCount) sample.append(requirements);
@@ -282,7 +282,7 @@ export function mountCreator(root, context) {
     choices(fields.sample_id, entries, "Choose a local sample");
     fields.sample_id.value = state.form.sample_id || "";
     $("samples-status").textContent = !state.snapshot || state.snapshot.status === "stale" ? "Analyze the selected workspace before loading local samples."
-      : catalogue?.loading ? "Reading the supported samples in this checkout…"
+      : catalogue?.loading ? "Reading the reviewed local samples and demos…"
       : catalogue?.error || (catalogue?.ready ? `Available samples in this checkout: ${catalogue.samples.filter((item) => item.status === "available").length}. Select one to see its requirements.` : "Refresh samples to read this checkout.");
     $("sample-description").textContent = sample?.description || "";
     const requirements = $("sample-requirements"); requirements.replaceChildren();
@@ -477,6 +477,25 @@ export function mountCreator(root, context) {
     const snapshot = state.snapshot;
     const creating = view === "create";
     const busy = Boolean(state.busy || state.loading || array(state.jobs).some(activeJob));
+    const pending = state.creationHandoff;
+    $("creation-handoff").hidden = !creating || !route.startsWith("create/") || !pending;
+    if (pending) {
+      const messages = {
+        loading: "Checking the demo selection…",
+        review: "Your creation form has changes. Keep the current draft or apply the proposed demo, board and SDK below.",
+        applied: "MNIST, board and SDK selected. Review the application name and destination, then preview the files.",
+        kept: "Your current creation draft was kept.",
+        error: pending.error,
+      };
+      $("creation-handoff-status").textContent = messages[pending.status] || "";
+      const sdk = creatorSdks(snapshot).find((entry) => entry.id === pending.selection?.selection.sdk_id);
+      $("creation-handoff-details").textContent = pending.selection
+        ? `${pending.selection.title} · ${pending.selection.selection.target} · SDK ${sdk?.version || "selected installation"}. Your application name and destination are retained.` : "";
+      $("creation-handoff-choices").hidden = !pending.choiceShown;
+      for (const name of ["creation-handoff-use", "creation-handoff-keep"]) {
+        $(name).setAttribute("aria-disabled", String(busy || pending.status !== "review"));
+      }
+    }
     $("creator-eyebrow").textContent = creating ? "PROJECT CREATOR · NEW APPLICATION" : "PROJECT CREATOR · APPLICATIONS";
     $("creator-title").textContent = creating ? "Create an application." : "Your workspace applications.";
     $("creator-intro").textContent = creating ? "Choose a template, destination, board and SDK, then review the files before creation." : "Choose an application's build configuration, configure it or start a build.";
@@ -542,6 +561,12 @@ export function mountCreator(root, context) {
     listen($(name), "cancel", (event) => { event.preventDefault(); if (!state.busy) session.dismissReview(kind); });
   }
   for (const [name, input] of Object.entries(fields)) listen(input, input.tagName === "SELECT" ? "change" : "input", () => session.changeField(name, input.value));
+  listen($("creation-handoff-use"), "click", () => {
+    if ($("creation-handoff-use").getAttribute("aria-disabled") !== "true") session.useCreationHandoff();
+  });
+  listen($("creation-handoff-keep"), "click", () => {
+    if ($("creation-handoff-keep").getAttribute("aria-disabled") !== "true") session.keepCreationDraft();
+  });
   listen($("creator-form"), "submit", (event) => { event.preventDefault(); perform(() => session.preview(), {pending: "Preparing application preview…", after: () => creationReview.show(state.plan, () => $("preview-submit"))}); });
   listen($("create-submit"), "click", () => launch(() => session.create()));
   listen($("build-start"), "click", () => launch(() => session.build()));
@@ -698,10 +723,15 @@ export function mountCreator(root, context) {
     navigate(next = "applications") {
       const changed = route !== next;
       route = next;
-      view = next === "create" ? "create" : "applications";
+      view = next === "create" || next.startsWith("create/") ? "create" : "applications";
       if (changed) navigationRevision++;
       resultNavigation.navigate(view);
       render();
+      if (next.startsWith("create/")) {
+        const revision = navigationRevision; const workspace = context.workspace.path;
+        const isCurrent = () => !disposed && route === next && revision === navigationRevision && context.workspace.path === workspace;
+        return session.resolveCreationHandoff(creationHandoff(next) || next.slice(7), {isCurrent});
+      }
       const handoff = applicationHandoff(next);
       if (handoff) {
         const revision = navigationRevision; const workspace = context.workspace.path;

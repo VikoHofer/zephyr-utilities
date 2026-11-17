@@ -20,6 +20,13 @@ _MAX_FILES = 128
 _MAX_FILE_BYTES = 1024 * 1024
 _MAX_TOTAL_BYTES = 4 * 1024 * 1024
 _LIMITATION = "Configuration checked; compilation and hardware operation were not tested."
+_MNIST_ID = "tinyml/mnist-shell"
+_MNIST_SOURCES = ("src/main.cpp", "src/inference.cpp", "src/assets.cpp")
+_MNIST_INPUTS = {*_MNIST_SOURCES, "src/inference.hpp", "src/assets.hpp", "model/model_metadata.hpp",
+                 "model/metadata.json", "model/model.inc", "data/images.inc", "data/test_samples.inc"}
+_MNIST_CONFIG = ("CONFIG_CPP", "CONFIG_STD_CPP17", "CONFIG_TENSORFLOW_LITE_MICRO", "CONFIG_CRC", "CONFIG_CONSOLE",
+                 "CONFIG_SERIAL", "CONFIG_UART_CONSOLE", "CONFIG_SHELL", "CONFIG_SHELL_BACKEND_SERIAL",
+                 "CONFIG_CBPRINTF_FP_SUPPORT")
 
 # Use the selected checkout's public dtlib API in the selected environment. Only
 # bounded JSON facts cross this process boundary; never deserialize edt.pickle.
@@ -86,7 +93,7 @@ def _result(status, message, details=()):
     return {"status": status, "message": message, "details": [str(item)[:1800] for item in details][:8]}
 
 
-def _validated_files(files, *, complete=True):
+def _validated_files(files, *, complete=True, sample_id=None):
     if not isinstance(files, list) or not 1 <= len(files) <= _MAX_FILES:
         raise ValueError("A sample check needs between 1 and 128 reviewed files.")
     contents, total = {}, 0
@@ -109,14 +116,24 @@ def _validated_files(files, *, complete=True):
     for name in contents:
         if any(str(parent) in contents for parent in PurePosixPath(name).parents):
             raise ValueError("Sample check files contain conflicting file and directory paths.")
-    if "src/main.c" not in contents:
+    if sample_id == _MNIST_ID:
+        if missing := _MNIST_INPUTS - contents.keys():
+            raise ValueError("MNIST requirements need the complete reviewed runtime inputs: " + ", ".join(sorted(missing)) + ".")
+    elif "src/main.c" not in contents:
         raise ValueError("Sample requirements need a readable src/main.c.")
     if complete and not {"CMakeLists.txt", "prj.conf"}.issubset(contents):
-        raise ValueError("Sample check needs CMakeLists.txt, prj.conf and src/main.c.")
+        raise ValueError("Sample check needs CMakeLists.txt, prj.conf and the reviewed application sources.")
     return contents
 
 
 def _kind(contents, sample_id):
+    if sample_id == _MNIST_ID:
+        main = re.sub(r"/\*.*?\*/|//[^\n]*", "", contents["src/main.cpp"], flags=re.DOTALL)
+        inference = re.sub(r"/\*.*?\*/|//[^\n]*", "", contents["src/inference.cpp"], flags=re.DOTALL)
+        if ("SHELL_CMD_REGISTER(ai," in main and "mnist::Initialize()" in main and
+                "tflite::MicroInterpreter" in inference and "AddFullyConnected()" in inference and "AddSoftmax()" in inference):
+            return "mnist-shell"
+        return None
     main = re.sub(r"/\*.*?\*/|//[^\n]*", "", contents["src/main.c"], flags=re.DOTALL)
     if sample_id == "hello_world":
         return "hello"
@@ -157,13 +174,14 @@ def _read_generated(build_dir, name, limit, *, in_zephyr=True):
     return content.decode("utf-8")
 
 
-def _compiled_main(build_dir, source_dir):
-    """Require the inspected main to be an input of the configured app target."""
+def _compiled_sources(build_dir, source_dir, sources=("src/main.c",)):
+    """Require every reviewed entrypoint to be an input of the configured app target."""
     if source_dir is None:
         raise ValueError("The application source directory was not supplied for compile-command verification.")
     source_dir = Path(source_dir)
     path_identity(source_dir)
-    expected = source_dir / "src/main.c"
+    expected = {source_dir / name for name in sources}
+    found = set()
     entries = json.loads(_read_generated(build_dir, "compile_commands.json", 8 * 1024 * 1024, in_zephyr=False))
     if not isinstance(entries, list) or len(entries) > 10000:
         raise ValueError("Generated compile commands are invalid or exceed the inspection limit.")
@@ -178,7 +196,8 @@ def _compiled_main(build_dir, source_dir):
         if not isinstance(entry, dict):
             raise ValueError("Generated compile commands contain an invalid entry.")
         directory = relative_to_directory(entry.get("directory"), build_dir)
-        if relative_to_directory(entry.get("file"), directory) != expected:
+        source = relative_to_directory(entry.get("file"), directory)
+        if source not in expected:
             continue
         output = entry.get("output")
         if output is None:
@@ -198,8 +217,11 @@ def _compiled_main(build_dir, source_dir):
         if output.is_relative_to(build_dir):
             parts = output.relative_to(build_dir).parts
             if any(parts[index:index + 2] == ("CMakeFiles", "app.dir") for index in range(len(parts) - 2)):
-                return
-    raise ValueError("The configured app does not compile this sample's src/main.c; its requirements cannot be applied.")
+                found.add(source)
+                if found == expected:
+                    return
+    missing = ", ".join(str(path.relative_to(source_dir)) for path in sorted(expected - found))
+    raise ValueError(f"The configured app does not compile this sample's {missing}; its requirements cannot be applied.")
 
 
 def _facts(value):
@@ -243,6 +265,12 @@ def _evaluate(kind, facts, config):
 
     if kind == "hello":
         return _result("compatible", "Hello World configured successfully; it needs no extra sample peripheral.", [_LIMITATION])
+    if kind == "mnist-shell":
+        if missing := missing_config(_MNIST_CONFIG):
+            return _result("incompatible", "The MNIST shell demo requires enabled Kconfig options: " + ", ".join(missing) + ".",
+                           ["Checked configured C++ application inputs and Kconfig."])
+        return _result("compatible", "MNIST C++ sources, TensorFlow Lite Micro and the serial shell are configured.",
+                       ["No sensor, LED or button aliases are required.", _LIMITATION])
     if kind in {"gpio-led", "gpio-button", "strip"}:
         alias = {"gpio-led": "led0", "gpio-button": "sw0", "strip": "led-strip"}[kind]
         node = facts["aliases"][alias]
@@ -293,17 +321,22 @@ def inspect_sample_requirements(profile, files, sample_id, build_dir, *, source_
     """Inspect fresh configured outputs without compiling or changing the application."""
     check_cancel(cancel)
     try:
-        contents = _validated_files(files, complete=False)
+        contents = _validated_files(files, complete=False, sample_id=sample_id)
         kind = _kind(contents, sample_id)
         if kind is None:
             return _result("unknown", "This sample source version needs a reviewed compatibility adapter.")
         build_dir = Path(build_dir)
-        _compiled_main(build_dir, source_dir)
-        dts = _read_generated(build_dir, "zephyr.dts", _MAX_TOTAL_BYTES)
+        _compiled_sources(build_dir, source_dir, _MNIST_SOURCES if kind == "mnist-shell" else ("src/main.c",))
         config_text = _read_generated(build_dir, ".config", _MAX_FILE_BYTES)
+        config = set(re.findall(r"^(CONFIG_[A-Z0-9_]+)=y$", config_text, re.MULTILINE))
+        if kind == "mnist-shell":
+            result = _evaluate(kind, None, config)
+            if emit:
+                emit(result["message"])
+            return result
+        dts = _read_generated(build_dir, "zephyr.dts", _MAX_TOTAL_BYTES)
         if re.search(r"/(?:include|incbin)/", dts):
             raise ValueError("Generated Device Tree contains unresolved file directives.")
-        config = set(re.findall(r"^(CONFIG_[A-Z0-9_]+)=y$", config_text, re.MULTILINE))
         python = next((item.get("path") for item in profile.get("tools", [])
                        if item.get("name") == "Python" and item.get("status") == "discovered"), None)
         if not isinstance(python, str) or not Path(python).is_absolute():
@@ -331,7 +364,7 @@ def inspect_sample_requirements(profile, files, sample_id, build_dir, *, source_
 def check_sample(profile, files, sample_id, *, root, environ=None, emit=None, cancel=None, default_overlay=None):
     """Configure reviewed sample files in disposable storage after an explicit request."""
     check_cancel(cancel)
-    contents = _validated_files(files)
+    contents = _validated_files(files, sample_id=sample_id)
     if _kind(contents, sample_id) is None:
         return _result("unknown", "This sample source version needs a reviewed compatibility adapter.")
     root = Path(root)

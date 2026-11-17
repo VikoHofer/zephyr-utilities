@@ -37,6 +37,10 @@ def build_parser():
                         help="Loopback HTTP port; use 0 to choose a free port (default: 8765)")
     launch.add_argument("--no-browser", action="store_true", default=argparse.SUPPRESS,
                         help="Print URL without opening a browser")
+    launch.add_argument("--install-mnist-assets", type=Path, default=argparse.SUPPRESS, metavar="PACK",
+                        help="Install an independent MNIST model/image asset pack before starting the application")
+    launch.add_argument("--tflm-source", type=Path, default=argparse.SUPPRESS, metavar="FRAMEWORK",
+                        help="Pinned TensorFlow Lite Micro directory to install with --install-mnist-assets")
     parser = argparse.ArgumentParser(
         description="Zephyr Utilities — one local application for your workspace tools.",
         parents=[launch],
@@ -67,7 +71,16 @@ def launch_application(args, parser):
         parser.error(f"Initial directory does not exist: {args.root}")
     if not 0 <= args.port <= 65535:
         parser.error("Port must be between 0 and 65535.")
+    assets_source = getattr(args, "install_mnist_assets", None)
+    framework_source = getattr(args, "tflm_source", None)
+    if (assets_source is None) != (framework_source is None):
+        parser.error("--install-mnist-assets and --tflm-source must be supplied together.")
     try:
+        if assets_source is not None:
+            from .features.projects.mnist_assets import MNISTAssets
+            assets = MNISTAssets(args.data_dir.expanduser().absolute() / ".features/projects/tinyml-runtime")
+            result = assets.install(assets_source.expanduser().absolute(), framework_source.expanduser().absolute(), emit=print)
+            print(f"MNIST runtime assets installed independently: {result['path']}", flush=True)
         from .app import create_server
         server = create_server(args.root.expanduser(), args.data_dir.expanduser(), args.port)
     except ModuleNotFoundError as exc:

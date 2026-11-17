@@ -30,7 +30,41 @@ The Nordic route adapter delegates the verified nRF54L native-domain rules to
 `chip_nrf54l.py`; canonical overlay commands, history and publication remain shared.
 See the [nRF54L handoff](device-tree-editor-nrf54l-handoff.md).
 Source/package evidence determines support; unavailable actions explain their reason.
-Broader peripherals, composition and TinyML experiments remain planned.
+TinyML supplies a MNIST, board and SDK chooser using public Projects
+catalogue and creation-handoff endpoints. Projects owns the bounded transient tokens,
+source/environment revalidation and ordinary creation form. Dirty forms retain an
+explicit Keep/Use choice; resolving a token writes no application files and starts no
+job. The former training/export implementation is removed; existing TinyML data stays
+inert. See the [MNIST workflow](tinyml-mnist-demo.md) and [replacement plan](tinyml-demo-creator-plan.md).
+The [D0 foundations](tinyml-d0-handoff.md) add pure Projects data contracts and a read-only
+developer qualification utility. [ADR 0027](decisions/0027-tinyml-demo-creation-handoff.md)
+defines the public ownership boundary; its MNIST continuation adds catalogue and token services inside Projects.
+Projects also admits one [MNIST runtime adapter](tinyml-mnist-demo.md) through its
+existing sample catalogue and reviewed publisher. Utilities owns and packages its C++
+source template under `projects/mnist_template/`. A separately installed, fingerprinted
+runtime asset pack supplies the trained model, reference images and pinned TFLM framework.
+`--install-mnist-assets PACK --tflm-source FRAMEWORK` explicitly copies local inputs into
+`context.feature_data("projects") / "tinyml-runtime/mnist-v1"` before application launch;
+no download or implicit installation runs. Model/image bytes are excluded from Git and
+the wheel. Creation and builds never consult the original demonstration or another
+generated application. Generated CMake uses the requested application name and the managed
+framework path; the created app owns its source and copied asset bytes. The framework
+installation remains a shared dependency, like the selected Zephyr checkout and SDK.
+Adapter `mnist-runtime-v2` uses adapter version 2 inside the existing provenance schemas
+1/3. Old creation plans require a fresh preview; existing project records and build history
+remain readable. Classic C sample restrictions remain separate. See
+[ADR 0029](decisions/0029-independent-mnist-template.md).
+TinyML's drawing view adds feature-owned image preparation and explicit UART inference
+routes using the existing authenticated server and job manager. A statically bundled
+demo-tool adaptation preserves normalization/protocol behavior; workspace tools are
+never imported. Explicit Open/Close jobs manage one application-wide UART connection;
+successful bounded Send jobs keep it open. Opening requires no firmware response or
+Projects selection. Cancellation or a failed transfer releases the connection.
+Captured workspace/device/image identity remains separate from current browser edits.
+Pillow/pyserial use the same application
+environment; no training data is read or saved. See
+[ADR 0028](decisions/0028-tinyml-drawing-uart.md).
+Broader peripherals and composition remain planned.
 
 ## Dependency direction
 
@@ -43,7 +77,7 @@ CLI
          ├─ features/devicetree/  [overlay editing, guarded Save and recovery]
          ├─ features/inspector/   [advanced read-only build/source inspection]
          ├─ features/projects/    [analysis, creation and single-image builds]
-         └─ features/tinyml/      [planned]
+         └─ features/tinyml/      [MNIST chooser and explicit drawing/UART inference]
 
 Browser shell → registered feature modules → shared authenticated API
 ```
@@ -72,7 +106,7 @@ src/zephyr_utilities/
     devicetree/              # Overlay editing, guarded Save and draft recovery
     inspector/              # Build outputs, resolved trees, sources and bindings
     projects/               # Environment analysis, creation, builds, storage and UI
-    tinyml/                 # Planned model/experiment-analysis scope
+    tinyml/                 # MNIST chooser, drawing normalization and bounded UART jobs
   web/                      # Shared HTML shell, styles and JavaScript helpers
   memory/                   # Compatibility imports for the first release
 tests/                      # Python and frontend behavior checks
@@ -417,10 +451,10 @@ occupancy, observed peaks and physical capacity are different measurements. RAM 
 may both contain initialized-data costs. Duplicate aliases and source attribution can
 change without a corresponding footprint change.
 
-TinyML features will connect immutable build/model identities to runs, datasets and
-observation conditions. Memory data alone does not prove timing, accuracy, schedulability
-or worst-case resource demand. The [research roadmap](roadmap.md) and
-[memory master plan](memory-explorer-masterplan.md) describe those later measurements.
+The TinyML chooser hands selected demo inputs to Projects; created applications use
+existing build and Memory Explorer workflows. Memory data alone does not prove timing, accuracy,
+schedulability or worst-case resource demand. The [memory master plan](memory-explorer-masterplan.md)
+retains broader research context; it does not expand the current TinyML demo scope.
 
 ## Decisions and extension points
 
@@ -435,6 +469,8 @@ or worst-case resource demand. The [research roadmap](roadmap.md) and
 - [ADR 0009: Project navigation and advanced Build Inspector](decisions/0009-project-navigation-and-inspector.md)
 - [ADR 0012: Reviewed local sample cloning](decisions/0012-reviewed-local-sample-cloning.md)
 - [ADR 0022: Module layout and source identity](decisions/0022-module-layout-and-source-identity.md)
+- [ADR 0027: TinyML demo creation handoff](decisions/0027-tinyml-demo-creation-handoff.md)
+- [ADR 0029: Independent MNIST template and runtime assets](decisions/0029-independent-mnist-template.md)
 - [Adding a feature](adding-a-feature.md)
 - [HTTP/browser integration contract](platform-contract.md)
 

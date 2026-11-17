@@ -79,6 +79,18 @@ test("editor handoff routes retain the selected application, configuration and a
   assert.equal(applicationHandoff("applications/../../environment"), null); app.navigation.dispose();
 });
 
+test("demo creation handoff routes retain their capability within the creator session", () => {
+  const app = harness();
+  const route = `create/${"a".repeat(32)}`;
+  app.navigation.navigate("applications");
+  app.navigation.navigate(route);
+  assert.equal(app.opened.length, 1);
+  assert.deepEqual(app.opened[0].views, ["applications", route]);
+  assert.equal(app.creator.hidden, false);
+  assert.equal(app.environment.hidden, true);
+  app.navigation.dispose();
+});
+
 function delayedCreator() {
   const pending = []; const state = {}; const workspace = "/workspace";
   const session = createCreatorSession({state, workspace: () => workspace, onChange: () => {},

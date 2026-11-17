@@ -1,1 +1,1 @@
-"""Planned TinyML Experiments feature."""
+"""TinyML demo chooser using the public Projects catalogue and creation handoff."""

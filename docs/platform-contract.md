@@ -17,7 +17,7 @@ src/zephyr_utilities/
     devicetree/           # Overlay editing, reviewed Save and recovery
     inspector/            # Advanced read-only builds, trees, sources and bindings
     projects/            # Environment analyser, creator, build attempts, API and web assets
-    tinyml/              # Planned feature manifest and scope
+    tinyml/              # MNIST chooser, drawing view and explicit UART inference
   web/                   # index.html, shell.js, shell.css; shared client helpers
   memory/                # Compatibility imports for the original Python package
 ```

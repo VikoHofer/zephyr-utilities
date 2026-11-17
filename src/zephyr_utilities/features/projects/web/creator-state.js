@@ -7,6 +7,31 @@ import {createManagementActions} from "./management-state.js";
 const defaults = () => ({name: "my_app", destination: "", search: "", board_id: "", target: "", sdk_id: "", template_id: "minimal-c", sample_id: ""});
 const configurationDefaults = () => ({name: "", search: "", board_id: "", target: "", sdk_id: "", create_default_overlay: false});
 const array = (value) => Array.isArray(value) ? value : [];
+const handoffId = /^[a-f0-9]{32}$/;
+const fingerprint = /^[a-f0-9]{64}$/;
+export function creationHandoff(view) {
+  const match = /^create\/([a-f0-9]{32})$/.exec(view);
+  return match?.[1] || null;
+}
+function validateCreationHandoff(data, id, state) {
+  const selection = data?.selection;
+  if (data?.schema_version !== 1 || data.id !== id || data.workspace !== state.workspace
+    || data.demo_id !== "mnist-shell" || data.variant_id !== "reference"
+    || data.template_id !== "local-sample" || data.sample_id !== "tinyml/mnist-shell"
+    || typeof data.title !== "string" || !data.title.trim() || !fingerprint.test(data.source_fingerprint)
+    || !fingerprint.test(data.environment_fingerprint) || data.environment_fingerprint !== state.snapshot?.fingerprint
+    || !selection || Object.keys(selection).sort().join() !== "board_id,sdk_id,target"
+    || !["board_id", "target", "sdk_id"].every((key) => typeof selection[key] === "string" && selection[key])) {
+    throw new Error("This demo selection could not be verified. Return to TinyML and choose it again.");
+  }
+  const board = creatorBoards(state.snapshot).find((entry) => entry.id === selection.board_id);
+  if (state.snapshot?.status === "stale" || !board?.targets.includes(selection.target)
+    || !creatorSdks(state.snapshot).some((entry) => entry.id === selection.sdk_id)
+    || !creatorTemplates(state.templates).some((entry) => entry.id === "local-sample")) {
+    throw new Error("The demo's target or SDK is no longer available. Return to TinyML and refresh the selection.");
+  }
+  return data;
+}
 const templateLanguages = {"minimal-c": "C", "minimal-cpp": "C++", "local-sample": "C"};
 const templateVersion = (entry) => entry?.id === "local-sample" ? entry.version === 1 : [1, 2].includes(entry?.version);
 export function creatorTemplates(value) {
@@ -47,6 +72,9 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
   let disposed = false;
   let epoch = 0;
   let formRevision = 0;
+  let editRevision = 0;
+  let handoffSequence = 0;
+  let pendingHandoffCurrent = () => true;
   let buildRevision = 0;
   let configurationRevision = 0;
   let timer;
@@ -60,6 +88,8 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
   state.plan = null;
   state.buildPlan = null;
   state.form ||= defaults();
+  state.formDirty ??= Object.entries(defaults()).some(([key, value]) => (state.form[key] ?? value) !== value);
+  state.creationHandoff = null;
   state.configurationSelections ||= {};
   state.configurationDrafts ||= {};
   state.configurationEditor ||= "";
@@ -77,10 +107,14 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
     if (state.workspace) {
       state.formsByWorkspace ||= {};
       state.formsByWorkspace[state.workspace] = {...state.form};
+      state.formDirtyByWorkspace ||= {};
+      state.formDirtyByWorkspace[state.workspace] = state.formDirty;
     }
-    epoch++; formRevision++; buildRevision++; configurationRevision++; fileSequence++; sampleSequence++;
+    epoch++; formRevision++; editRevision++; handoffSequence++; buildRevision++; configurationRevision++; fileSequence++; sampleSequence++;
     Object.assign(state, {workspace: path, snapshot: null, templates: [], projects: [], unavailableProjects: [], jobs: [], diagnostics: [], jobId: null, plan: null, buildPlan: null, error: "", removalNotice: "", loading: false, busy: "", cancelling: false, form: {...defaults(), ...state.formsByWorkspace?.[path]}, configurationSelections: {}, configurationDrafts: {}, configurationEditor: "", configurationNotice: null, configurationFiles: {}, sampleCatalogue: null, sampleCheck: null});
     state.management = null;
+    state.formDirty = state.formDirtyByWorkspace?.[path] ?? Object.entries(defaults()).some(([key, value]) => (state.form[key] ?? value) !== value);
+    state.creationHandoff = null;
     return true;
   }
   function choosePending() {
@@ -190,17 +224,78 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
     }
   }
   const ensureSamples = () => isCreating() && isLocalSample(state.form) && !state.sampleCatalogue ? loadSamples({restore: true}) : Promise.resolve();
-  function changeField(key, value) {
-    if (disposed) return;
-    followWorkspace();
-    if (!(key in defaults())) return;
-    if (state.form[key] === value) return;
+  function setFormField(key, value) {
+    if (!(key in defaults()) || state.form[key] === value) return false;
     state.form[key] = value;
     if (key === "board_id") state.form.target = "";
     if (["template_id", "sample_id", "board_id", "target", "sdk_id"].includes(key)) invalidateSampleCheck();
     formRevision++; state.plan = null; state.error = "";
+    return true;
+  }
+  function changeField(key, value) {
+    if (disposed) return;
+    followWorkspace();
+    if (!setFormField(key, value)) return;
+    editRevision++; state.formDirty = true;
     publish();
     if (key === "template_id") ensureSamples();
+  }
+  async function resolveCreationHandoff(id, {isCurrent = () => true, replace = false} = {}) {
+    if (disposed) return false;
+    followWorkspace();
+    const path = state.workspace; const captured = epoch;
+    const sequence = ++handoffSequence; const edits = editRevision;
+    const active = () => current(path, captured) && sequence === handoffSequence && isCurrent();
+    pendingHandoffCurrent = isCurrent;
+    const pending = {id, status: "loading", selection: null, error: "",
+      choiceShown: state.creationHandoff?.id === id && Boolean(state.creationHandoff.choiceShown)};
+    state.creationHandoff = pending; publish();
+    try {
+      if (typeof id !== "string" || !handoffId.test(id)) throw new Error("This demo selection link is invalid. Return to TinyML and choose it again.");
+      if (!await load() || !active()) {
+        if (active()) throw new Error(state.error || "The current environment could not be loaded. Return to TinyML and refresh.");
+        return false;
+      }
+      const data = await request(`/api/projects/creation-handoffs/${id}?workspace=${encodeURIComponent(path)}`);
+      if (!active()) return false;
+      validateCreationHandoff(data, id, state);
+      const revision = formRevision;
+      const samples = await request("/api/projects/samples", {method: "POST", body: {workspace: path}});
+      if (!active()) return false;
+      const catalogue = validateSampleCatalogue(samples, path, state.snapshot?.zephyr?.path);
+      const sample = catalogue.samples.find((entry) => entry.id === data.sample_id);
+      if (sample?.status !== "available" || sample.fingerprint !== data.source_fingerprint) {
+        throw new Error("The MNIST source or dependency changed. Return to TinyML and refresh the demo selection.");
+      }
+      pending.selection = data;
+      const matches = state.form.template_id === data.template_id && state.form.sample_id === data.sample_id
+        && ["board_id", "target", "sdk_id"].every((key) => state.form[key] === data.selection[key]);
+      if (editRevision !== edits || formRevision !== revision || !replace && state.formDirty && !matches) {
+        pending.status = "review"; pending.choiceShown = true; publish(); return false;
+      }
+      sampleSequence++;
+      for (const [key, value] of Object.entries({template_id: data.template_id, sample_id: data.sample_id,
+        board_id: data.selection.board_id, target: data.selection.target, sdk_id: data.selection.sdk_id, search: ""})) setFormField(key, value);
+      state.sampleCatalogue = {...catalogue, ready: true, loading: false, error: ""};
+      invalidateSampleCheck(); state.plan = null; formRevision++; editRevision++; state.formDirty = true;
+      pending.status = "applied"; publish(); return true;
+    } catch (error) {
+      if (active() && error.name !== "AbortError") {
+        pending.status = "error"; pending.error = error.message || String(error); pending.selection = null; publish();
+      }
+      return false;
+    }
+  }
+  function keepCreationDraft() {
+    if (disposed || !pendingHandoffCurrent()) return;
+    handoffSequence++;
+    if (state.creationHandoff) Object.assign(state.creationHandoff, {status: "kept", selection: null, error: ""});
+    publish();
+  }
+  function useCreationHandoff() {
+    const pending = state.creationHandoff;
+    if (!pending?.selection || pending.status !== "review" || !pendingHandoffCurrent()) return Promise.resolve(false);
+    return resolveCreationHandoff(pending.id, {isCurrent: pendingHandoffCurrent, replace: true});
   }
   function invalidateSampleCheck() {
     if (!state.sampleCheck) return;
@@ -585,6 +680,7 @@ export function createCreatorSession({api, state, workspace, onChange, pendingBo
   management = createManagementActions({state, action, publish, acceptProject, acceptConfiguration: acceptManagedConfiguration, acceptJob});
   followWorkspace(); queue();
   return {load, loadSamples, ensureSamples, refresh: () => tick({force: true}), preview, create, previewBuild, build, cancel, changeField,
+    resolveCreationHandoff, useCreationHandoff, keepCreationDraft,
     removeProject, removeConfiguration, removeAttempt, dismissReview, checkSample, cancelSampleCheck,
     management, previewConfiguration,
     selectConfiguration, editConfiguration, closeConfiguration, changeConfigurationField, saveConfiguration, loadConfigurationFiles, changeFragment,

@@ -11,7 +11,7 @@ const toolDetails = {
   devicetree: ["Automatic chip and pin discovery", "Pin diagram and source inspector", "Reviewed Save, Undo and recovery"],
   projects: ["Workspace applications", "Create, configure and build", "Environment, board and SDK discovery"],
   inspector: ["Existing build outputs and image context", "Resolved nodes, sources and bindings", "Read-only advanced inspection"],
-  tinyml: ["Model and experiment metadata", "Memory, latency and accuracy", "Reproducible framework comparisons"],
+  tinyml: ["Board and SDK selection", "TinyML samples and framework compatibility", "Reviewed creation through Project Creator"],
 };
 let api;
 let noticeTimer;

@@ -14,6 +14,7 @@ SMOKE = r'''
 import importlib
 import importlib.metadata
 import pathlib
+import re
 import sys
 
 installed = pathlib.Path(sys.argv[1]).resolve()
@@ -37,8 +38,24 @@ for feature in validate_features(builtin_features()):
             asset = feature.frontend.asset_dir / getattr(feature.frontend, attr)
             assert asset.is_file(), f"Missing feature asset: {asset}"
             assert asset.resolve().is_relative_to(package), f"External asset: {asset}"
-for name in ("app", "core.http", "features.memory.snapshots", "memory.api", "memory.model"):
+for name in ("app", "core.http", "features.memory.snapshots", "memory.api", "memory.model",
+             "features.projects.demo_contracts", "features.projects.demo_handoffs", "features.tinyml.mnist_protocol"):
     importlib.import_module("zephyr_utilities." + name)
+for name in ("LICENSE-MNIST.txt", "NOTICE-MNIST.txt"):
+    assert (package / "features" / "tinyml" / name).is_file(), f"Missing MNIST attribution: {name}"
+template = package / "features" / "projects" / "mnist_template"
+for name in ("src/main.cpp", "src/inference.cpp", "src/inference.hpp", "src/assets.cpp", "src/assets.hpp",
+             "prj.conf", "boards/nucleo_h753zi.conf", "README.rst", "NOTICE.rst", "LICENSE"):
+    asset = template / name
+    assert asset.is_file(), f"Missing MNIST runtime template: {name}"
+    assert asset.resolve().is_relative_to(package), f"External MNIST template: {asset}"
+assert not any((template / name).exists() for name in ("model", "data", "CMakeLists.txt")), \
+    "MNIST template unexpectedly bundles managed assets or an active CMake file."
+managed_includes = {"model_metadata.hpp", "model.inc", "images.inc", "test_samples.inc"}
+for source in (template / "src").iterdir():
+    for include in re.findall(r'^\s*#\s*include\s*"([^"\n]+)"', source.read_text(encoding="utf-8"), re.MULTILINE):
+        assert (template / "src" / include).is_file() or include in managed_includes, \
+            f"Missing MNIST template runtime include: {include}"
 try:
     main(["--help"])
 except SystemExit as exc:
@@ -75,7 +92,8 @@ def main():
                 if any(name.startswith(("tests/", "node_modules/", ".memory-explorer/")) for name in names):
                     raise RuntimeError("Development or captured data leaked into the wheel.")
                 package = source / "src" / "zephyr_utilities"
-                asset_roots = [package / "web", *(package / "features").glob("*/web")]
+                asset_roots = [package / "web", *(package / "features").glob("*/web"),
+                               package / "features" / "projects" / "mnist_template"]
                 expected = {path.relative_to(source / "src").as_posix()
                             for root in asset_roots for path in root.rglob("*") if path.is_file()}
                 missing = expected.difference(names)

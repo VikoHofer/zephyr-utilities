@@ -111,7 +111,7 @@ See [west workspaces](https://docs.zephyrproject.org/latest/develop/west/workspa
 | Environment evolution | Rescan new boards/chips, compare installed environments, diagnose removed targets/options/bindings, deliberate upgrade trials | P1 refresh; P6 comparison and migration |
 | Custom hardware | Registered custom roots and reviewed reference-port scaffolds; explicit hardware customization remains separate | P1/P2 discovery; first P7 slice available |
 | Testing and devices | Twister recipes, native/simulator builds, build matrices, then runner-specific flash/debug actions | P7, with selected smoke builds earlier |
-| Downstream consumers | Open completed builds in Memory Explorer; later model/run provenance for TinyML | P3 artifact integration; later research work |
+| Downstream consumers | Open completed builds in Memory Explorer; TinyML demo selection reuses Projects creation/build | P3 artifact integration; [TinyML demo plan](tinyml-demo-creator-plan.md) |
 
 A reference for advanced repository layout is Zephyr's
 [example application](https://github.com/zephyrproject-rtos/example-application), which

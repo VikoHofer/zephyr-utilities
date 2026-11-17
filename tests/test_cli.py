@@ -95,6 +95,42 @@ class LauncherTests(unittest.TestCase):
             server.server_close.assert_called_once()
             browser.assert_not_called()
 
+    def test_mnist_installation_uses_selected_data_directory_before_shared_launch(self):
+        from test_mnist_assets import fixture
+        from zephyr_utilities.features.projects.mnist_assets import MNISTAssets
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            assets, framework = fixture(root)
+            data = root / "chosen-data"
+            server = Mock()
+            server.server_port = 12345
+            server.app.initial_path = str(root)
+            server.serve_forever.side_effect = KeyboardInterrupt
+
+            def start(*args):
+                self.assertEqual(MNISTAssets(data / ".features/projects/tinyml-runtime").status()["status"], "ready")
+                self.assertEqual(args[1], data)
+                return server
+
+            with patch("zephyr_utilities.app.create_server", side_effect=start) as create, \
+                 contextlib.redirect_stdout(io.StringIO()):
+                result = cli.main(["--root", str(root), "--data-dir", str(data), "--no-browser",
+                                   "--install-mnist-assets", str(assets), "--tflm-source", str(framework)])
+            self.assertEqual(result, 0)
+            create.assert_called_once()
+            server.app.close.assert_called_once()
+            server.server_close.assert_called_once()
+
+    def test_partial_mnist_installation_never_starts_the_application(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            for option in ("--install-mnist-assets", "--tflm-source"):
+                with self.subTest(option=option), patch("zephyr_utilities.app.create_server") as create, \
+                     contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as raised:
+                    cli.main(["--root", temporary, option, temporary, "--no-browser"])
+                self.assertEqual(raised.exception.code, 2)
+                create.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
